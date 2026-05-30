@@ -1,0 +1,27 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --color-bg: #0e0e10;
+  --color-surface: #18181b;
+  --color-border: #2a2a2e;
+  --color-text: #e0e0e0;
+  --color-text-muted: #8b8b96;
+  --color-primary: #4f98a3;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --radius-md: 0.5rem;
+  --space-2: 0.5rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-body);
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}

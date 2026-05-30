@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
+   "dev": "cargo tauri dev",
+    "build": "cargo tauri build",
+    "typecheck": "npm run typecheck --prefix controller && npm run typecheck --prefix presentation",
+    "install:all": "npm install --prefix controller && npm install --prefix presentation"
   },
   "dependencies": {
     "react": "^19.1.0",

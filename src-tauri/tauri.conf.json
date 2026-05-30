@@ -1,24 +1,28 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "streamdeck",
+  "productName": "StreamDeck",
   "version": "0.1.0",
-  "identifier": "com.sachu.streamdeck",
+  "identifier": "app.streamdeck.desktop",
   "build": {
-    "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "frontendDist": "../controller/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm run dev --prefix controller",
+    "beforeBuildCommand": "npm run build --prefix controller && npm run build --prefix presentation"
   },
   "app": {
     "windows": [
       {
-        "title": "streamdeck",
-        "width": 800,
-        "height": 600
+        "label": "controller",
+        "title": "StreamDeck — Controller",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false,
+        "url": "index.html"
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {
