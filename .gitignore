@@ -26,3 +26,4 @@ dist-ssr
 # specifics
 src-tauri/target
 target/
+.verify-cache/

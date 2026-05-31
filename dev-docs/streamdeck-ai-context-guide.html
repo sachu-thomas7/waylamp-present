@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StreamDeck — AI Context Handoff System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0d0f12;
+  --surface: #13161b;
+  --surface-2: #181c23;
+  --surface-3: #1e2430;
+  --border: rgba(255,255,255,0.07);
+  --border-bright: rgba(255,255,255,0.14);
+  --text: #e4e8f0;
+  --text-muted: #8892a4;
+  --text-faint: #4a5568;
+  --accent: #4f9cf9;
+  --accent-2: #7c6af7;
+  --green: #3ecf8e;
+  --orange: #f59e0b;
+  --red: #f87171;
+  --yellow: #fbbf24;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --radius: 8px;
+  --radius-lg: 14px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  font-size: 15px;
+  min-height: 100vh;
+}
+
+/* Layout */
+.layout { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 28px 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+.sidebar-logo {
+  padding: 0 20px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.logo-mark {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 700; font-size: 15px; letter-spacing: -0.02em;
+}
+.logo-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.logo-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-weight: 400; }
+
+.nav-section { padding: 6px 12px; margin-bottom: 4px; }
+.nav-label { font-size: 10px; font-weight: 600; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.1em; padding: 0 8px 8px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 6px;
+  color: var(--text-muted); font-size: 13px; font-weight: 400;
+  cursor: pointer; transition: all 0.15s; border: none; background: none;
+  width: 100%; text-align: left; text-decoration: none;
+}
+.nav-item:hover { background: var(--surface-2); color: var(--text); }
+.nav-item.active { background: rgba(79,156,249,0.12); color: var(--accent); }
+.nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
+.nav-dot.green { background: var(--green); }
+.nav-dot.orange { background: var(--orange); }
+.nav-dot.blue { background: var(--accent); }
+
+.main { overflow-y: auto; }
+.content { max-width: 860px; margin: 0 auto; padding: 48px 40px; }
+
+/* Header */
+.page-header { margin-bottom: 40px; }
+.breadcrumb { font-size: 12px; color: var(--text-faint); margin-bottom: 12px; }
+h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.2; margin-bottom: 10px; }
+.subtitle { color: var(--text-muted); font-size: 15px; max-width: 60ch; }
+
+/* Sections */
+h2 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; margin-bottom: 16px; margin-top: 40px; display: flex; align-items: center; gap: 10px; }
+h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; margin-top: 28px; }
+
+p { color: var(--text-muted); margin-bottom: 14px; max-width: 72ch; }
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  margin-bottom: 16px;
+}
+.card-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.card p { font-size: 13px; margin-bottom: 0; }
+
+/* Principle Cards */
+.principle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+.principle-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.principle-num { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.principle-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.principle-card p { font-size: 12px; margin-bottom: 0; }
+
+/* Code blocks */
+.code-block {
+  background: #0a0c0f;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 16px 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  overflow-x: auto;
+  position: relative;
+}
+.code-block .comment { color: #4d6a8a; }
+.code-block .key { color: #7ec5f4; }
+.code-block .value { color: #a8e6cf; }
+.code-block .section { color: #f9c472; font-weight: 600; }
+.code-block .meta { color: #c792ea; }
+.code-block .copy-btn {
+  position: absolute; top: 12px; right: 12px;
+  background: var(--surface-3); border: 1px solid var(--border-bright);
+  color: var(--text-muted); font-size: 11px; padding: 4px 10px;
+  border-radius: 4px; cursor: pointer; font-family: var(--font-body);
+  transition: all 0.15s;
+}
+.code-block .copy-btn:hover { background: var(--surface-2); color: var(--text); }
+
+/* Badges */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 500;
+}
+.badge-green { background: rgba(62,207,142,0.12); color: var(--green); }
+.badge-orange { background: rgba(245,158,11,0.12); color: var(--orange); }
+.badge-blue { background: rgba(79,156,249,0.15); color: var(--accent); }
+.badge-red { background: rgba(248,113,113,0.12); color: var(--red); }
+.badge-purple { background: rgba(124,106,247,0.12); color: var(--accent-2); }
+
+/* Phase table */
+.phase-table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 13px; }
+.phase-table th { color: var(--text-faint); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+.phase-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+.phase-table tr:last-child td { border-bottom: none; }
+.phase-table td:first-child { font-weight: 500; white-space: nowrap; }
+.phase-done td:first-child { color: var(--green); }
+.phase-active td:first-child { color: var(--yellow); }
+.phase-pending td:first-child { color: var(--text-faint); }
+
+/* Divider */
+.divider { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+
+/* Step list */
+.step-list { list-style: none; padding: 0; }
+.step-list li {
+  display: flex; gap: 14px; padding: 14px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.step-list li:last-child { border-bottom: none; }
+.step-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(79,156,249,0.15); color: var(--accent);
+  font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+}
+.step-content h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.step-content p { font-size: 12.5px; margin-bottom: 0; }
+
+/* Warning / tip boxes */
+.callout {
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 18px 0;
+  font-size: 13px;
+  display: flex; gap: 12px; align-items: flex-start;
+}
+.callout-green { background: rgba(62,207,142,0.07); border: 1px solid rgba(62,207,142,0.2); }
+.callout-orange { background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.2); }
+.callout-blue { background: rgba(79,156,249,0.07); border: 1px solid rgba(79,156,249,0.2); }
+.callout-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+.callout p { margin-bottom: 0; color: var(--text); }
+.callout strong { color: var(--text); }
+
+/* Tab system */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+.tab {
+  padding: 9px 16px; font-size: 13px; font-weight: 500;
+  color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent;
+  margin-bottom: -1px; background: none; border-top: none; border-left: none; border-right: none;
+  transition: all 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Checklist */
+.checklist { list-style: none; padding: 0; }
+.checklist li {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 8px 0; font-size: 13px; color: var(--text-muted);
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.checklist li:last-child { border-bottom: none; }
+.check-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+
+/* Section tabs nav */
+.section-tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+.section-tab {
+  padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-muted); cursor: pointer; transition: all 0.15s;
+}
+.section-tab:hover { border-color: var(--border-bright); color: var(--text); }
+.section-tab.active { background: rgba(79,156,249,0.12); border-color: rgba(79,156,249,0.3); color: var(--accent); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">
+      <div class="logo-icon">🎬</div>
+      <div>
+        <div>StreamDeck</div>
+        <div class="logo-sub">AI Context Engineering</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Guide</div>
+    <a class="nav-item active" href="#principles">
+      <div class="nav-dot blue"></div> Core Principles
+    </a>
+    <a class="nav-item" href="#anatomy">
+      <div class="nav-dot blue"></div> Context Anatomy
+    </a>
+    <a class="nav-item" href="#templates">
+      <div class="nav-dot blue"></div> Handoff Templates
+    </a>
+    <a class="nav-item" href="#anti-patterns">
+      <div class="nav-dot orange"></div> Anti-Patterns
+    </a>
+    <a class="nav-item" href="#workflow">
+      <div class="nav-dot blue"></div> Workflow Checklist
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Phase Templates</div>
+    <a class="nav-item" href="#phase0">
+      <div class="nav-dot green"></div> Phase 0 — Skeleton
+    </a>
+    <a class="nav-item" href="#phase1">
+      <div class="nav-dot green"></div> Phase 1 — Presentation
+    </a>
+    <a class="nav-item" href="#phase2">
+      <div class="nav-dot orange"></div> Phase 2 — NDI Ingest
+    </a>
+    <a class="nav-item" href="#phase3">
+      <div class="nav-dot"></div> Phase 3 — Compositor
+    </a>
+    <a class="nav-item" href="#phase4">
+      <div class="nav-dot"></div> Phase 4 — Streaming
+    </a>
+    <a class="nav-item" href="#phase5">
+      <div class="nav-dot"></div> Phase 5 — Native Slides
+    </a>
+    <a class="nav-item" href="#phase6">
+      <div class="nav-dot"></div> Phase 6 — Intelligence
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Quick Reference</div>
+    <a class="nav-item" href="#stack">
+      <div class="nav-dot blue"></div> Tech Stack
+    </a>
+    <a class="nav-item" href="#invariants">
+      <div class="nav-dot orange"></div> Arch Invariants
+    </a>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+<div class="content">
+
+<!-- HEADER -->
+<div class="page-header" id="principles">
+  <div class="breadcrumb">StreamDeck 2026 · Context Engineering Guide</div>
+  <h1>AI Context Handoff System</h1>
+  <p class="subtitle">Expert framework for conveying project state to Claude or any AI coding assistant — efficiently, precisely, and without redundant regeneration across phase boundaries.</p>
+</div>
+
+<!-- WHY THIS MATTERS -->
+<div class="callout callout-blue">
+  <div class="callout-icon">💡</div>
+  <p><strong>The core problem:</strong> Every new AI thread starts cold. Without a structured handoff, you waste the first 20% of your context window re-explaining architecture, re-generating boilerplate, and correcting the model's wrong assumptions. This guide eliminates that waste.</p>
+</div>
+
+<!-- PRINCIPLES -->
+<h2>🧠 The 5 Context Engineering Principles</h2>
+<div class="principle-grid">
+  <div class="principle-card">
+    <div class="principle-num">Principle 01</div>
+    <h4>State Over History</h4>
+    <p>Never give the AI the full conversation history. Give it the <em>current state</em>: what exists, what works, what's broken, what's next. History wastes tokens; state gives direction.</p>
+  </div>
+  <div class="principle-card">
+    <div class="principle-num">Principle 02</div>
+    <h4>Boundary Before Code</h4>
+    <p>Always declare architecture invariants before asking for code. This prevents the model from generating patterns that violate your event-bus-only channel rule or process-separation constraint.</p>
+  </div>
+  <div class="principle-card">
+    <div class="principle-num">Principle 03</div>
+    <h4>Scope Locking</h4>
+    <p>Explicitly name what is OUT of scope for the current task. Claude will otherwise try to be helpful by touching adjacent systems — which breaks stable code you didn't want changed.</p>
+  </div>
+  <div class="principle-card">
+    <div class="principle-num">Principle 04</div>
+    <h4>Acceptance Criteria First</h4>
+    <p>Paste the exact acceptance criteria from the roadmap. The model generates toward measurable tests, not toward vague descriptions. This alone halves back-and-forth iterations.</p>
+  </div>
+  <div class="principle-card">
+    <div class="principle-num">Principle 05</div>
+    <h4>Minimal Viable Context</h4>
+    <p>Only include the subsystems the AI will <em>touch</em> in this session. Don't paste the full roadmap — paste only the current feature block plus its direct dependencies. Smaller context = sharper output.</p>
+  </div>
+  <div class="principle-card">
+    <div class="principle-num">Principle 06</div>
+    <h4>Output Contract</h4>
+    <p>Tell Claude exactly what files to produce and what to leave untouched. "Generate only X, modify only Y, do not touch Z" prevents the model from refactoring stable code mid-session.</p>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- CONTEXT ANATOMY -->
+<h2 id="anatomy">📐 The 7-Block Context Anatomy</h2>
+<p>Every handoff prompt to Claude should follow this exact structure. Each block serves a distinct cognitive purpose for the model.</p>
+
+<ol class="step-list">
+  <li>
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <h4>🔖 Project Identity Block <span class="badge badge-blue">~100 tokens</span></h4>
+      <p>Project name, tech stack summary (Tauri v2 / Rust / GStreamer / React), current phase, and one-sentence mission. Sets the model's entire reasoning frame.</p>
+    </div>
+  </li>
+  <li>
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <h4>🏗️ Architecture Invariants Block <span class="badge badge-orange">~200 tokens</span></h4>
+      <p>The 5 never-break rules (process separation, event-bus-only, config-as-code, coexistence-first, observability). Pasted verbatim every time. Guards against AI anti-patterns.</p>
+    </div>
+  </li>
+  <li>
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <h4>✅ Completed State Block <span class="badge badge-green">~150 tokens</span></h4>
+      <p>Bullet list of what's done and verified. Feature IDs (F0.1, F1.2…) + one-line status. No code — just confirmation of what the AI should treat as stable ground truth.</p>
+    </div>
+  </li>
+  <li>
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <h4>🎯 Current Task Block <span class="badge badge-purple">~300 tokens</span></h4>
+      <p>The single feature being built this session: description, technologies, and the exact acceptance criteria from the roadmap. This is the AI's primary directive.</p>
+    </div>
+  </li>
+  <li>
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <h4>🔌 Interface Contract Block <span class="badge badge-blue">~200 tokens</span></h4>
+      <p>Types, event variants, and Tauri command signatures that the current feature must integrate with. Only the interfaces — not the implementation. Prevents mismatched types.</p>
+    </div>
+  </li>
+  <li>
+    <div class="step-num">6</div>
+    <div class="step-content">
+      <h4>🚫 Scope Boundary Block <span class="badge badge-orange">~50 tokens</span></h4>
+      <p>Explicit "DO NOT touch / generate / modify" list. Short but critical. Prevents Claude from helpfully refactoring things you didn't ask for.</p>
+    </div>
+  </li>
+  <li>
+    <div class="step-num">7</div>
+    <div class="step-content">
+      <h4>📦 Output Contract Block <span class="badge badge-green">~50 tokens</span></h4>
+      <p>Exact file paths to generate or modify. Expected response format (code only / code + explanation / tests only). This makes the output immediately usable.</p>
+    </div>
+  </li>
+</ol>
+
+<hr class="divider">
+
+<!-- MASTER TEMPLATE -->
+<h2 id="templates">📋 Master Handoff Template</h2>
+<p>Copy, fill in the brackets, and paste to start any session. This is the canonical format for StreamDeck AI handoffs.</p>
+
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment"># ═══════════════════════════════════════════════════</span>
+<span class="comment"># STREAMDECK AI HANDOFF — [PHASE X · FEATURE Y]</span>
+<span class="comment"># ═══════════════════════════════════════════════════</span>
+
+<span class="section">## 1. PROJECT IDENTITY</span>
+<span class="key">Project:</span> <span class="value">StreamDeck — cross-platform live streaming + presentation app</span>
+<span class="key">Stack:</span>   <span class="value">Tauri v2.11 · Rust 1.78 / Tokio 1.38 · React 18 / TypeScript 5 · GStreamer 1.26 · NDI SDK 6.3</span>
+<span class="key">Phase:</span>   <span class="value">[CURRENT PHASE NUMBER AND NAME]</span>
+<span class="key">Task:</span>    <span class="value">[FEATURE ID e.g. F2.2 — NDI Source Discovery & Ingest]</span>
+
+<span class="section">## 2. ARCHITECTURE INVARIANTS (never violate these)</span>
+<span class="value">1. GStreamer pipeline runs in its own Tokio task — Tauri UI events NEVER block the media thread pool</span>
+<span class="value">2. Event bus is the ONLY channel — all state transitions go through tokio::sync::broadcast AppEvent enum</span>
+<span class="value">3. Config is TOML only — no hard-coded pipeline topology, scenes, or WHIP endpoints</span>
+<span class="value">4. Coexistence first — new subsystems are additive; do NOT break Mevo Studio/ProPresenter integration</span>
+<span class="value">5. Observability from day one — all GStreamer bus errors forward to AppEvent within 100ms</span>
+
+<span class="section">## 3. COMPLETED & STABLE (treat as ground truth, do not regenerate)</span>
+<span class="comment"># List each completed feature ID + one-line status:</span>
+<span class="value">- F0.1 ✓  Tauri v2 workspace, two windows (controller 1280×800, presentation 1920×1080)</span>
+<span class="value">- F0.2 ✓  IPC command layer — typed invoke&lt;T&gt;() with AppError discriminated union</span>
+<span class="value">- F0.3 ✓  tokio::sync::broadcast AppEvent bus, Tauri emit_all() bridge</span>
+<span class="value">- F0.4 ✓  TOML config loader with notify v6 hot-reload, keyring for secrets</span>
+<span class="value">- [ADD COMPLETED FEATURES HERE]</span>
+
+<span class="section">## 4. CURRENT TASK</span>
+<span class="comment"># Paste directly from roadmap:</span>
+<span class="key">Feature:</span>   <span class="value">[FEATURE ID AND NAME]</span>
+<span class="key">Goal:</span>      <span class="value">[ONE SENTENCE GOAL]</span>
+<span class="key">Technologies:</span>
+<span class="value">  - [technology + version]</span>
+<span class="value">  - [technology + version]</span>
+<span class="key">Acceptance Criteria:</span>
+<span class="value">  - [EXACT criterion from roadmap — verbatim]</span>
+<span class="value">  - [EXACT criterion from roadmap — verbatim]</span>
+<span class="value">  - [EXACT criterion from roadmap — verbatim]</span>
+
+<span class="section">## 5. INTERFACE CONTRACTS (what this feature must integrate with)</span>
+<span class="comment"># Types and events the new code will read from or write to:</span>
+<span class="meta">// AppEvent variants relevant to this feature:</span>
+<span class="value">AppEvent::SlideUpdate(SlidePayload)   // emitted by slide state machine</span>
+<span class="value">AppEvent::PipelineError { element, message }  // GStreamer errors</span>
+
+<span class="meta">// Tauri commands this feature exposes or calls:</span>
+<span class="value">invoke('slide_advance') -> Result&lt;(), AppError&gt;</span>
+<span class="value">invoke('slide_rewind')  -> Result&lt;(), AppError&gt;</span>
+
+<span class="meta">// Rust structs/traits to conform to:</span>
+<span class="value">struct SlidePayload { index: u32, title: String, body: String, notes: String, background_path: Option&lt;PathBuf&gt; }</span>
+
+<span class="section">## 6. SCOPE BOUNDARY (do NOT touch)</span>
+<span class="value">- Do NOT modify the AppEvent enum (it is non_exhaustive — add variants only if required by this feature)</span>
+<span class="value">- Do NOT change tauri.conf.json</span>
+<span class="value">- Do NOT refactor existing Tauri command handlers</span>
+<span class="value">- Do NOT generate UI for features outside this task</span>
+
+<span class="section">## 7. OUTPUT CONTRACT</span>
+<span class="key">Generate:</span>
+<span class="value">  - src-tauri/src/[module].rs  (Rust implementation)</span>
+<span class="value">  - controller/src/components/[Component].tsx  (React UI if applicable)</span>
+<span class="key">Format:</span>  <span class="value">Code blocks only, one file per block, filename as the code block language tag</span>
+<span class="key">Tests:</span>   <span class="value">Include unit tests in the same Rust file under #[cfg(test)]</span>
+<span class="key">Do NOT:</span>  <span class="value">Provide prose explanation unless I ask — code only</span>
+</div>
+
+<hr class="divider">
+
+<!-- ANTI-PATTERNS -->
+<h2 id="anti-patterns">⚠️ Context Anti-Patterns to Avoid</h2>
+
+<div class="card">
+  <div class="card-title">❌ Pasting the Full Roadmap</div>
+  <p>The 40KB roadmap eats your entire context window. The AI reads all of Phase 5 even when you're working on Phase 0. Paste only the current feature's section + the invariants header.</p>
+</div>
+
+<div class="card">
+  <div class="card-title">❌ "Continue from where we left off"</div>
+  <p>New threads have no memory. This prompt forces the AI to hallucinate the prior state. Always provide an explicit completed-features list instead — it takes 60 seconds and saves 10 minutes of corrections.</p>
+</div>
+
+<div class="card">
+  <div class="card-title">❌ No Scope Boundary Declaration</div>
+  <p>Without an explicit "do not touch" list, Claude will refactor your working IPC layer while implementing NDI discovery. It's being helpful — but it breaks stable code. Always lock scope explicitly.</p>
+</div>
+
+<div class="card">
+  <div class="card-title">❌ Vague Task Description ("implement NDI")</div>
+  <p>The AI will invent requirements. Paste the exact acceptance criteria from the roadmap — they're testable, specific, and already match your architecture. Verbatim beats paraphrased every time.</p>
+</div>
+
+<div class="card">
+  <div class="card-title">❌ Sharing Interface Details Inside Code Comments</div>
+  <p>If your interface contract is buried in code comments or inline, the model deprioritises it. Put types and event signatures in a dedicated block before any code. Named blocks = higher attention weight.</p>
+</div>
+
+<hr class="divider">
+
+<!-- WORKFLOW CHECKLIST -->
+<h2 id="workflow">✅ Phase Completion Workflow</h2>
+<p>Run through this checklist at the end of every phase or sub-feature before starting the next AI session.</p>
+
+<ul class="checklist">
+  <li><div class="check-icon">□</div><div><strong>All acceptance criteria tested</strong> — every bullet in the roadmap's AC section has a passing unit/integration test</div></li>
+  <li><div class="check-icon">□</div><div><strong>AppEvent enum reviewed</strong> — new variants are additive, #[non_exhaustive] is maintained, no variants removed</div></li>
+  <li><div class="check-icon">□</div><div><strong>TOML schema updated</strong> — any new config fields have default values and migration handled</div></li>
+  <li><div class="check-icon">□</div><div><strong>Feature flag verified</strong> — feature compiles independently under its Cargo feature flag (phase2, phase3…)</div></li>
+  <li><div class="check-icon">□</div><div><strong>External tools still operational</strong> — Mevo Studio / ProPresenter still work alongside the new feature</div></li>
+  <li><div class="check-icon">□</div><div><strong>CI passes</strong> — cargo test, cargo clippy -D warnings, npm run typecheck all green</div></li>
+  <li><div class="check-icon">□</div><div><strong>Observability wired</strong> — new subsystem errors surface as AppEvent within 100ms</div></li>
+  <li><div class="check-icon">□</div><div><strong>Update the completed-features list</strong> — add the new feature ID to your handoff template's Block 3</div></li>
+</ul>
+
+<hr class="divider">
+
+<!-- PHASE-SPECIFIC TEMPLATES -->
+<h2 id="phase0">📁 Phase-Specific Handoff Starters</h2>
+<p>Pre-filled Block 3 snapshots for each phase gate. Use as the "Completed State" block in your master template.</p>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab(event, 'p0')">Phase 0</button>
+  <button class="tab" onclick="switchTab(event, 'p1')">Phase 1</button>
+  <button class="tab" onclick="switchTab(event, 'p2')">Phase 2</button>
+  <button class="tab" onclick="switchTab(event, 'p3')">Phase 3</button>
+  <button class="tab" onclick="switchTab(event, 'p4')">Phase 4</button>
+  <button class="tab" onclick="switchTab(event, 'p5')">Phase 5</button>
+</div>
+
+<div id="tab-p0" class="tab-panel active">
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment">## PHASE 0 COMPLETE — use this as Block 3 when starting Phase 1</span>
+<span class="value">- F0.1 ✓  Tauri v2 workspace · controller (1280×800) + presentation (1920×1080) windows · cargo tauri dev OK</span>
+<span class="value">- F0.2 ✓  IPC layer · invoke&lt;T&gt;() wrappers · AppError discriminated union · TS types in sync · &lt;2ms dispatch</span>
+<span class="value">- F0.3 ✓  tokio::sync::broadcast(256) AppEvent bus · emit_all() bridge · BusLag backpressure · 1000-event test OK</span>
+<span class="value">- F0.4 ✓  TOML config loader · notify v6 hot-reload (&lt;500ms) · keyring for WHIP tokens · config v0→v1 migration</span>
+<span class="comment">## Phase 0 gate: CI green · no GStreamer dep yet · Mevo + ProPresenter untouched</span>
+</div>
+</div>
+
+<div id="tab-p1" class="tab-panel">
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment">## PHASE 1 COMPLETE — use this as Block 3 when starting Phase 2</span>
+<span class="value">- F0.1–F0.4 ✓  (see Phase 0 — stable, do not regenerate)</span>
+<span class="value">- F1.1 ✓  Presentation Window · fullscreen · decorations:false · CSS Grid slide zones · listen('slide:update')</span>
+<span class="value">- F1.2 ✓  SlideStateMachine · RwLock · advance/rewind/jump · DeckEnd/DeckStart events · state serialised to disk</span>
+<span class="value">- F1.3 ✓  Controller Slide Panel · SlideDeck / SlideThumb / SlidePreview / SpeakerNotes / Timer components</span>
+<span class="value">- F1.4 ✓  Slide import (.pptx / .pdf) · 50-slide import &lt;10s · SlideDeck JSON v1 schema · error dialogs</span>
+<span class="value">- F1.5 ✓  Multi-display detection · operator assigns Presentation Window per display · persisted in TOML</span>
+<span class="comment">## Phase 1 gate: ProPresenter still active in parallel · no GStreamer yet</span>
+</div>
+</div>
+
+<div id="tab-p2" class="tab-panel">
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment">## PHASE 2 COMPLETE — use this as Block 3 when starting Phase 3</span>
+<span class="value">- F0.1–F1.5 ✓  (Phases 0–1 stable)</span>
+<span class="value">- F2.1 ✓  GStreamer 1.26 init · PipelineService actor · tokio::task::spawn_blocking · start/stop 100× no leak</span>
+<span class="value">- F2.2 ✓  ndisrc element · NDI 6.3 New Format Stream · discovery polling 2s · Mevo Start/Core/Go detected &lt;5s</span>
+<span class="value">- F2.3 ✓  Camera preview grid · appsink→base64 PNG @8fps · up to 8 streams · &lt;40% CPU on 8-core</span>
+<span class="value">- F2.4 ✓  WHIP server axum 0.8 · RFC 9725 · Larix Broadcaster connect &lt;3s · QR code in controller</span>
+<span class="comment">## Phase 2 gate: Mevo Studio still handles streaming · GStreamer preview only, no egress yet</span>
+</div>
+</div>
+
+<div id="tab-p3" class="tab-panel">
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment">## PHASE 3 COMPLETE — use this as Block 3 when starting Phase 4</span>
+<span class="value">- F0.1–F2.4 ✓  (Phases 0–2 stable)</span>
+<span class="value">- F3.1 ✓  compositor element · d3d12/glvideomixer GPU path · 1920×1080@30fps · &lt;33ms source-to-composite</span>
+<span class="value">- F3.2 ✓  Presentation slide capture · AVFoundation/D3D12/PipeWire platform impls · &lt;2 frame lag</span>
+<span class="value">- F3.3 ✓  SceneManager · TOML scene defs · switch &lt;2 frames · 4 transition types · controller thumbnail grid</span>
+<span class="value">- F3.4 ✓  AdaptiveOverlayEngine · SlideClassifier (Title/Visual/Content/Transition) · WCAG AA contrast verified</span>
+<span class="comment">## Phase 3 gate: Mevo Studio still handles streaming egress · compositor is local-only</span>
+</div>
+</div>
+
+<div id="tab-p4" class="tab-panel">
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment">## PHASE 4 COMPLETE — use this as Block 3 when starting Phase 5</span>
+<span class="value">- F0.1–F3.4 ✓  (Phases 0–3 stable)</span>
+<span class="value">- F4.1 ✓  whipclientsink · vtenc/mfh264/vaapi HW encoder · FB Live stream live &lt;8s · HW CPU &lt;10%</span>
+<span class="value">- F4.2 ✓  GStreamer tee fan-out · 3 WHIP destinations · 1.15× bandwidth · auto-reconnect 30s backoff</span>
+<span class="value">- F4.3 ✓  StreamPanel React · Go Live 2-step · bitrate sparkline 60s · dropped-frame counter · EOS on end</span>
+<span class="value">- F4.4 ✓  SRT ingest relay · srtsrc listener · 10% packet loss OK · SRT+NDI coexist</span>
+<span class="comment">## Phase 4 gate: Mevo Studio STREAMING RETIRED · Mevo cameras still used via NDI · ProPresenter optional</span>
+</div>
+</div>
+
+<div id="tab-p5" class="tab-panel">
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment">## PHASE 5 COMPLETE — use this as Block 3 when starting Phase 6</span>
+<span class="value">- F0.1–F4.4 ✓  (Phases 0–4 stable)</span>
+<span class="value">- F5.1 ✓  SlideCanvas React · CSS absolute layers · 6 SlideTransition types @60fps · 4K support</span>
+<span class="value">- F5.2 ✓  SlideEditor contentEditable · slide_update_text invoke · delta layer JSON · undo/redo</span>
+<span class="value">- F5.3 ✓  TemplatePicker · 8 built-in templates · variables system · .streamdeck ZIP format</span>
+<span class="value">- F5.4 ✓  ProPresenterBridge · TCP port 50001 · slide events &lt;200ms · auto-reconnect polling</span>
+<span class="comment">## Phase 5 gate: ProPresenter fully optional · all external tools optional except Mevo cameras (NDI)</span>
+</div>
+</div>
+
+<hr class="divider">
+
+<!-- QUICK REFERENCE: STACK -->
+<h2 id="stack">⚙️ Tech Stack Quick Reference</h2>
+<p>Include relevant rows from this in Block 5 (Interface Contracts) when needed.</p>
+
+<table class="phase-table">
+  <thead>
+    <tr>
+      <th>Layer</th>
+      <th>Technology</th>
+      <th>Version</th>
+      <th>First Phase</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="phase-done"><td>App shell</td><td>Tauri</td><td>v2.11.x</td><td><span class="badge badge-green">P0</span></td></tr>
+    <tr class="phase-done"><td>Backend lang</td><td>Rust + Tokio</td><td>1.78 / 1.38</td><td><span class="badge badge-green">P0</span></td></tr>
+    <tr class="phase-done"><td>Frontend</td><td>TypeScript + React</td><td>5.x / 18.x</td><td><span class="badge badge-green">P0</span></td></tr>
+    <tr class="phase-active"><td>Media pipeline</td><td>GStreamer</td><td>1.26.x</td><td><span class="badge badge-orange">P2</span></td></tr>
+    <tr class="phase-active"><td>NDI</td><td>NDI SDK + gst-plugin-ndi</td><td>6.3 / 0.14.x</td><td><span class="badge badge-orange">P2</span></td></tr>
+    <tr class="phase-active"><td>WebRTC ingest</td><td>whipserversrc</td><td>0.14.x</td><td><span class="badge badge-orange">P2</span></td></tr>
+    <tr class="phase-pending"><td>WebRTC egress</td><td>whipclientsink</td><td>0.14.x</td><td><span class="badge badge-purple">P4</span></td></tr>
+    <tr class="phase-active"><td>WHIP HTTP server</td><td>axum</td><td>0.8</td><td><span class="badge badge-orange">P2</span></td></tr>
+    <tr class="phase-done"><td>Event bus</td><td>tokio::sync::broadcast</td><td>built-in</td><td><span class="badge badge-green">P0</span></td></tr>
+    <tr class="phase-done"><td>Config</td><td>TOML + serde</td><td>latest</td><td><span class="badge badge-green">P0</span></td></tr>
+    <tr class="phase-done"><td>Secrets</td><td>keyring</td><td>3.x</td><td><span class="badge badge-green">P0</span></td></tr>
+    <tr class="phase-active"><td>Frontend state</td><td>Zustand</td><td>5.x</td><td><span class="badge badge-orange">P1</span></td></tr>
+    <tr class="phase-pending"><td>Charts</td><td>Chart.js</td><td>4.x</td><td><span class="badge badge-purple">P4</span></td></tr>
+  </tbody>
+</table>
+
+<hr class="divider">
+
+<!-- ARCHITECTURE INVARIANTS -->
+<h2 id="invariants">🛡️ Architecture Invariants (Copy-Paste Ready)</h2>
+<p>Always include Block 2 verbatim — these 5 rules prevent the most common AI-generated anti-patterns in a Tauri + GStreamer architecture.</p>
+
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment">## ARCHITECTURE INVARIANTS — include in every AI session</span>
+<span class="value">1. PROCESS SEPARATION: GStreamer pipeline runs in a dedicated Tokio task.</span>
+<span class="value">   Tauri UI events NEVER block the media pipeline thread pool.</span>
+<span class="value">   No GStreamer calls from command handlers — use PipelineService actor channel.</span>
+
+<span class="value">2. EVENT BUS ONLY: ALL state transitions (slide change, scene cut, stream start/stop)</span>
+<span class="value">   flow through tokio::sync::broadcast AppEvent enum.</span>
+<span class="value">   No direct function calls across subsystem boundaries.</span>
+
+<span class="value">3. CONFIG AS CODE: Pipeline topology, scene definitions, overlay zones, WHIP endpoints</span>
+<span class="value">   are TOML files. No hard-coded behaviour anywhere.</span>
+<span class="value">   WHIP bearer tokens go in OS keychain (keyring crate), never in TOML plaintext.</span>
+
+<span class="value">4. COEXISTENCE FIRST: New subsystems are additive.</span>
+<span class="value">   Mevo Studio and ProPresenter continue working until the phase that explicitly retires them.</span>
+<span class="value">   No breaking changes to external tool integration until the replacement passes all AC.</span>
+
+<span class="value">5. OBSERVABILITY FROM DAY ONE: All GStreamer bus messages (Error, Warning, Latency, QoS)</span>
+<span class="value">   translate to AppEvent variants visible in the controller UI.</span>
+<span class="value">   New subsystems must wire their errors to AppEvent within 100ms of occurrence.</span>
+</div>
+
+<hr class="divider">
+
+<!-- EXAMPLE: MINI HANDOFF -->
+<h2>⚡ Mini-Handoff Template (Sub-Feature / Bug Fix)</h2>
+<p>For single-file fixes or small sub-features, use this condensed version — same 7 blocks, just slimmer.</p>
+
+<div class="code-block">
+<button class="copy-btn" onclick="copyCode(this)">Copy</button>
+<span class="comment"># STREAMDECK MINI HANDOFF — [sub-feature / bug]</span>
+<span class="key">Stack:</span>  <span class="value">Tauri v2.11 · Rust 1.78 · GStreamer 1.26 · React 18 / TS 5</span>
+<span class="key">Invariants:</span> <span class="value">Event bus only · GStreamer in own Tokio task · TOML config · no breaking external tool changes</span>
+<span class="key">Stable:</span> <span class="value">F0.1–F[LAST COMPLETED] all passing CI</span>
+<span class="key">Fix/Task:</span> <span class="value">[ONE SENTENCE — what exactly needs to change]</span>
+<span class="key">File(s):</span> <span class="value">src-tauri/src/[module].rs</span>
+<span class="key">Must NOT change:</span> <span class="value">[list of files/modules to leave untouched]</span>
+<span class="key">AC:</span>
+<span class="value">  - [test condition 1]</span>
+<span class="value">  - [test condition 2]</span>
+<span class="key">Output:</span> <span class="value">Code diff / replacement block only, no prose</span>
+</div>
+
+<div class="callout callout-green" style="margin-top:32px;">
+  <div class="callout-icon">✅</div>
+  <p><strong>Rule of thumb:</strong> If you can describe the task's acceptance criteria in under 5 bullet points, use the mini handoff. If the task touches 2+ subsystems or introduces a new module, use the full master template.</p>
+</div>
+
+<div style="height: 60px;"></div>
+</div>
+</main>
+</div>
+
+<script>
+function switchTab(e, id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  e.target.classList.add('active');
+  document.getElementById('tab-' + id).classList.add('active');
+}
+
+function copyCode(btn) {
+  const block = btn.closest('.code-block');
+  const text = Array.from(block.childNodes)
+    .filter(n => n.nodeType === Node.TEXT_NODE || (n.nodeType === Node.ELEMENT_NODE && !n.classList.contains('copy-btn')))
+    .map(n => n.textContent)
+    .join('').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1600);
+  });
+}
+
+// Active nav highlight on scroll
+const sections = document.querySelectorAll('[id]');
+const navItems = document.querySelectorAll('.nav-item');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 120) current = s.id;
+  });
+  navItems.forEach(item => {
+    item.classList.remove('active');
+    if (item.getAttribute('href') === '#' + current) item.classList.add('active');
+  });
+}, { passive: true });
+</script>
+</body>
+</html>
