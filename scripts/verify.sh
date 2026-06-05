@@ -355,7 +355,7 @@ run_f0_3() {
   file_contains "pub enum AppEvent"     "src-tauri/src/events.rs" "pub enum AppEvent"
   file_contains "#[non_exhaustive]"     "src-tauri/src/events.rs" "non_exhaustive"
   file_contains "serde::Serialize"      "src-tauri/src/events.rs" "serde::Serialize"
-  file_contains "broadcast channel"     "src-tauri/src/events.rs" "broadcast"
+  file_contains "broadcast channel"     "src-tauri/src/bus.rs" "broadcast"
   file_contains "BusLag variant"        "src-tauri/src/events.rs" "BusLag"
   check "Event bus unit tests pass" \
     bash -c 'cd src-tauri && cargo test events 2>&1 | tee /tmp/sd-test.log \
@@ -372,8 +372,8 @@ run_f0_4() {
     return
   fi
   file_contains "StreamDeckConfig struct" "src-tauri/src/config.rs" "StreamDeckConfig"
-  file_contains "serde Deserialize"       "src-tauri/src/config.rs" "serde::Deserialize"
-  file_contains "notify hot-reload"       "src-tauri/src/config.rs" "notify"
+  file_contains "serde::Deserialize"       "src-tauri/src/config.rs" "serde::Deserialize"
+  file_contains "notify hot-reload"       "src-tauri/src/config_loader.rs" "notify"
   file_contains "version field"           "src-tauri/src/config.rs" "version"
   file_not_contains "No plaintext tokens" "src-tauri/src/config.rs" "bearer_token.*String"
 }

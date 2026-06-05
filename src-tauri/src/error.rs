@@ -10,4 +10,10 @@ pub enum AppError {
 
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+
+    #[error("Config error: {0}")]
+    Config(String),
+
+    #[error("Keychain error: {0}")]
+    Keychain(String),
 }

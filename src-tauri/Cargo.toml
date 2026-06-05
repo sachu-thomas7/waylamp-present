@@ -18,19 +18,25 @@ path = "src/main.rs"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri        = { version = "2", features = ["devtools"] }
+tauri              = { version = "2", features = ["devtools"] }
 tauri-plugin-shell = "2"
-serde        = { version = "1", features = ["derive"] }
-serde_json   = "1"
-tokio        = { version = "1", features = ["full"] }
-sysinfo      = "0.30"
-thiserror = "1"
-ts-rs = { version = "10", features = ["serde-compat"] }
-anyhow = "1"
+serde              = { version = "1", features = ["derive"] }
+serde_json         = "1"
+tokio              = { version = "1", features = ["full"] }
+sysinfo            = "0.30"
+thiserror          = "1"
+ts-rs              = { version = "10", features = ["serde-compat"] }
+anyhow             = "1"
+toml               = "0.8"
+notify             = "6"
+keyring            = "3"
 
 [features]
 default          = ["custom-protocol"]
 custom-protocol  = ["tauri/custom-protocol"]
+
+[dev-dependencies]
+tempfile = "3"
 
 [package.metadata.tauri]
 
