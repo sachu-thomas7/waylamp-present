@@ -410,6 +410,11 @@ run_f1_1() {
   file_contains "zustand in presentation" "presentation/package.json" "zustand"
   file_contains "zustand in controller" "controller/package.json" "zustand"
 
+  subsection "Presentation floating-window fallback (regression check — see CLAUDE.md)"
+  file_contains "single-display fallback exists" "src-tauri/src/commands/presentation.rs" "single_display"
+  file_contains "no exclusive fullscreen on single display" "src-tauri/src/commands/presentation.rs" "set_fullscreen(false)"
+  file_contains "Escape registration failure is non-fatal" "src-tauri/src/commands/presentation.rs" "non-fatal"
+
   subsection "Multi-window dev/build wiring (regression check — see CLAUDE.md)"
   file_contains "presentation window uses dev server URL in debug builds" "src-tauri/src/app.rs" "localhost:5174"
   file_contains "beforeDevCommand runs both dev servers" "src-tauri/tauri.conf.json" "dev-both.cjs"

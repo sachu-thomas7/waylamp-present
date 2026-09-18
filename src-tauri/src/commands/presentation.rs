@@ -38,18 +38,41 @@ pub async fn presentation_show(
         .get_webview_window("presentation")
         .ok_or_else(|| AppError::NotFound("presentation window not found".into()))?;
 
+    // No secondary display: fall back to a floating window, not exclusive fullscreen (F1.5 AC).
+    let single_display = crate::display::list_displays(&app)
+        .map(|d| d.len() < 2)
+        .unwrap_or(true);
+
+    if single_display {
+        window.set_fullscreen(false).map_err(|e| AppError::Internal(e.to_string()))?;
+        window.set_always_on_top(false).map_err(|e| AppError::Internal(e.to_string()))?;
+        window.set_decorations(true).map_err(|e| AppError::Internal(e.to_string()))?;
+        window.set_resizable(true).map_err(|e| AppError::Internal(e.to_string()))?;
+        window.set_size(tauri::PhysicalSize::new(960, 540)).map_err(|e| AppError::Internal(e.to_string()))?;
+    } else {
+        window.set_decorations(false).map_err(|e| AppError::Internal(e.to_string()))?;
+        window.set_always_on_top(true).map_err(|e| AppError::Internal(e.to_string()))?;
+        window.set_fullscreen(true).map_err(|e| AppError::Internal(e.to_string()))?;
+    }
+
     window.show().map_err(|e| AppError::Internal(e.to_string()))?;
-    window.set_fullscreen(true).map_err(|e| AppError::Internal(e.to_string()))?;
     window.set_focus().map_err(|e| AppError::Internal(e.to_string()))?;
+
+    // Publish before the shortcut registration below, so a failure there can't skip this.
+    let sm = machine.read().await;
+    bus.publish(AppEvent::SlideUpdate(sm.current_payload()));
+    drop(sm);
 
     PRESENTING.store(true, Ordering::SeqCst);
     bus.publish(AppEvent::PresentationVisibility { visible: true });
 
-    // Register Escape — unregister is done via spawn OUTSIDE the callback to avoid deadlock
-    let app_handle = app.clone();
-    let bus_weak: Weak<EventBus> = Arc::downgrade(&bus);
-    app.global_shortcut()
-        .on_shortcut(escape_shortcut(), move |_shortcut_app, _shortcut, event| {
+    // Only needed to escape fullscreen; clear stale registrations first, never fail the command on it.
+    if !single_display {
+        let _ = app.global_shortcut().unregister(escape_shortcut());
+
+        let app_handle = app.clone();
+        let bus_weak: Weak<EventBus> = Arc::downgrade(&bus);
+        if let Err(e) = app.global_shortcut().on_shortcut(escape_shortcut(), move |_shortcut_app, _shortcut, event| {
             if event.state() != ShortcutState::Pressed {
                 return;
             }
@@ -62,11 +85,11 @@ pub async fn presentation_show(
                 }
                 let _ = handle.global_shortcut().unregister(escape_shortcut());
             });
-        })
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+        }) {
+            eprintln!("Escape shortcut registration failed (non-fatal): {e}");
+        }
+    }
 
-    let sm = machine.read().await;
-    bus.publish(AppEvent::SlideUpdate(sm.current_payload()));
     Ok(())
 }
 

@@ -41,6 +41,17 @@ can't see this class of bug. **Only an actual `cargo tauri dev` launch would hav
 this** — which is exactly why a manual launch test matters before considering any
 multi-window feature done, not just `verify.sh` passing.
 
+**Second bug found by the same launch test (fixed 2026-09-18):** `presentation_show`
+always went exclusive fullscreen + always-on-top, even with only one display — trapping the
+operator, since F1.1's own AC calls for a floating-window fallback on a single display,
+which was never implemented. It also published the slide content *after* registering the
+global Escape shortcut, so a registration failure (plausible after repeated dev hot-reloads
+leave a stale OS-level hotkey binding) skipped the content entirely while the window was
+already fullscreen-focused with no way out. Fixed: content now publishes first; single vs.
+multi-display is checked via `display::list_displays` and only goes fullscreen/always-on-top
+with 2+ displays, otherwise a resizable floating window; Escape shortcut registration is
+now defensively cleared first and never fails the command.
+
 ## Repo map
 
 ```
