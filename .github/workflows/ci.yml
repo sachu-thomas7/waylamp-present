@@ -44,6 +44,24 @@ jobs:
             librsvg2-dev \
             patchelf
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: |
+            controller/package-lock.json
+            presentation/package-lock.json
+
+      # cargo test/build/clippy compile with the default "custom-protocol" feature,
+      # which embeds each window's dist/ at compile time — it must exist before cargo runs.
+      - name: Build frontend dist (controller + presentation)
+        run: |
+          npm ci --prefix controller
+          npm ci --prefix presentation
+          npm run build --prefix controller
+          npm run build --prefix presentation
+
       - name: cargo test
         run: cargo test --manifest-path src-tauri/Cargo.toml
 

@@ -27,3 +27,6 @@ dist-ssr
 src-tauri/target
 target/
 .verify-cache/
+
+# Claude Code — local/per-machine only; project-shared config (settings.json, skills) stays tracked
+.claude/settings.local.json

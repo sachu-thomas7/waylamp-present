@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2/capability",
+  "identifier": "presentation",
+  "description": "Listen-only capability for the Presentation window. No invoke permissions — all state changes flow from the Controller through Rust commands and are pushed here via the event bus.",
+  "windows": ["presentation"],
+  "permissions": [
+    "core:event:default"
+  ]
+}
