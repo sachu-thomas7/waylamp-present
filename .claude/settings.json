@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push*)",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-push-verify.sh",
+            "timeout": 300,
+            "statusMessage": "Running scripts/verify.sh core before push..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Edit(*.rs)|Write(*.rs)",
+            "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/fmt-rust.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
