@@ -8,6 +8,7 @@ pub const CONFIG_VERSION: u32 = 1;
 pub struct StreamDeckConfig {
     pub version: u32,
     pub app: AppConfig,
+    pub presentation: PresentationConfig,
 }
 
 impl Default for StreamDeckConfig {
@@ -15,8 +16,16 @@ impl Default for StreamDeckConfig {
         Self {
             version: CONFIG_VERSION,
             app: AppConfig::default(),
+            presentation: PresentationConfig::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresentationConfig {
+    // Derived from monitor name + position (Tauri exposes no stable hardware id) — see display.rs
+    pub display_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,5 +58,21 @@ mod tests {
         let restored: StreamDeckConfig = toml::from_str(&serialised).unwrap();
         assert_eq!(original.version, restored.version);
         assert_eq!(original.app.log_level, restored.app.log_level);
+        assert_eq!(original.presentation.display_id, restored.presentation.display_id);
+    }
+
+    #[test]
+    fn v0_config_without_presentation_section_defaults_to_none() {
+        let restored: StreamDeckConfig = toml::from_str("version = 0\n").unwrap();
+        assert_eq!(restored.presentation.display_id, None);
+    }
+
+    #[test]
+    fn presentation_display_id_round_trips() {
+        let mut original = StreamDeckConfig::default();
+        original.presentation.display_id = Some("Built-in@0,0".into());
+        let serialised = toml::to_string(&original).unwrap();
+        let restored: StreamDeckConfig = toml::from_str(&serialised).unwrap();
+        assert_eq!(restored.presentation.display_id, Some("Built-in@0,0".into()));
     }
 }

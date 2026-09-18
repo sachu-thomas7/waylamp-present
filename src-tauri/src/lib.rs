@@ -8,6 +8,7 @@ pub mod slide;
 pub mod slide_state_machine;
 pub mod scene;
 pub mod deck_importer;
+pub mod display;
 
 #[cfg(not(test))]
 mod app;

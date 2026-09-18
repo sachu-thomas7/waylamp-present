@@ -516,6 +516,37 @@ run_f1_4() {
     && ! grep -q "FAILED" /tmp/sd-f14-test.log'
 }
 
+run_f1_5() {
+  section "F1.5 — Multi-Display Assignment"
+  if [ ! -f "src-tauri/src/display.rs" ]; then
+    skip "display.rs not created — F1.5 not started yet"
+    return
+  fi
+
+  file_contains "DisplayInfo struct"        "src-tauri/src/display.rs"              "pub struct DisplayInfo"
+  file_contains "list_displays fn"          "src-tauri/src/display.rs"              "pub fn list_displays"
+  file_contains "displays_changed fn"       "src-tauri/src/display.rs"              "pub fn displays_changed"
+  file_contains "is_assigned_display_lost"  "src-tauri/src/display.rs"              "pub fn is_assigned_display_lost"
+  file_contains "pick_fallback fn"          "src-tauri/src/display.rs"              "pub fn pick_fallback"
+  file_contains "spawn_watch_task fn"       "src-tauri/src/display.rs"              "pub fn spawn_watch_task"
+  file_contains "DisplaysChanged variant"   "src-tauri/src/events.rs"               "DisplaysChanged"
+  file_contains "DisplayLost variant"       "src-tauri/src/events.rs"               "DisplayLost"
+  file_contains "display_list cmd"          "src-tauri/src/commands/display.rs"     "display_list"
+  file_contains "display_assign cmd"        "src-tauri/src/commands/display.rs"     "display_assign_presentation"
+  file_contains "display_id in config"      "src-tauri/src/config.rs"               "display_id"
+  file_contains "ConfigLoader::save"        "src-tauri/src/config_loader.rs"        "pub fn save"
+
+  file_contains "DisplayPanel component"    "controller/src/components/DisplayPanel.tsx" "DisplayPanel"
+  file_contains "displayStore"              "controller/src/store/displayStore.ts"  "useDisplayStore"
+  file_contains "displayList ipc"           "controller/src/lib/ipc.ts"             "displayList"
+  file_contains "displayAssignPresentation ipc" "controller/src/lib/ipc.ts"         "displayAssignPresentation"
+  file_contains "DisplaysChanged events.ts" "controller/src/lib/events.ts"          "DisplaysChanged"
+
+  check "F1.5 unit tests pass" \
+    bash -c 'cd src-tauri && cargo test display 2>&1 | tee /tmp/sd-f15-test.log \
+    && ! grep -q "FAILED" /tmp/sd-f15-test.log'
+}
+
 # ══════════════════════════════════════════════════════════════════
 # CORE — Build + Lint (requires frontend dist to exist)
 # ══════════════════════════════════════════════════════════════════
@@ -602,14 +633,17 @@ case "$FILTER" in
   f1.4)
     run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4
     ;;
+  f1.5)
+    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5
+    ;;
   f1|phase1)
-    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_core
+    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_core
     ;;
   core)
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_core
     ;;
 esac
 

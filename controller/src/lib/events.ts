@@ -3,6 +3,7 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { SlidePayload } from './ipc';
 import type { SceneMediaPayload } from './ipc';
+import type { DisplayInfo } from './ipc';
 
 export type AppEvent =
   | { type: 'BusLag'; payload: { receiver_id: string; dropped: number } }
@@ -20,7 +21,10 @@ export type AppEvent =
   | { type: 'DeckImportComplete'; payload: { deck_id: string } }
   | { type: 'DeckImportFailed';   payload: { slide: number; reason: string } }
   | { type: 'SceneMediaUpdate';   payload: SceneMediaPayload }
-  | { type: 'SceneSourceChanged'; payload: { source: 'SlideDeck' | 'SceneMedia' } };
+  | { type: 'SceneSourceChanged'; payload: { source: 'SlideDeck' | 'SceneMedia' } }
+  | { type: 'DisplaysChanged';    payload: DisplayInfo[] }
+  | { type: 'DisplayAssigned';    payload: { display_id: string } }
+  | { type: 'DisplayLost';        payload: null };
 
 export function onAppEvent(handler: (event: AppEvent) => void): Promise<UnlistenFn> {
   return listen<AppEvent>('app-event', (e) => handler(e.payload));

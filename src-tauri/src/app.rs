@@ -12,6 +12,7 @@ use crate::slide::SlideDeck;
 use crate::slide_state_machine;
 
 pub struct TimerAbortHandle(pub tokio::task::AbortHandle);
+pub struct DisplayWatchAbortHandle(pub tokio::task::AbortHandle);
 
 pub fn run() {
     let (bus, rx) = EventBus::new();
@@ -40,6 +41,8 @@ pub fn run() {
             crate::commands::scene::scene_push_video,
             crate::commands::scene::scene_set_source,
             crate::commands::scene::scene_get_active_source,
+            crate::commands::display::display_list,
+            crate::commands::display::display_assign_presentation,
         ])
         .setup(move |app| {
             WebviewWindowBuilder::new(
@@ -104,11 +107,8 @@ pub fn run() {
 
             tauri::async_runtime::spawn(run_event_bridge(app.handle().clone(), rx));
 
-            let config_path = app
-                .path()
-                .app_config_dir()
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
-                .join("streamdeck.toml");
+            let config_path = ConfigLoader::resolve_path(app.handle())
+                .map_err(|e| Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>)?;
 
             let config = ConfigLoader::load_or_default(&config_path).map_err(|e| {
                 eprintln!("Config load failed: {e}");
@@ -122,6 +122,24 @@ pub fn run() {
                         as Box<dyn std::error::Error>
                 })?;
 
+            let display_handle = crate::display::new_display_handle(config.presentation.display_id.clone());
+            if let Some(id) = &config.presentation.display_id {
+                if let Ok(displays) = crate::display::list_displays(app.handle()) {
+                    if let Some(target) = displays.iter().find(|d| &d.id == id) {
+                        if let Some(window) = app.get_webview_window("presentation") {
+                            let _ = crate::display::apply_position(&window, target);
+                        }
+                    }
+                }
+            }
+            let display_watch_abort = crate::display::spawn_watch_task(
+                app.handle().clone(),
+                Arc::clone(&bus_arc),
+                Arc::clone(&display_handle),
+            );
+            app.manage(display_handle);
+            app.manage(DisplayWatchAbortHandle(display_watch_abort));
+
             app.manage(config);
             app.manage(watcher);
 
@@ -131,6 +149,9 @@ pub fn run() {
             if window.label() == "controller" {
                 if let tauri::WindowEvent::Destroyed = event {
                     if let Some(abort) = window.app_handle().try_state::<TimerAbortHandle>() {
+                        abort.0.abort();
+                    }
+                    if let Some(abort) = window.app_handle().try_state::<DisplayWatchAbortHandle>() {
                         abort.0.abort();
                     }
                     window.app_handle().exit(0);

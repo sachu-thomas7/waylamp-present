@@ -40,6 +40,17 @@ export interface SceneMediaPayload {
 
 export type SceneSource = 'SlideDeck' | 'SceneMedia';
 
+// @sync-with: src-tauri/src/display.rs DisplayInfo
+export interface DisplayInfo {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  is_primary: boolean;
+}
+
 export async function pickDeckFile(): Promise<string | null> {
   const result = await open({
     multiple: false,
@@ -110,4 +121,12 @@ export async function slideGetCurrent(): Promise<SlidePayload> {
 
 export async function slideTimerReset(): Promise<void> {
   return invoke<void>('slide_timer_reset');
+}
+
+export async function displayList(): Promise<DisplayInfo[]> {
+  return invoke<DisplayInfo[]>('display_list');
+}
+
+export async function displayAssignPresentation(id: string): Promise<void> {
+  return invoke<void>('display_assign_presentation', { id });
 }

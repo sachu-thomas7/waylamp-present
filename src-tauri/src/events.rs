@@ -1,6 +1,7 @@
 use crate::slide::SlidePayload;
 use crate::scene::SceneMediaPayload;
 use crate::scene::SceneSource;
+use crate::display::DisplayInfo;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "payload")]
@@ -22,4 +23,7 @@ pub enum AppEvent {
     DeckImportFailed { slide: u32, reason: String },
     SceneMediaUpdate(SceneMediaPayload),
     SceneSourceChanged { source: SceneSource },
+    DisplaysChanged(Vec<DisplayInfo>),
+    DisplayAssigned { display_id: String },
+    DisplayLost,
 }

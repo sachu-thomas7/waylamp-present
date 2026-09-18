@@ -4,6 +4,7 @@ import { getBuildInfo } from './lib/ipc';
 import { PresentButton } from './components/PresentButton';
 import { SlideDeckPanel } from './components/SlideDeckPanel';
 import { SceneMediaPanel } from './components/SceneMediaPanel';
+import { DisplayPanel } from './components/DisplayPanel';
 
 interface BuildInfo {
   build_timestamp: string;
@@ -24,8 +25,8 @@ export default function App() {
     <div>
       <PresentButton />
       <SlideDeckPanel />
-      <SlideDeckPanel />
       <SceneMediaPanel />
+      <DisplayPanel />
 
       <h2>Build Info</h2>
       {error && <p>IPC error: {error}</p>}

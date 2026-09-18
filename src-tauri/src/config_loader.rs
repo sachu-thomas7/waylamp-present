@@ -17,6 +17,15 @@ use crate::events::AppEvent;
 pub struct ConfigLoader;
 
 impl ConfigLoader {
+    pub fn resolve_path(app: &tauri::AppHandle) -> Result<PathBuf, AppError> {
+        use tauri::Manager;
+        Ok(app
+            .path()
+            .app_config_dir()
+            .map_err(|e| AppError::Config(e.to_string()))?
+            .join("streamdeck.toml"))
+    }
+
     pub fn load_or_default(path: &PathBuf) -> Result<StreamDeckConfig, AppError> {
         if !path.exists() {
             let default = StreamDeckConfig::default();
@@ -35,6 +44,15 @@ impl ConfigLoader {
             .map_err(|e| AppError::Config(e.to_string()))?;
         toml::from_str::<StreamDeckConfig>(&content)
             .map_err(|e| AppError::Config(e.to_string()))
+    }
+
+    pub fn save(path: &PathBuf, config: &StreamDeckConfig) -> Result<(), AppError> {
+        let toml_str = toml::to_string_pretty(config)
+            .map_err(|e| AppError::Config(e.to_string()))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| AppError::Config(e.to_string()))?;
+        }
+        std::fs::write(path, toml_str).map_err(|e| AppError::Config(e.to_string()))
     }
 
     pub fn spawn_watcher(
@@ -97,6 +115,17 @@ mod tests {
         fs::write(&path, "not valid toml ][[[").unwrap();
         let result = ConfigLoader::load_or_default(&path);
         assert!(matches!(result, Err(AppError::Config(_))));
+    }
+
+    #[test]
+    fn save_then_load_round_trips_presentation_display_id() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("streamdeck.toml");
+        let mut config = StreamDeckConfig::default();
+        config.presentation.display_id = Some("Built-in@0,0".into());
+        ConfigLoader::save(&path, &config).unwrap();
+        let restored = ConfigLoader::load_or_default(&path).unwrap();
+        assert_eq!(restored.presentation.display_id, Some("Built-in@0,0".into()));
     }
 
     #[test]
