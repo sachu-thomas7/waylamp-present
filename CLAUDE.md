@@ -71,22 +71,38 @@ choice, not drift; don't "fix" it by extracting a shared package unless asked.
 ## Current status (2026-09-18)
 
 - **Phase 0** (F0.1–F0.4: bootstrap, IPC layer, event bus, TOML config) — done.
-- **Phase 1**: F1.1 (Presentation window + slide renderer), F1.2 (slide state machine),
-  F1.3 (controller slide panel + timer), F1.4 (PPTX/PDF import + scene media push) — code
-  complete, 36/36 Rust tests passing, clippy clean, typecheck clean in both frontends.
-- **F1.5 (Multi-Display Assignment) is NOT started** — no `DisplaysChanged` event, no
-  display enumeration/assignment code anywhere. This is the one unfinished item in Phase 1
-  per the roadmap; decide explicitly whether to finish it before starting Phase 2.
+- **Phase 1 — all of F1.1–F1.5 done**: presentation window + slide renderer, slide state
+  machine, controller slide panel + timer, PPTX/PDF import + scene media push, and
+  multi-display assignment (`display.rs` — monitor enumeration, hotplug polling every 2s,
+  `DisplaysChanged`/`DisplayLost`/`DisplayAssigned` events, assignment persisted to
+  `streamdeck.toml`, fallback to primary display on disconnect). 49/49 Rust tests passing,
+  clippy clean, typecheck clean in both frontends. `bash scripts/verify.sh f1` is green.
+- Phase 1 is functionally complete now; Phase 2 (NDI camera ingest) is next per the
+  roadmap and hasn't been started — no GStreamer/NDI code exists anywhere yet.
 - **Zero frontend tests** — no vitest, no `*.test.tsx`, in either `controller/` or
-  `presentation/`. Rust side has solid coverage (`#[test]` in bus, config, slide,
-  slide_state_machine, deck_importer, commands::system); frontend does not. Worth setting
-  up before Phase 1 work is considered fully done, not just CI-green.
-- `deck_importer.rs` has real unit tests for parsing helpers, but no fixture-based
-  integration tests against actual `.pptx`/`.pdf` files (fixtures dir exists, empty).
+  `presentation/`. Rust side has solid coverage (49 `#[test]`s across bus, config,
+  config_loader, slide, slide_state_machine, deck_importer, display, commands::system);
+  frontend does not.
+- `deck_importer.rs` now has fixture-based integration tests
+  (`src-tauri/tests/deck_import_fixtures.rs`) against real generated `.pptx`/`.pdf` files in
+  `src-tauri/tests/fixtures/` (same files as `dev-docs/test-assets/`, regenerate both via
+  `node dev-docs/test-assets/make_test_assets.cjs`). This caught and fixed a real bug: the
+  `.pptx` parser only handled `<p:ph type="title">` when quick-xml emitted it as an
+  `Event::Start`, but real PowerPoint always writes placeholders as self-closing tags
+  (`Event::Empty`) — title/body extraction was silently broken for every real-world file.
+  Fixed via a shared `classify_ph()` helper called from both event arms.
+- **PDF import panics at runtime without a native `pdfium` library present** —
+  `pdfium-render`'s `Pdfium::default()` doesn't return an `Err` when it can't find/load the
+  library, it panics (`LoadLibraryError`). Nothing in this repo bundles or downloads that
+  library. The PDF fixture test is `#[ignore]`d for this reason (run with
+  `cargo test -- --ignored` once pdfium is available). This needs an explicit decision —
+  likely bundling a prebuilt pdfium binary per platform (see bblanchon/pdfium-binaries) and
+  switching `import_pdf` from `Pdfium::default()` to `Pdfium::bind_to_library(...)` with an
+  app-relative path — before PDF import can be considered actually done, not just compiling.
 - Git history was ~5 commits behind the actual working tree until 2026-09-18 — F1.1–F1.4
-  and the scene/deck-import system existed only as uncommitted/untracked changes. Being
-  committed now; keep commits current going forward — don't let multiple shipped features
-  pile up uncommitted.
+  and the scene/deck-import system existed only as uncommitted/untracked changes. Now
+  clean and committed; keep commits current going forward — don't let multiple shipped
+  features pile up uncommitted.
 
 ## Verification — `scripts/verify.sh`
 
@@ -122,12 +138,16 @@ running cargo, for the reason above — this was previously missing and would ha
 
 ## Local environment note (Windows)
 
-`cargo`/`rustup` tools live in `~/.cargo/bin`; Node is managed via `fnm` — neither is on
-the default non-interactive shell PATH. Use:
+`cargo`/`rustup` tools live in `/c/Users/<you>/.cargo/bin`; Node is managed via `fnm` —
+neither is on the default non-interactive shell PATH. **`$HOME` in this Git Bash/MSYS
+environment resolves to the MSYS home (`/c/msys64/home/<you>`), not the Windows user
+profile** — `$HOME/.cargo/bin` silently doesn't exist. Use the explicit Windows path:
 ```
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="/c/Users/<you>/.cargo/bin:$PATH"
 eval "$(fnm env --shell bash)"
 ```
+(`.claude/hooks/*.sh` fall back through `/c/Users/sachu/.cargo/bin` → `$HOME/.cargo/bin` →
+`$USERPROFILE/.cargo/bin` for exactly this reason — don't "simplify" that to just `$HOME`.)
 
 ## Hard-won lessons (curated — see individual `dev-docs/*-handoff.md` for the full running list)
 
@@ -154,6 +174,30 @@ eval "$(fnm env --shell bash)"
   any copy or path storage — never trust the frontend to pre-validate.
 - Windows AV may flag the dev binary (`VHO:Trojan-PSW`) due to `keyring` + being unsigned —
   add the project/`target` dirs to AV exclusions locally; code-sign for real distribution.
+- quick-xml distinguishes `Event::Start`/`Event::End` (has children) from `Event::Empty`
+  (self-closing `<tag/>`) — real-world XML producers (PowerPoint included) favor
+  self-closing tags for childless elements. A `match` that only handles one of these two
+  event kinds for the same element name will silently miss real files while still passing
+  hand-written tests that happen to use the other form. Handle both, or share the logic via
+  a helper called from both arms (see `classify_ph` in `deck_importer.rs`).
+- A dynamically-created Tauri window (`WebviewWindowBuilder` inside `.setup()`, not declared
+  in `tauri.conf.json`) is invisible to capability matching unless its label appears in some
+  capability file's `windows` array — including for `listen()`, not just `invoke()`. Every
+  new dynamic window needs its own capability entry from the start.
+
+## Agentic tooling in this repo
+
+- `/verify` skill (`.claude/skills/verify/`) — wraps `scripts/verify.sh`, the real
+  Definition-of-Done gate. Use it instead of running `cargo test` alone and calling
+  something done.
+- `feature-builder` subagent (`.claude/agents/feature-builder.md`) — implements one roadmap
+  feature end-to-end (Rust + frontend + verify.sh gate + tests) following this file's
+  conventions. Invoke it for "implement FX.Y"-shaped requests; it never runs git commands.
+- A `PreToolUse` hook (`.claude/settings.json` → `.claude/hooks/pre-push-verify.sh`) runs
+  `verify.sh core` before any `git push` and blocks the push if it fails. A `PostToolUse`
+  hook (`.claude/hooks/fmt-rust.sh`) auto-runs `cargo fmt` after editing any `.rs` file.
+- The built-in `/run` skill can launch the app for manual verification; `/code-review` for
+  an independent review pass on a diff.
 
 ## Working agreement for AI-assisted sessions
 
