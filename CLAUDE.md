@@ -184,6 +184,10 @@ eval "$(fnm env --shell bash)"
   in `tauri.conf.json`) is invisible to capability matching unless its label appears in some
   capability file's `windows` array — including for `listen()`, not just `invoke()`. Every
   new dynamic window needs its own capability entry from the start.
+- `tokio::spawn` called synchronously from `.setup()` panics ("no reactor running") —
+  `.setup()` isn't inside a Tokio runtime context yet. Use `tauri::async_runtime::spawn`
+  for anything spawned directly in `.setup()`. `cargo test`/clippy don't catch this; only
+  actually running the app does (see `display::spawn_watch_task`).
 
 ## Agentic tooling in this repo
 

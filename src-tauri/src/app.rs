@@ -12,7 +12,7 @@ use crate::slide::SlideDeck;
 use crate::slide_state_machine;
 
 pub struct TimerAbortHandle(pub tokio::task::AbortHandle);
-pub struct DisplayWatchAbortHandle(pub tokio::task::AbortHandle);
+pub struct DisplayWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 
 pub fn run() {
     let (bus, rx) = EventBus::new();

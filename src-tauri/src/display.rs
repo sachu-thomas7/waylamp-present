@@ -83,8 +83,9 @@ pub fn spawn_watch_task(
     app: AppHandle,
     bus: Arc<crate::bus::EventBus>,
     display_state: DisplayStateHandle,
-) -> tokio::task::AbortHandle {
-    let task = tokio::spawn(async move {
+) -> tauri::async_runtime::JoinHandle<()> {
+    // Called from .setup(), outside any Tokio runtime — tokio::spawn would panic here.
+    tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
         loop {
             interval.tick().await;
@@ -110,8 +111,7 @@ pub fn spawn_watch_task(
                 }
             }
         }
-    });
-    task.abort_handle()
+    })
 }
 
 /// True when the display list changed in a way the controller needs to know about
