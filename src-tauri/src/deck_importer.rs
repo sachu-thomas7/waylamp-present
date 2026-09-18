@@ -5,6 +5,26 @@ use crate::error::AppError;
 use crate::slide::{SlideDeck, SlideEntry, SlideTextBlock, SlideTextRun, TextAlignment};
 use crate::events::AppEvent;
 
+enum PhKind {
+    Title,
+    Body,
+    Other,
+}
+
+// PowerPoint always writes <p:ph .../> as a self-closing (Empty) element, never Start/End —
+// this must be called from both Event::Start and Event::Empty arms, not just Start.
+fn classify_ph(e: &quick_xml::events::BytesStart) -> PhKind {
+    let type_attr = e
+        .attributes()
+        .filter_map(|a| a.ok())
+        .find(|a| a.key.local_name().as_ref() == b"type");
+    match type_attr.as_ref().and_then(|a| std::str::from_utf8(&a.value).ok()) {
+        Some("title") | Some("ctrTitle") => PhKind::Title,
+        Some("body") | None => PhKind::Body,
+        Some(_) => PhKind::Other,
+    }
+}
+
 pub enum DeckFormat {
     Pptx,
     Pdf,
@@ -122,16 +142,11 @@ fn parse_pptx_slide(
                     b"sp" => {
                         // Detect placeholder type via ph element inside spPr/nvSpPr
                     }
-                    b"ph" => {
-                        let type_attr = e.attributes()
-                            .filter_map(|a| a.ok())
-                            .find(|a| a.key.local_name().as_ref() == b"type");
-                        match type_attr.as_ref().and_then(|a| std::str::from_utf8(&a.value).ok()) {
-                            Some("title") | Some("ctrTitle") => { in_title_ph = true; in_body_ph = false; }
-                            Some("body") | None => { in_body_ph = true; in_title_ph = false; }
-                            Some(_) => { layout_unsupported = true; }
-                        }
-                    }
+                    b"ph" => match classify_ph(e) {
+                        PhKind::Title => { in_title_ph = true; in_body_ph = false; }
+                        PhKind::Body => { in_body_ph = true; in_title_ph = false; }
+                        PhKind::Other => { layout_unsupported = true; }
+                    },
                     b"rPr" if in_title_ph || in_body_ph => {
                         current_bold = e.attributes().filter_map(|a| a.ok())
                             .any(|a| a.key.local_name().as_ref() == b"b" && a.value.as_ref() == b"1");
@@ -162,10 +177,18 @@ fn parse_pptx_slide(
                 }
             }
             Ok(Event::Empty(ref e)) => {
-                if e.local_name().as_ref() == b"latin" && (in_title_ph || in_body_ph) {
-                    current_font_family = e.attributes().filter_map(|a| a.ok())
-                        .find(|a| a.key.local_name().as_ref() == b"typeface")
-                        .and_then(|a| String::from_utf8(a.value.into_owned()).ok());
+                match e.local_name().as_ref() {
+                    b"latin" if in_title_ph || in_body_ph => {
+                        current_font_family = e.attributes().filter_map(|a| a.ok())
+                            .find(|a| a.key.local_name().as_ref() == b"typeface")
+                            .and_then(|a| String::from_utf8(a.value.into_owned()).ok());
+                    }
+                    b"ph" => match classify_ph(e) {
+                        PhKind::Title => { in_title_ph = true; in_body_ph = false; }
+                        PhKind::Body => { in_body_ph = true; in_title_ph = false; }
+                        PhKind::Other => { layout_unsupported = true; }
+                    },
+                    _ => {}
                 }
             }
             Ok(Event::Text(ref e)) => {
@@ -441,6 +464,51 @@ mod tests {
     fn is_code_slide_false_for_sans_serif_run() {
         let blocks = vec![make_block(make_run(Some("Arial")))];
         assert!(!is_code_slide(&blocks));
+    }
+
+    fn empty_ph_event(xml: &str) -> quick_xml::events::BytesStart<'static> {
+        use quick_xml::events::Event;
+        use quick_xml::Reader;
+        let mut reader = Reader::from_str(xml);
+        let mut buf = Vec::new();
+        loop {
+            match reader.read_event_into(&mut buf).unwrap() {
+                Event::Empty(e) => return e.into_owned(),
+                Event::Eof => panic!("no empty element found in {xml}"),
+                _ => {}
+            }
+            buf.clear();
+        }
+    }
+
+    #[test]
+    fn classify_ph_title_for_title_type() {
+        let e = empty_ph_event(r#"<p:ph type="title"/>"#);
+        assert!(matches!(classify_ph(&e), PhKind::Title));
+    }
+
+    #[test]
+    fn classify_ph_title_for_ctr_title_type() {
+        let e = empty_ph_event(r#"<p:ph type="ctrTitle"/>"#);
+        assert!(matches!(classify_ph(&e), PhKind::Title));
+    }
+
+    #[test]
+    fn classify_ph_body_for_body_type() {
+        let e = empty_ph_event(r#"<p:ph type="body" idx="1"/>"#);
+        assert!(matches!(classify_ph(&e), PhKind::Body));
+    }
+
+    #[test]
+    fn classify_ph_body_when_type_attribute_absent() {
+        let e = empty_ph_event(r#"<p:ph idx="1"/>"#);
+        assert!(matches!(classify_ph(&e), PhKind::Body));
+    }
+
+    #[test]
+    fn classify_ph_other_for_unrecognised_type() {
+        let e = empty_ph_event(r#"<p:ph type="subTitle"/>"#);
+        assert!(matches!(classify_ph(&e), PhKind::Other));
     }
 
     #[test]
