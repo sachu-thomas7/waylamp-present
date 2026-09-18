@@ -1,0 +1,96 @@
+use std::sync::Arc;
+use tauri::Manager;
+use crate::bus::EventBus;
+use crate::error::AppError;
+use crate::events::AppEvent;
+use crate::slide::{SlideDeck, SlidePayload};
+use crate::slide_state_machine::StateMachineHandle;
+use crate::scene::{SceneSource, SceneStateHandle};
+
+#[tauri::command]
+pub async fn deck_import(
+    path: String,
+    bus: tauri::State<'_, Arc<EventBus>>,
+    machine: tauri::State<'_, StateMachineHandle>,
+    scene: tauri::State<'_, SceneStateHandle>,
+    app: tauri::AppHandle,
+) -> Result<String, AppError> {
+    let deck_id = uuid::Uuid::new_v4().to_string();
+    let data_dir = app.path().app_data_dir()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let dest_dir = data_dir.join("decks").join(&deck_id);
+
+    let bus_arc = Arc::clone(&*bus);
+    let deck = crate::deck_importer::import_deck(
+        std::path::Path::new(&path),
+        &dest_dir,
+        bus_arc,
+    ).await?;
+
+    let deck_json_path = dest_dir.join("deck.json");
+    deck.save_to_json(&deck_json_path)?;
+
+    let active_id_path = data_dir.join("decks").join("active_deck_id.txt");
+    std::fs::write(&active_id_path, &deck_id)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    let first_payload = {
+        let mut m = machine.write().await;
+        m.load_deck(deck);
+        SlidePayload::from_entry(m.current_slide_entry(), m.deck_len() as u32)
+    };
+
+    {
+        let mut s = scene.write().await;
+        s.active_source = SceneSource::SlideDeck;
+    }
+
+    bus.publish(AppEvent::SlideUpdate(first_payload));
+    bus.publish(AppEvent::SceneSourceChanged { source: SceneSource::SlideDeck });
+    bus.publish(AppEvent::DeckImportComplete { deck_id: deck_id.clone() });
+
+    Ok(deck_id)
+}
+
+#[tauri::command]
+pub async fn deck_get_all_slides(
+    machine: tauri::State<'_, StateMachineHandle>,
+) -> Result<Vec<SlidePayload>, AppError> {
+    let m = machine.read().await;
+    let total = m.deck_len() as u32;
+    Ok(m.all_slides()
+        .iter()
+        .map(|e| SlidePayload::from_entry(e, total))
+        .collect())
+}
+
+#[tauri::command]
+pub async fn deck_restore(
+    bus: tauri::State<'_, Arc<EventBus>>,
+    machine: tauri::State<'_, StateMachineHandle>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    let data_dir = app.path().app_data_dir()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let active_id_path = data_dir.join("decks").join("active_deck_id.txt");
+
+    let deck_id = match std::fs::read_to_string(&active_id_path) {
+        Ok(id) => id.trim().to_string(),
+        Err(_) => return Ok(()),
+    };
+
+    let deck_json_path = data_dir.join("decks").join(&deck_id).join("deck.json");
+    if !deck_json_path.exists() {
+        return Ok(());
+    }
+
+    let deck = SlideDeck::load_from_json(&deck_json_path)?;
+    let first_payload = {
+        let mut m = machine.write().await;
+        m.load_deck(deck);
+        SlidePayload::from_entry(m.current_slide_entry(), m.deck_len() as u32)
+    };
+
+    bus.publish(AppEvent::SlideUpdate(first_payload));
+    Ok(())
+}

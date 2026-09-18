@@ -1,313 +1,470 @@
----
-name: streamdeck-ai-context-handoff
-version: 1
-description: >
-  AI context engineering skill for the StreamDeck project.
-  Defines the 7-block handoff structure, 6 context principles, anti-patterns,
-  phase-completion checklist, master + mini templates, phase-gate snapshots,
-  tech stack reference, and architecture invariants.
-  Load this skill at the start of every new AI coding session to convey project
-  state efficiently and prevent redundant code generation.
----
+# StreamDeck — AI Handoff Document
+## Feature F0.4 · TOML Configuration Loader
 
-# StreamDeck — AI Context Handoff System
-
-Expert framework for conveying project state to Claude or any AI coding assistant — efficiently, precisely, and without redundant regeneration across phase boundaries.
-
-> **The core problem:** Every new AI thread starts cold. Without a structured handoff, you waste the first 20% of your context window re-explaining architecture, re-generating boilerplate, and correcting the model's wrong assumptions. This skill eliminates that waste.
+**Document Type:** AI Session Handoff  
+**Phase:** Phase 0 — Project Skeleton & Toolchain  
+**Feature:** F0.4 — TOML Configuration Loader  
+**Prerequisite:** F0.1, F0.2, and F0.3 must be complete and CI green before starting  
+**Date:** June 2026  
 
 ---
 
-## The 6 Context Engineering Principles
-
-### Principle 01 — State Over History
-Never give the AI the full conversation history. Give it the *current state*: what exists, what works, what's broken, what's next. History wastes tokens; state gives direction.
-
-### Principle 02 — Boundary Before Code
-Always declare architecture invariants before asking for code. This prevents the model from generating patterns that violate your event-bus-only channel rule or process-separation constraint.
-
-### Principle 03 — Scope Locking
-Explicitly name what is OUT of scope for the current task. Claude will otherwise try to be helpful by touching adjacent systems — which breaks stable code you didn't want changed.
-
-### Principle 04 — Acceptance Criteria First
-Paste the exact acceptance criteria from the roadmap. The model generates toward measurable tests, not toward vague descriptions. This alone halves back-and-forth iterations.
-
-### Principle 05 — Minimal Viable Context
-Only include the subsystems the AI will *touch* in this session. Don't paste the full roadmap — paste only the current feature block plus its direct dependencies. Smaller context = sharper output.
-
-### Principle 06 — Output Contract
-Tell Claude exactly what files to produce and what to leave untouched. "Generate only X, modify only Y, do not touch Z" prevents the model from refactoring stable code mid-session.
-
----
-
-## The 7-Block Context Anatomy
-
-Every handoff prompt to Claude must follow this exact structure. Each block serves a distinct cognitive purpose for the model.
-
-| # | Block | Purpose | Token Budget |
-|---|---|---|---|
-| 1 | 🔖 Project Identity | Project name, stack summary, current phase, one-sentence mission. Sets the model's entire reasoning frame. | ~100 |
-| 2 | 🏗️ Architecture Invariants | The 5 never-break rules. Pasted verbatim every time. Guards against AI anti-patterns. | ~200 |
-| 3 | ✅ Completed State | Feature IDs (F0.1, F1.2…) + one-line status each. No code — just ground truth. | ~150 |
-| 4 | 🎯 Current Task | Single feature being built: description, technologies, verbatim acceptance criteria. The AI's primary directive. | ~300 |
-| 5 | 🔌 Interface Contract | Types, event variants, Tauri command signatures the current feature integrates with. Interfaces only — not implementation. Prevents mismatched types. | ~200 |
-| 6 | 🚫 Scope Boundary | Explicit "DO NOT touch / generate / modify" list. Short but critical. | ~50 |
-| 7 | 📦 Output Contract | Exact file paths to generate or modify. Expected response format (code only / code + tests). | ~50 |
-
----
-
-## Master Handoff Template
-
-Copy, fill in the brackets, and paste to start any session. This is the canonical format for StreamDeck AI handoffs.
+## ═══════════════════════════════════════════
+## BLOCK 1 — PROJECT IDENTITY
+## ═══════════════════════════════════════════
 
 ```
-# ═══════════════════════════════════════════════════
-# STREAMDECK AI HANDOFF — [PHASE X · FEATURE Y]
-# ═══════════════════════════════════════════════════
+Project : StreamDeck — cross-platform live streaming + presentation desktop app
+Mission : Unify local presentation control, multi-camera production, and live-stream egress
+          into a single Tauri app. Zero dependency on Mevo Studio / ProPresenter by Phase 5.
 
-## 1. PROJECT IDENTITY
-Project: StreamDeck — cross-platform live streaming + presentation app
-Stack:   Tauri v2.11 · Rust 1.78 / Tokio 1.38 · React 18 / TypeScript 5 · GStreamer 1.26 · NDI SDK 6.3
-Phase:   [CURRENT PHASE NUMBER AND NAME]
-Task:    [FEATURE ID e.g. F2.2 — NDI Source Discovery & Ingest]
-
-## 2. ARCHITECTURE INVARIANTS (never violate these)
-1. GStreamer pipeline runs in its own Tokio task — Tauri UI events NEVER block the media thread pool
-2. Event bus is the ONLY channel — all state transitions go through tokio::sync::broadcast AppEvent enum
-3. Config is TOML only — no hard-coded pipeline topology, scenes, or WHIP endpoints
-4. Coexistence first — new subsystems are additive; do NOT break Mevo Studio/ProPresenter integration
-5. Observability from day one — all GStreamer bus errors forward to AppEvent within 100ms
-
-## 3. COMPLETED & STABLE (treat as ground truth, do not regenerate)
-# List each completed feature ID + one-line status:
-- F0.1 ✓  Tauri v2 workspace, two windows (controller 1280×800, presentation 1920×1080)
-- F0.2 ✓  IPC command layer — typed invoke<T>() with AppError discriminated union
-- F0.3 ✓  tokio::sync::broadcast AppEvent bus, Tauri emit_all() bridge
-- F0.4 ✓  TOML config loader with notify v6 hot-reload, keyring for secrets
-- [ADD COMPLETED FEATURES HERE]
-
-## 4. CURRENT TASK
-# Paste directly from roadmap:
-Feature:   [FEATURE ID AND NAME]
-Goal:      [ONE SENTENCE GOAL]
-Technologies:
-  - [technology + version]
-  - [technology + version]
-Acceptance Criteria:
-  - [EXACT criterion from roadmap — verbatim]
-  - [EXACT criterion from roadmap — verbatim]
-  - [EXACT criterion from roadmap — verbatim]
-
-## 5. INTERFACE CONTRACTS (what this feature must integrate with)
-# Types and events the new code will read from or write to:
-// AppEvent variants relevant to this feature:
-AppEvent::SlideUpdate(SlidePayload)   // emitted by slide state machine
-AppEvent::PipelineError { element, message }  // GStreamer errors
-
-// Tauri commands this feature exposes or calls:
-invoke('slide_advance') -> Result<(), AppError>
-invoke('slide_rewind')  -> Result<(), AppError>
-
-// Rust structs/traits to conform to:
-struct SlidePayload { index: u32, title: String, body: String, notes: String, background_path: Option<PathBuf> }
-
-## 6. SCOPE BOUNDARY (do NOT touch)
-- Do NOT modify the AppEvent enum (it is non_exhaustive — add variants only if required by this feature)
-- Do NOT change tauri.conf.json
-- Do NOT refactor existing Tauri command handlers
-- Do NOT generate UI for features outside this task
-
-## 7. OUTPUT CONTRACT
-Generate:
-  - src-tauri/src/[module].rs  (Rust implementation)
-  - controller/src/components/[Component].tsx  (React UI if applicable)
-Format:  Code blocks only, one file per block, filename as the code block language tag
-Tests:   Include unit tests in the same Rust file under #[cfg(test)]
-Do NOT:  Provide prose explanation unless I ask — code only
+Stack   : Tauri v2.11.x  ·  Rust 1.78 / Tokio 1.38  ·  React 18.x / TypeScript 5.x  ·  Vite 5.x
+Phase   : Phase 0 — Project Skeleton & Toolchain  (no media pipeline yet)
+Task    : F0.4 — TOML Configuration Loader
 ```
 
 ---
 
-## Mini-Handoff Template (Sub-Feature / Bug Fix)
-
-For single-file fixes or small sub-features — same 7 blocks, just condensed.
-
-> **Rule of thumb:** If you can describe the task's acceptance criteria in under 5 bullet points, use the mini handoff. If the task touches 2+ subsystems or introduces a new module, use the full master template.
+## ═══════════════════════════════════════════
+## BLOCK 2 — ARCHITECTURE INVARIANTS (never violate)
+## ═══════════════════════════════════════════
 
 ```
-# STREAMDECK MINI HANDOFF — [sub-feature / bug]
-Stack:        Tauri v2.11 · Rust 1.78 · GStreamer 1.26 · React 18 / TS 5
-Invariants:   Event bus only · GStreamer in own Tokio task · TOML config · no breaking external tool changes
-Stable:       F0.1–F[LAST COMPLETED] all passing CI
-Fix/Task:     [ONE SENTENCE — what exactly needs to change]
-File(s):      src-tauri/src/[module].rs
-Must NOT change: [list of files/modules to leave untouched]
-AC:
-  - [test condition 1]
-  - [test condition 2]
-Output: Code diff / replacement block only, no prose
-```
-
----
-
-## Context Anti-Patterns to Avoid
-
-### ❌ Pasting the Full Roadmap
-The 40KB roadmap eats your entire context window. The AI reads all of Phase 5 even when you're working on Phase 0. Paste only the current feature's section + the invariants header.
-
-### ❌ "Continue from where we left off"
-New threads have no memory. This prompt forces the AI to hallucinate the prior state. Always provide an explicit completed-features list instead — it takes 60 seconds and saves 10 minutes of corrections.
-
-### ❌ No Scope Boundary Declaration
-Without an explicit "do not touch" list, Claude will refactor your working IPC layer while implementing NDI discovery. It's being helpful — but it breaks stable code. Always lock scope explicitly.
-
-### ❌ Vague Task Description ("implement NDI")
-The AI will invent requirements. Paste the exact acceptance criteria from the roadmap — they're testable, specific, and already match your architecture. Verbatim beats paraphrased every time.
-
-### ❌ Sharing Interface Details Inside Code Comments
-If your interface contract is buried in code comments or inline, the model deprioritises it. Put types and event signatures in a dedicated block before any code. Named blocks = higher attention weight.
-
----
-
-## Phase Completion Checklist
-
-Run through this at the end of every phase or sub-feature before starting the next AI session.
-
-- [ ] **All acceptance criteria tested** — every bullet in the roadmap's AC section has a passing unit/integration test
-- [ ] **AppEvent enum reviewed** — new variants are additive, `#[non_exhaustive]` is maintained, no variants removed
-- [ ] **TOML schema updated** — any new config fields have default values and migration handled
-- [ ] **Feature flag verified** — feature compiles independently under its Cargo feature flag (`phase2`, `phase3`…)
-- [ ] **External tools still operational** — Mevo Studio / ProPresenter still work alongside the new feature
-- [ ] **CI passes** — `cargo test`, `cargo clippy -D warnings`, `npm run typecheck` all green
-- [ ] **Observability wired** — new subsystem errors surface as `AppEvent` within 100ms
-- [ ] **Update the completed-features list** — add the new feature ID to your handoff template's Block 3
-
----
-
-## Phase-Gate Handoff Snapshots
-
-Pre-filled Block 3 for each phase boundary. Copy the relevant snapshot directly into the **Completed & Stable** block of the master template.
-
-### Phase 0 Complete → Starting Phase 1
-
-```
-## PHASE 0 COMPLETE — use this as Block 3 when starting Phase 1
-- F0.1 ✓  Tauri v2 workspace · controller (1280×800) + presentation (1920×1080) windows · cargo tauri dev OK
-- F0.2 ✓  IPC layer · invoke<T>() wrappers · AppError discriminated union · TS types in sync · <2ms dispatch
-- F0.3 ✓  tokio::sync::broadcast(256) AppEvent bus · emit_all() bridge · BusLag backpressure · 1000-event test OK
-- F0.4 ✓  TOML config loader · notify v6 hot-reload (<500ms) · keyring for WHIP tokens · config v0→v1 migration
-## Phase 0 gate: CI green · no GStreamer dep yet · Mevo + ProPresenter untouched
-```
-
-### Phase 1 Complete → Starting Phase 2
-
-```
-## PHASE 1 COMPLETE — use this as Block 3 when starting Phase 2
-- F0.1–F0.4 ✓  (see Phase 0 — stable, do not regenerate)
-- F1.1 ✓  Presentation Window · fullscreen · decorations:false · CSS Grid slide zones · listen('slide:update')
-- F1.2 ✓  SlideStateMachine · RwLock · advance/rewind/jump · DeckEnd/DeckStart events · state serialised to disk
-- F1.3 ✓  Controller Slide Panel · SlideDeck / SlideThumb / SlidePreview / SpeakerNotes / Timer components
-- F1.4 ✓  Slide import (.pptx / .pdf) · 50-slide import <10s · SlideDeck JSON v1 schema · error dialogs
-- F1.5 ✓  Multi-display detection · operator assigns Presentation Window per display · persisted in TOML
-## Phase 1 gate: ProPresenter still active in parallel · no GStreamer yet
-```
-
-### Phase 2 Complete → Starting Phase 3
-
-```
-## PHASE 2 COMPLETE — use this as Block 3 when starting Phase 3
-- F0.1–F1.5 ✓  (Phases 0–1 stable)
-- F2.1 ✓  GStreamer 1.26 init · PipelineService actor · tokio::task::spawn_blocking · start/stop 100× no leak
-- F2.2 ✓  ndisrc element · NDI 6.3 New Format Stream · discovery polling 2s · Mevo Start/Core/Go detected <5s
-- F2.3 ✓  Camera preview grid · appsink→base64 PNG @8fps · up to 8 streams · <40% CPU on 8-core
-- F2.4 ✓  WHIP server axum 0.8 · RFC 9725 · Larix Broadcaster connect <3s · QR code in controller
-## Phase 2 gate: Mevo Studio still handles streaming · GStreamer preview only, no egress yet
-```
-
-### Phase 3 Complete → Starting Phase 4
-
-```
-## PHASE 3 COMPLETE — use this as Block 3 when starting Phase 4
-- F0.1–F2.4 ✓  (Phases 0–2 stable)
-- F3.1 ✓  compositor element · d3d12/glvideomixer GPU path · 1920×1080@30fps · <33ms source-to-composite
-- F3.2 ✓  Presentation slide capture · AVFoundation/D3D12/PipeWire platform impls · <2 frame lag
-- F3.3 ✓  SceneManager · TOML scene defs · switch <2 frames · 4 transition types · controller thumbnail grid
-- F3.4 ✓  AdaptiveOverlayEngine · SlideClassifier (Title/Visual/Content/Transition) · WCAG AA contrast verified
-## Phase 3 gate: Mevo Studio still handles streaming egress · compositor is local-only
-```
-
-### Phase 4 Complete → Starting Phase 5
-
-```
-## PHASE 4 COMPLETE — use this as Block 3 when starting Phase 5
-- F0.1–F3.4 ✓  (Phases 0–3 stable)
-- F4.1 ✓  whipclientsink · vtenc/mfh264/vaapi HW encoder · FB Live stream live <8s · HW CPU <10%
-- F4.2 ✓  GStreamer tee fan-out · 3 WHIP destinations · 1.15× bandwidth · auto-reconnect 30s backoff
-- F4.3 ✓  StreamPanel React · Go Live 2-step · bitrate sparkline 60s · dropped-frame counter · EOS on end
-- F4.4 ✓  SRT ingest relay · srtsrc listener · 10% packet loss OK · SRT+NDI coexist
-## Phase 4 gate: Mevo Studio STREAMING RETIRED · Mevo cameras still used via NDI · ProPresenter optional
-```
-
-### Phase 5 Complete → Starting Phase 6
-
-```
-## PHASE 5 COMPLETE — use this as Block 3 when starting Phase 6
-- F0.1–F4.4 ✓  (Phases 0–4 stable)
-- F5.1 ✓  SlideCanvas React · CSS absolute layers · 6 SlideTransition types @60fps · 4K support
-- F5.2 ✓  SlideEditor contentEditable · slide_update_text invoke · delta layer JSON · undo/redo
-- F5.3 ✓  TemplatePicker · 8 built-in templates · variables system · .streamdeck ZIP format
-- F5.4 ✓  ProPresenterBridge · TCP port 50001 · slide events <200ms · auto-reconnect polling
-## Phase 5 gate: ProPresenter fully optional · all external tools optional except Mevo cameras (NDI)
-```
-
----
-
-## Tech Stack Quick Reference
-
-Include relevant rows from this table in Block 5 (Interface Contracts) when needed.
-
-| Layer | Technology | Version | First Phase |
-|---|---|---|---|
-| App shell | Tauri | v2.11.x | P0 |
-| Backend lang | Rust + Tokio | 1.78 / 1.38 | P0 |
-| Frontend | TypeScript + React | 5.x / 18.x | P0 |
-| Event bus | tokio::sync::broadcast | built-in | P0 |
-| Config | TOML + serde | latest | P0 |
-| Secrets | keyring | 3.x | P0 |
-| Frontend state | Zustand | 5.x | P1 |
-| Media pipeline | GStreamer | 1.26.x | P2 |
-| NDI | NDI SDK + gst-plugin-ndi | 6.3 / 0.14.x | P2 |
-| WebRTC ingest | whipserversrc | 0.14.x | P2 |
-| WHIP HTTP server | axum | 0.8 | P2 |
-| WebRTC egress | whipclientsink | 0.14.x | P4 |
-| Charts | Chart.js | 4.x | P4 |
-
----
-
-## Architecture Invariants (Copy-Paste Ready)
-
-Always include Block 2 verbatim — these 5 rules prevent the most common AI-generated anti-patterns in a Tauri + GStreamer architecture.
-
-```
-## ARCHITECTURE INVARIANTS — include in every AI session
-
-1. PROCESS SEPARATION: GStreamer pipeline runs in a dedicated Tokio task.
+1. PROCESS SEPARATION
+   GStreamer pipeline (Phase 2) runs in a dedicated Tokio task.
    Tauri UI events NEVER block the media pipeline thread pool.
-   No GStreamer calls from command handlers — use PipelineService actor channel.
+   All event patterns established in Phase 0 must remain compatible.
 
-2. EVENT BUS ONLY: ALL state transitions (slide change, scene cut, stream start/stop)
-   flow through tokio::sync::broadcast AppEvent enum.
+2. EVENT BUS ONLY
+   ALL state transitions flow through tokio::sync::broadcast AppEvent enum.
    No direct function calls across subsystem boundaries.
+   Config hot-reload MUST publish AppEvent::ConfigReloaded — not call handlers directly.
 
-3. CONFIG AS CODE: Pipeline topology, scene definitions, overlay zones, WHIP endpoints
-   are TOML files. No hard-coded behaviour anywhere.
-   WHIP bearer tokens go in OS keychain (keyring crate), never in TOML plaintext.
+3. CONFIG AS CODE  ← THIS IS THE INVARIANT F0.4 IMPLEMENTS
+   Pipeline topology, scene definitions, overlay zones, and WHIP endpoints are TOML files.
+   No hard-coded behaviour anywhere.
+   WHIP bearer tokens go in OS keychain (keyring crate), NEVER in TOML plaintext.
 
-4. COEXISTENCE FIRST: New subsystems are additive.
-   Mevo Studio and ProPresenter continue working until the phase that explicitly retires them.
-   No breaking changes to external tool integration until the replacement passes all AC.
+4. COEXISTENCE FIRST
+   New subsystems are additive. Mevo Studio and ProPresenter continue operating.
 
-5. OBSERVABILITY FROM DAY ONE: All GStreamer bus messages (Error, Warning, Latency, QoS)
-   translate to AppEvent variants visible in the controller UI.
-   New subsystems must wire their errors to AppEvent within 100ms of occurrence.
+5. OBSERVABILITY FROM DAY ONE
+   All errors surface as typed AppEvent variants within 100 ms.
+   Command handlers return Result<T, AppError> — never unwrap() or panic in handlers.
+```
+
+---
+
+## ═══════════════════════════════════════════
+## BLOCK 3 — COMPLETED & STABLE STATE
+## ═══════════════════════════════════════════
+
+> Treat everything below as ground truth. Do NOT regenerate, refactor, or modify these.
+
+```
+F0.1 ✓  Tauri v2 workspace bootstrapped
+        - Rust backend at src-tauri/
+        - Two frontend entry points: controller/ and presentation/
+        - Vite 5.x + React 18.x + TypeScript 5.x wired for both frontends
+        - tauri.conf.json: controller (1280×800), presentation (1920×1080)
+        - cargo tauri dev launches both windows ✓
+        - cargo tauri build produces signed installer on macOS + Windows ✓
+        - CI: cargo test, cargo clippy -- -D warnings, npm run typecheck on every PR ✓
+
+F0.2 ✓  IPC Command Layer complete
+        - AppError at src-tauri/src/error.rs — VERIFIED CONTENT:
+            #[derive(Debug, thiserror::Error, serde::Serialize)]
+            #[serde(tag = "type", content = "message")]
+            #[non_exhaustive]
+            pub enum AppError {
+                #[error("Internal error: {0}")]   Internal(String),
+                #[error("Not found: {0}")]         NotFound(String),
+                #[error("Invalid input: {0}")]     InvalidInput(String),
+            }
+        - Commands: src-tauri/src/commands/mod.rs, info.rs, system.rs
+        - ipc.ts in controller/src/lib/ and presentation/src/lib/
+        - No manual From<AppError> impl — Tauri v2 blanket covers it
+        - ping dispatch latency < 2ms verified ✓
+
+F0.3 ✓  Event Bus Foundation complete
+        - src-tauri/src/events.rs — AppEvent enum (#[non_exhaustive], serde::Serialize)
+            Variants: BusLag { receiver_id: String, dropped: u64 }, Ping { message: String }
+        - src-tauri/src/bus.rs — EventBus struct, broadcast::channel(256)
+            pub fn new() -> (Self, Receiver<AppEvent>)
+            pub fn publish(&self, event: AppEvent)
+            pub fn subscribe(&self) -> Receiver<AppEvent>
+            NOTE: share EventBus via Arc<EventBus>; do not reconstruct Arc from app.state()
+        - src-tauri/src/app.rs — .manage(bus) + run_event_bridge task
+            Uses tauri::Emitter trait + handle.emit() (NOT emit_all — removed in Tauri v2)
+        - controller/src/lib/events.ts + presentation/src/lib/events.ts
+            onAppEvent() wrapper — components never call listen() directly
+        - All 4 AC passing CI ✓
+```
+
+---
+
+## ═══════════════════════════════════════════
+## BLOCK 4 — CURRENT TASK
+## ═══════════════════════════════════════════
+
+### Feature ID: F0.4 — TOML Configuration Loader
+
+**Description:**  
+Load `streamdeck.toml` from the Tauri app config directory on startup. If the file does not
+exist, write a default config and continue. Validate on load — invalid TOML shows a
+user-facing error dialog, not a panic. Watch for file changes with the `notify` v6 crate
+and hot-reload within 500 ms, publishing `AppEvent::ConfigReloaded` on the bus.
+Support config versioning so a v0 file loaded by a v1 app silently applies defaults for
+new fields. Store WHIP bearer tokens in the OS keychain via `keyring` — never in TOML.
+
+### Technologies
+
+| Technology | Version | Role |
+|---|---|---|
+| `toml` crate | 0.8 | Parse/serialise `streamdeck.toml` |
+| `serde` | 1.x (already present) | Derive Deserialize/Serialize on config structs |
+| `notify` | 6.x | File-system watcher for hot-reload |
+| `keyring` | 3.x | OS keychain for WHIP tokens |
+| `tempfile` | 3.x | Dev-dependency only for isolated test directories |
+| `tauri::Manager::path()` | Tauri v2.11.x | Resolve app config dir — no plugin needed |
+
+### Acceptance Criteria
+
+| # | Criterion | Testability Class | Verification |
+|---|---|---|---|
+| AC1 | Invalid TOML on startup shows a user-facing error dialog (not a Rust panic) | integration | Manual verification in a Tauri runtime |
+| AC2 | Valid config change on disk is reflected in the running app within 500 ms | integration | Integration test or manual timing verification with real file write + bus receive |
+| AC3 | Config version field enables migration: loading a v0 config in a v1 app applies default values for new fields without error | unit | Rust unit test |
+| AC4 | Sensitive fields (WHIP bearer tokens) are stored in OS keychain via `keyring` crate, not in TOML plaintext | unit/structural | Rust tests + verify.sh guard |
+
+### Definition of Done
+
+All four AC above passing CI where automatable, plus AC1 manually verified before F0.4 is marked complete and Phase 1 work begins.
+
+---
+
+## ═══════════════════════════════════════════
+## BLOCK 5 — INTERFACE CONTRACTS
+## ═══════════════════════════════════════════
+
+### Cargo.toml — VERIFIED CURRENT STATE + required additions
+
+```toml
+# src-tauri/Cargo.toml — CURRENT VERIFIED CONTENT
+[package]
+name = "streamdeck"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.78"
+
+[lib]
+name = "streamdeck_lib"
+path = "src/lib.rs"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "streamdeck"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri              = { version = "2", features = ["devtools"] }
+tauri-plugin-shell = "2"
+serde              = { version = "1", features = ["derive"] }
+serde_json         = "1"
+tokio              = { version = "1", features = ["full"] }
+sysinfo            = "0.30"
+thiserror          = "1"
+ts-rs              = { version = "10", features = ["serde-compat"] }
+anyhow             = "1"
+# ── ADD these three for F0.4 ─────────────────────────────────────────────────
+toml               = "0.8"
+notify             = "6"
+keyring            = "3"
+
+[dev-dependencies]
+tempfile           = "3"
+
+[features]
+default         = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+```
+
+### Ownership & Shared State Contract
+
+```rust
+// CRITICAL OWNERSHIP RULE FOR F0.4
+// EventBus must be wrapped in Arc<EventBus> BEFORE .manage().
+// Never build Arc from app.state::<EventBus>().inner() inside .setup(),
+// because that produces Arc<&EventBus>, not Arc<EventBus>.
+//
+// Correct pattern:
+//   let (bus, rx) = EventBus::new();
+//   let bus_arc = Arc::new(bus);
+//   Builder::default()
+//       .manage(Arc::clone(&bus_arc))
+//       .setup(move |app| {
+//           let watcher = ConfigLoader::spawn_watcher(path, Arc::clone(&bus_arc))?;
+//           app.manage(watcher);
+//           Ok(())
+//       })
+//
+// The notify watcher MUST be stored in managed state. Dropping it stops watching silently.
+```
+
+### AppError — VERIFIED CURRENT CONTENT + required additions
+
+```rust
+// src-tauri/src/error.rs — ADD two variants only, preserve everything else exactly
+
+#[derive(Debug, thiserror::Error, serde::Serialize)]
+#[serde(tag = "type", content = "message")]
+#[non_exhaustive]
+pub enum AppError {
+    #[error("Internal error: {0}")]
+    Internal(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("Config error: {0}")]
+    Config(String),
+
+    #[error("Keychain error: {0}")]
+    Keychain(String),
+}
+```
+
+### AppEvent — ADD one variant to events.rs
+
+```rust
+// src-tauri/src/events.rs — ADD one variant only, preserve BusLag and Ping exactly
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "type", content = "payload")]
+#[non_exhaustive]
+pub enum AppEvent {
+    BusLag { receiver_id: String, dropped: u64 },
+    Ping { message: String },
+    ConfigReloaded,
+}
+```
+
+### New Types to Define (F0.4)
+
+```rust
+// src-tauri/src/config.rs  ← NEW FILE
+// verify.sh run_f0_4() checks this file with raw grep patterns.
+// Natural code should satisfy them; do not add artificial comments just to pass checks.
+// Required natural matches:
+// - "StreamDeckConfig"
+// - "serde::Deserialize" (satisfied by use/import style if written directly)
+// - "version"
+// Forbidden:
+// - bearer_token.*String
+
+use serde::{Deserialize, Serialize};
+
+pub const CONFIG_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StreamDeckConfig {
+    pub version: u32,
+    pub app: AppConfig,
+}
+
+impl Default for StreamDeckConfig {
+    fn default() -> Self {
+        Self {
+            version: CONFIG_VERSION,
+            app: AppConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AppConfig {
+    pub log_level: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self { log_level: "info".into() }
+    }
+}
+```
+
+```rust
+// src-tauri/src/config_loader.rs  ← NEW FILE
+// verify.sh checks config_loader.rs for the raw grep pattern "notify".
+// The normal notify imports satisfy this naturally.
+
+use crate::AppError;
+use crate::config::StreamDeckConfig;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+pub struct ConfigLoader;
+
+impl ConfigLoader {
+    /// Load config from path. If file missing, write default and return it.
+    /// Returns AppError::Config on invalid TOML.
+    pub fn load_or_default(path: &PathBuf) -> Result<StreamDeckConfig, AppError> { todo!() }
+
+    /// Spawn a notify::RecommendedWatcher that publishes AppEvent::ConfigReloaded
+    /// on the EventBus within 500ms of a valid file change.
+    /// Caller MUST store the returned watcher in managed state — dropping it stops watching.
+    pub fn spawn_watcher(
+        path: PathBuf,
+        bus: Arc<crate::bus::EventBus>,
+    ) -> Result<notify::RecommendedWatcher, AppError> { todo!() }
+}
+```
+
+### verify.sh — F0.4 Checks Decoded
+
+| verify.sh label | File | grep pattern | Natural code that satisfies it |
+|---|---|---|---|
+| StreamDeckConfig struct | `src-tauri/src/config.rs` | `StreamDeckConfig` | struct name |
+| serde Deserialize | `src-tauri/src/config.rs` | `serde::Deserialize` | explicit import path or derive-related direct usage |
+| notify hot-reload | `src-tauri/src/config_loader.rs` | `notify` | `use notify::{...}` |
+| version field | `src-tauri/src/config.rs` | `version` | `pub version: u32` |
+| No plaintext tokens | `src-tauri/src/config.rs` | `bearer_token.*String` | must remain absent |
+
+### app.rs — VERIFIED CURRENT CONTENT (MODIFY only as specified)
+
+```rust
+// src-tauri/src/app.rs — VERIFIED STATE after F0.3
+// Only add what is listed under REQUIRED MODIFICATIONS — do not touch anything else.
+// Additional implementation notes learned from F0.4:
+// - use std::sync::Arc;
+// - use std::io::Error::other(...) instead of Error::new(ErrorKind::Other, ...)
+// - collapse nested ifs to satisfy clippy::collapsible_if
+// - .setup() should be move when it captures rx and bus_arc
+// - if a dialog plugin is not available, document the exact fallback behaviour before coding
+```
+
+### lib.rs — add two module declarations
+
+```rust
+// src-tauri/src/lib.rs — ADD two lines only
+
+mod error;
+pub mod commands;
+pub mod events;
+pub mod bus;
+pub mod config;
+pub mod config_loader;
+
+#[cfg(not(test))]
+mod app;
+```
+
+---
+
+## ═══════════════════════════════════════════
+## BLOCK 6 — SCOPE BOUNDARY
+## ═══════════════════════════════════════════
+
+```
+DO NOT implement or scaffold:
+  ✗  Phase 1+ AppEvent variants (SlideUpdate, SlideAdvance, etc.)
+  ✗  GStreamer, NDI, or pipeline config fields in StreamDeckConfig — Phase 2+
+  ✗  WHIP destination config fields — Phase 4 (keyring plumbing is fine, WHIP fields are not)
+  ✗  Frontend UI for config editing — not part of F0.4
+  ✗  tauri-plugin-fs — not needed, use tauri::Manager::path() directly
+
+DO NOT modify:
+  ✗  src-tauri/src/bus.rs
+  ✗  src-tauri/src/commands/system.rs or info.rs
+  ✗  tauri.conf.json
+  ✗  src-tauri/capabilities/default.json
+  ✗  controller/src/lib/events.ts, ipc.ts
+  ✗  presentation/src/lib/events.ts, ipc.ts
+
+CRITICAL CONSTRAINTS (learned from F0.2 + F0.3 + F0.4):
+  ✗  No manual From<AppError> for InvokeError — Tauri v2 blanket covers it
+  ✗  No pub use re-exports in generate_handler![] paths — use full module paths
+  ✗  app.rs stays gated: #[cfg(not(test))] mod app; in lib.rs
+  ✗  Do NOT drop the notify watcher handle — dropping it silently stops file watching
+  ✗  WHIP tokens must never be written to TOML — keyring only
+  ✗  Use handle.emit() not handle.emit_all() — emit_all was removed in Tauri v2
+  ✗  Do NOT construct Arc from app.state().inner() when Arc<T> is required
+```
+
+---
+
+## ═══════════════════════════════════════════
+## BLOCK 7 — OUTPUT CONTRACT
+## ═══════════════════════════════════════════
+
+### Files to Generate
+
+| File | Action | Notes |
+|---|---|---|
+| `src-tauri/Cargo.toml` | **MODIFY** | Add `toml = "0.8"`, `notify = "6"`, `keyring = "3"`, and `[dev-dependencies] tempfile = "3"` |
+| `src-tauri/src/error.rs` | **MODIFY** | Add `Config(String)` and `Keychain(String)` variants only |
+| `src-tauri/src/events.rs` | **MODIFY** | Add `ConfigReloaded` variant only |
+| `src-tauri/src/config.rs` | **CREATE** | `StreamDeckConfig`, `AppConfig`, `Default` impls |
+| `src-tauri/src/config_loader.rs` | **CREATE** | `load_or_default()`, `spawn_watcher()` |
+| `src-tauri/src/app.rs` | **MODIFY** | Config load + watcher in `.setup()`, `.manage(config)`, Arc ownership pattern |
+| `src-tauri/src/lib.rs` | **MODIFY** | Add `pub mod config;` and `pub mod config_loader;` |
+| `src-tauri/src/commands/config.rs` | **CREATE** | `get_config()` command returning `StreamDeckConfig` |
+| `src-tauri/src/commands/mod.rs` | **MODIFY** | Add `pub mod config;` |
+
+### Tests Required
+
+| File | Tests Required |
+|---|---|
+| `src-tauri/src/config_loader.rs` | Load valid TOML → correct struct; invalid TOML → `AppError::Config`; missing file → default written + returned; v0 config loaded by v1 → defaults applied for new fields |
+| `src-tauri/src/config.rs` | `StreamDeckConfig::default()` produces `version = 1`; round-trip serialise → deserialise → equal |
+
+### Verification Contract
+
+```bash
+cargo test                    # config load, migration, round-trip tests
+cargo clippy -- -D warnings   # zero warnings
+npm run typecheck             # TS still passes — no frontend changes expected
+bash verify.sh f0.4           # pattern + AC gate
+```
+
+If verify.sh is referenced in a future handoff, document each raw grep-based check in the handoff itself. Prefer real acceptance tests over pattern checks wherever possible.
+
+### Output Format
+
+```
+- One fenced code block per file, file path as comment on line 1
+- Complete file content for every file — no partial diffs
+- #[cfg(test)] unit tests inside the same Rust file
+- No prose explanation unless asked
+- Avoid unnecessary comments; add comments only when they capture a non-obvious invariant, ownership rule, verify-script contract, or lint constraint
+```
+
+---
+
+## ═══════════════════════════════════════════
+## LESSONS LEARNED (F0.2 + F0.3 + F0.4 — do not repeat)
+## ═══════════════════════════════════════════
+
+```
+L1  generate_handler![] requires full paths to defining modules — no pub use re-exports
+L2  No manual From<AppError> for InvokeError — Tauri v2 blanket impl covers it
+L3  app.rs must stay in its own gated module — #[cfg(not(test))] mod app; in lib.rs
+L4  cargo build/clippy require frontend dist/ — cargo test never does
+L5  Use handle.emit() not handle.emit_all() — emit_all removed in Tauri v2
+L6  notify watcher must be kept alive in managed state — dropping it stops watching silently
+L7  #[serde(default)] on every config struct is required for forward-compat migration —
+    fields added in later config versions must have Default impls or serde will error
+L8  Arc<EventBus> must be created before .manage() — never reconstruct from app.state()
+L9  Use std::io::Error::other(...) instead of Error::new(ErrorKind::Other, ...)
+L10 verify.sh uses raw grep checks; document those checks when they matter to implementation
+L11 Prefer real acceptance tests over hardcoded grep patterns in verify.sh for future features
+L12 Empty TOML and v0 TOML are not equivalent for migration tests; use explicit `version = 0`
 ```

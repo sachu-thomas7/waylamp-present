@@ -79,6 +79,16 @@ file_not_contains() {
   ! grep -q "$3" "$2" 2>/dev/null && pass "$1" || fail "$1 — forbidden pattern found in $2"
 }
 
+file_not_exists() {
+  local label="$1"
+  local file="$2"
+  if [ -f "$file" ]; then
+    fail "$label — $file should NOT exist but does"
+  else
+    pass "$label"
+  fi
+}
+
 # ── Guard: project root ────────────────────────────────────────────
 if [ ! -f "src-tauri/Cargo.toml" ]; then
   echo -e "${RED}ERROR: Run from the project root (where src-tauri/ lives).${RESET}"
@@ -378,6 +388,134 @@ run_f0_4() {
   file_not_contains "No plaintext tokens" "src-tauri/src/config.rs" "bearer_token.*String"
 }
 
+run_f1_1() {
+  section "F1.1 — Presentation Window & Slide Renderer"
+  if [ ! -f "src-tauri/src/slide.rs" ]; then
+    skip "slide.rs not created — F1.1 not started yet"
+    return
+  fi
+
+  file_contains "SlidePayload struct" "src-tauri/src/slide.rs" "SlidePayload"
+  file_contains "background_path Option<String>" "src-tauri/src/slide.rs" "background_path"
+  file_contains "SlideUpdate variant" "src-tauri/src/events.rs" "SlideUpdate"
+  file_contains "presentation_show command" "src-tauri/src/commands/presentation.rs" "presentation_show"
+  file_contains "presentation_hide command" "src-tauri/src/commands/presentation.rs" "presentation_hide"
+  file_contains "visible(false) in app.rs" "src-tauri/src/app.rs" "visible"
+  file_not_contains "No auto-spawn on setup" "src-tauri/src/app.rs" "presentation.*index.html.*spawn"
+
+  file_contains "SlideCanvas component" "presentation/src/components/SlideCanvas.tsx" "SlideCanvas"
+  file_contains "useSlideStore" "presentation/src/store/slideStore.ts" "useSlideStore"
+  file_contains "scale" "presentation/src/components/SlideCanvas.tsx" "scale"
+  file_contains "PresentButton in controller" "controller/src/components/PresentButton.tsx" "PresentButton"
+  file_contains "zustand in presentation" "presentation/package.json" "zustand"
+  file_contains "zustand in controller" "controller/package.json" "zustand"
+
+  check "F1.1 unit tests pass" \
+    bash -c 'cd src-tauri && cargo test slide 2>&1 | tee /tmp/sd-test.log \
+    && ! grep -q "FAILED" /tmp/sd-test.log'
+}
+
+run_f1_2() {
+  section "F1.2 — Slide State Machine"
+  if [ ! -f "src-tauri/src/slide_state_machine.rs" ]; then
+    skip "slide_state_machine.rs not created — F1.2 not started yet"
+    return
+  fi
+  
+  file_contains "advance_from_last test"          "src-tauri/src/slide_state_machine.rs" "advance_from_last_emits_deck_end"
+  file_contains "rewind_from_first test"          "src-tauri/src/slide_state_machine.rs" "rewind_from_first_emits_deck_start"
+  file_contains "jump_to_valid_index test"        "src-tauri/src/slide_state_machine.rs" "jump_to_valid_index_publishes_slide_update"
+  file_contains "jump_to_invalid_index test"      "src-tauri/src/slide_state_machine.rs" "jump_to_invalid_index_returns_error"
+  file_contains "persist_then_restore test"       "src-tauri/src/slide_state_machine.rs" "advance_then_persist_then_restore_preserves_index"
+  file_contains "stub_deck_has_five_slides test"  "src-tauri/src/slide.rs"               "stub_deck_has_five_slides"
+  file_contains "from_entry_correct_payload test" "src-tauri/src/slide.rs"               "from_entry_produces_correct_payload"
+
+  check "F1.2 unit tests pass" \
+    bash -c 'cd src-tauri && cargo test slide_state_machine 2>&1 | tee /tmp/sd-test.log \
+    && ! grep -q "FAILED" /tmp/sd-test.log'
+}
+
+# ── ADD this function before the dispatch block ──────────────────────────────
+
+run_f1_3() {
+  section "F1.3 — Controller Slide Panel"
+  if [ ! -f "controller/src/components/SlideDeckPanel.tsx" ]; then
+    skip "SlideDeckPanel.tsx not created — F1.3 not started yet"
+    return
+  fi
+
+  # Rust checks
+  file_contains "TimerTick variant"       "src-tauri/src/events.rs"                      "TimerTick"
+  file_contains "TimerReset variant"      "src-tauri/src/events.rs"                      "TimerReset"
+  file_contains "timer_started_at"        "src-tauri/src/slide_state_machine.rs"         "timer_started_at"
+  file_contains "spawn_timer_task"        "src-tauri/src/slide_state_machine.rs"         "spawn_timer_task"
+  file_contains "slide_timer_reset cmd"   "src-tauri/src/commands/slide.rs"              "slide_timer_reset"
+  file_contains "stub notes non-empty"    "src-tauri/src/slide.rs"                       "Welcome the audience"
+
+  # Frontend checks
+  file_contains "SlideCanvas"             "controller/src/components/SlideCanvas.tsx"    "SlideCanvas"
+  file_contains "SlideDeckPanel"          "controller/src/components/SlideDeckPanel.tsx" "SlideDeckPanel"
+  file_contains "TimerTick events.ts"     "controller/src/lib/events.ts"                 "TimerTick"
+  file_contains "isCollapsed store"       "controller/src/store/slideStore.ts"           "isCollapsed"
+  file_contains "keydown listener"        "controller/src/components/SlideDeckPanel.tsx" "keydown"
+  file_contains "slideTimerReset ipc"     "controller/src/lib/ipc.ts"                    "slideTimerReset"
+  file_not_exists "SlidePanel deleted"    "controller/src/components/SlidePanel.tsx"
+
+  # Unit test presence checks
+  file_contains "timer_starts_on_first_advance_only test"  "src-tauri/src/slide_state_machine.rs" "timer_starts_on_first_advance_only"
+  file_contains "timer_does_not_reset_on_rewind test"      "src-tauri/src/slide_state_machine.rs" "timer_does_not_reset_on_rewind"
+  file_contains "timer_reset_command test"                  "src-tauri/src/slide_state_machine.rs" "timer_reset_command_sets_new_start_time"
+  file_contains "timer_persists_restores test"              "src-tauri/src/slide_state_machine.rs" "timer_persists_and_restores_correctly"
+  file_contains "stub_notes_non_empty test"                 "src-tauri/src/slide.rs"               "stub_deck_notes_are_non_empty"
+
+  check "F1.3 unit tests pass" \
+    bash -c 'cd src-tauri && cargo test slide 2>&1 | tee /tmp/sd-f13-test.log \
+    && ! grep -q "FAILED" /tmp/sd-f13-test.log'
+}
+
+run_f1_4() {
+  section "F1.4 — Slide Deck Import"
+  if [ ! -f "src-tauri/src/deck_importer.rs" ]; then
+    skip "deck_importer.rs not created — F1.4 not started yet"
+    return
+  fi
+
+  file_contains "DeckImportProgress variant"  "src-tauri/src/events.rs"                       "DeckImportProgress"
+  file_contains "DeckImportComplete variant"  "src-tauri/src/events.rs"                       "DeckImportComplete"
+  file_contains "SceneMediaUpdate variant"    "src-tauri/src/events.rs"                       "SceneMediaUpdate"
+  file_contains "SceneSourceChanged variant"  "src-tauri/src/events.rs"                       "SceneSourceChanged"
+  file_contains "SlideTextBlock type"         "src-tauri/src/slide.rs"                        "SlideTextBlock"
+  file_contains "SlideTextRun type"           "src-tauri/src/slide.rs"                        "SlideTextRun"
+  file_contains "word_count field"            "src-tauri/src/slide.rs"                        "word_count"
+  file_contains "is_code_slide field"         "src-tauri/src/slide.rs"                        "is_code_slide"
+  file_contains "deck_import cmd"             "src-tauri/src/commands/deck.rs"                "deck_import"
+  file_contains "deck_restore cmd"            "src-tauri/src/commands/deck.rs"                "deck_restore"
+  file_contains "scene_push_image cmd"        "src-tauri/src/commands/scene.rs"               "scene_push_image"
+  file_contains "scene_set_source cmd"        "src-tauri/src/commands/scene.rs"               "scene_set_source"
+  file_contains "spawn_blocking"              "src-tauri/src/deck_importer.rs"                "spawn_blocking"
+  file_contains "tauri-plugin-dialog"         "src-tauri/Cargo.toml"                          "tauri-plugin-dialog"
+  file_contains "pdfium-render"               "src-tauri/Cargo.toml"                          "pdfium-render"
+  file_contains "quick-xml"                   "src-tauri/Cargo.toml"                          "quick-xml"
+
+  file_contains "DeckImportProgress events.ts"  "controller/src/lib/events.ts"                "DeckImportProgress"
+  file_contains "SceneMediaUpdate events.ts"    "controller/src/lib/events.ts"                "SceneMediaUpdate"
+  file_contains "deckImport ipc"                "controller/src/lib/ipc.ts"                   "deckImport"
+  file_contains "pickDeckFile ipc"              "controller/src/lib/ipc.ts"                   "pickDeckFile"
+  file_contains "sceneStore"                    "controller/src/store/sceneStore.ts"           "useSceneStore"
+  file_contains "SceneMediaPanel"               "controller/src/components/SceneMediaPanel.tsx" "SceneMediaPanel"
+  file_contains "SceneMediaView"                "presentation/src/components/SceneMediaView.tsx" "SceneMediaView"
+  file_contains "DeckImportProgress pres"       "presentation/src/lib/events.ts"              "DeckImportProgress"
+
+  file_contains "pptx_extracts_title test"   "src-tauri/src/deck_importer.rs" "pptx_extracts_title_body_notes"
+  file_contains "is_code_slide test"         "src-tauri/src/deck_importer.rs" "is_code_slide_true_for_monospace"
+  file_contains "load_deck_resets test"      "src-tauri/src/slide_state_machine.rs" "load_deck_resets_index_and_timer"
+  file_contains "round_trip_json test"       "src-tauri/src/slide.rs"         "deck_save_and_load_json_round_trips"
+
+  check "F1.4 unit tests pass" \
+    bash -c 'cd src-tauri && cargo test 2>&1 | tee /tmp/sd-f14-test.log \
+    && ! grep -q "FAILED" /tmp/sd-f14-test.log'
+}
+
 # ══════════════════════════════════════════════════════════════════
 # CORE — Build + Lint (requires frontend dist to exist)
 # ══════════════════════════════════════════════════════════════════
@@ -452,11 +590,26 @@ case "$FILTER" in
   f0|phase0)
     run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_core
     ;;
+  f1.1)
+    run_invariants; run_f1_1
+    ;;
+  f1.2)
+    run_invariants; run_f1_2; run_core
+    ;;
+  f1.3)
+    run_invariants; run_f1_1; run_f1_2; run_f1_3
+    ;;
+  f1.4)
+    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4
+    ;;
+  f1|phase1)
+    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_core
+    ;;
   core)
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_core
     ;;
 esac
 
