@@ -1,0 +1,170 @@
+# StreamDeck
+
+Cross-platform desktop app (macOS/Windows/Linux) unifying live presentation control,
+multi-camera production, and live-streaming egress. Built on Tauri v2 + Rust/Tokio +
+React/TypeScript. Goal: zero dependency on Mevo Studio / ProPresenter by Phase 5.
+
+Full spec: `dev-docs/streamdeck_product_roadmap_2026.md` — the authoritative phase/feature
+list with acceptance criteria. Read it before starting any new feature. Don't paste it
+wholesale into context — reference the specific phase/feature section needed.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Shell | Tauri v2.11.x — two windows: `controller` (operator UI, static in `tauri.conf.json`) and `presentation` (projector output, created dynamically in `app.rs::run()`) |
+| Backend | Rust 1.78 + Tokio (`src-tauri/`) |
+| Frontend | Two **independent** Vite + React 18 + TypeScript projects: `controller/` and `presentation/` |
+| State sync | `tokio::sync::broadcast::<AppEvent>` — the only channel for cross-subsystem state. No direct function calls across subsystem boundaries. |
+| Config | TOML (`streamdeck.toml` in app config dir), hot-reloaded via `notify`, secrets in OS keychain via `keyring` — never in TOML |
+| Frontend state | Zustand (`slideStore.ts`, `sceneStore.ts`, one per window) |
+| Not yet started | GStreamer/NDI/WHIP media pipeline (Phase 2+) — no camera, compositor, or streaming code exists yet |
+
+## Repo map
+
+```
+src-tauri/src/
+  app.rs                  Builder setup: window creation, capability wiring, .manage() state, event bridge
+  bus.rs                  EventBus (broadcast channel wrapper)
+  events.rs               AppEvent enum — single source of truth for what can flow over the bus
+  error.rs                AppError — discriminated union returned by every command
+  config.rs / config_loader.rs   StreamDeckConfig, TOML load + hot-reload watcher
+  slide.rs / slide_state_machine.rs   Slide deck model + advance/rewind/jump/timer state machine
+  scene.rs                 Scene media source state (image/video push, active source)
+  deck_importer.rs         .pptx/.pdf import → SlideDeck (spawn_blocking — CPU-bound)
+  commands/                 One #[tauri::command] module per feature area — thin wrappers, no business logic
+controller/src/            Operator UI — the only window with invoke() permissions
+presentation/src/          Projector output — listen-only, zero invoke permissions
+dev-docs/                  Roadmap + one "AI handoff" doc per shipped feature (historical record)
+scripts/verify.sh          Acceptance-gate script — see "Verification" below
+```
+
+`controller/` and `presentation/` intentionally duplicate small shared files
+(`SlideCanvas.tsx`, `ipc.ts`, `events.ts` shape) — they are separate Vite projects with
+separate `package.json`s, not a monorepo with shared packages. This is a deliberate
+choice, not drift; don't "fix" it by extracting a shared package unless asked.
+
+## Architecture invariants (do not violate)
+
+1. **Process separation** — the future GStreamer pipeline (Phase 2+) runs in a dedicated
+   Tokio task; UI events never block it.
+2. **Event bus only** — all state transitions (slide change, scene cut, stream start/stop)
+   flow through `AppEvent` on the broadcast bus. No direct cross-module function calls for
+   state changes.
+3. **Config as code** — pipeline/scene/overlay config lives in TOML, no hard-coded
+   behaviour. WHIP bearer tokens and other secrets: OS keychain only, never TOML plaintext.
+4. **Coexistence first** — new subsystems are additive; don't break existing flows to add
+   a new phase's feature.
+5. **Capability minimalism** — `controller` window has `invoke` + full permissions
+   (`src-tauri/capabilities/default.json`); `presentation` window has **listen-only**
+   access (`src-tauri/capabilities/presentation.json`, `core:event:default` only, no
+   invoke permissions at all). Any new dynamically-created window needs its own capability
+   file — a window not listed in any capability gets **zero** permissions, including
+   `listen()`. (This was actually broken until 2026-09-18 — the presentation window had no
+   capability file at all and its `listen()` calls would have been silently denied at
+   runtime; fixed by adding `presentation.json`.)
+6. **No `.unwrap()` in command handlers** — return `Result<T, AppError>`. Enforced by
+   `verify.sh invariants`.
+7. **`app.rs` stays gated** — `#[cfg(not(test))] mod app;` in `lib.rs`, so `cargo test`
+   never needs to build the Tauri runtime wiring.
+
+## Current status (2026-09-18)
+
+- **Phase 0** (F0.1–F0.4: bootstrap, IPC layer, event bus, TOML config) — done.
+- **Phase 1**: F1.1 (Presentation window + slide renderer), F1.2 (slide state machine),
+  F1.3 (controller slide panel + timer), F1.4 (PPTX/PDF import + scene media push) — code
+  complete, 36/36 Rust tests passing, clippy clean, typecheck clean in both frontends.
+- **F1.5 (Multi-Display Assignment) is NOT started** — no `DisplaysChanged` event, no
+  display enumeration/assignment code anywhere. This is the one unfinished item in Phase 1
+  per the roadmap; decide explicitly whether to finish it before starting Phase 2.
+- **Zero frontend tests** — no vitest, no `*.test.tsx`, in either `controller/` or
+  `presentation/`. Rust side has solid coverage (`#[test]` in bus, config, slide,
+  slide_state_machine, deck_importer, commands::system); frontend does not. Worth setting
+  up before Phase 1 work is considered fully done, not just CI-green.
+- `deck_importer.rs` has real unit tests for parsing helpers, but no fixture-based
+  integration tests against actual `.pptx`/`.pdf` files (fixtures dir exists, empty).
+- Git history was ~5 commits behind the actual working tree until 2026-09-18 — F1.1–F1.4
+  and the scene/deck-import system existed only as uncommitted/untracked changes. Being
+  committed now; keep commits current going forward — don't let multiple shipped features
+  pile up uncommitted.
+
+## Verification — `scripts/verify.sh`
+
+This is the actual Definition-of-Done gate, not `cargo test` alone. It bootstraps
+npm installs + frontend builds (hash-cached), then runs phase/feature-scoped checks:
+structural (`grep`-based file/pattern presence) + real `cargo test`/`clippy`/`typecheck`.
+
+```
+bash scripts/verify.sh              # full check, current phase
+bash scripts/verify.sh f1.4         # one feature's checks (+ its prerequisites)
+bash scripts/verify.sh f1           # all of Phase 1
+bash scripts/verify.sh invariants   # architecture invariants only
+bash scripts/verify.sh core         # build + test + lint only, no structural checks
+bash scripts/verify.sh --no-frontend  # skip the frontend build bootstrap step
+```
+
+`cargo test` is always independent of frontend state. `cargo build`/`cargo clippy` are
+**not** — the default `custom-protocol` Cargo feature embeds `controller/dist` and
+`presentation/dist` via rust-embed at compile time, so those dirs must exist first
+(verify.sh's bootstrap step handles this; CI now does too — see below).
+
+When adding a new feature: add its `run_fX_Y()` block to `verify.sh` following the
+existing pattern (file existence → `file_contains` structural checks → a `cargo test`
+filter), and wire it into the `case` dispatch, including the `all|*)` fallthrough — that
+fallthrough is easy to forget and was itself out of date (missing `run_f1_4`) until fixed.
+
+## CI (`.github/workflows/ci.yml`)
+
+Two jobs: `rust` (test + clippy, matrix over ubuntu/macos/windows) and `typecheck`
+(both frontends). The rust job now builds both frontend `dist/` directories before
+running cargo, for the reason above — this was previously missing and would have failed
+`cargo test`/`clippy` on any clean checkout since `dist/` is gitignored.
+
+## Local environment note (Windows)
+
+`cargo`/`rustup` tools live in `~/.cargo/bin`; Node is managed via `fnm` — neither is on
+the default non-interactive shell PATH. Use:
+```
+export PATH="$HOME/.cargo/bin:$PATH"
+eval "$(fnm env --shell bash)"
+```
+
+## Hard-won lessons (curated — see individual `dev-docs/*-handoff.md` for the full running list)
+
+- `generate_handler![]` needs full module paths — no `pub use` re-exports.
+- No manual `From<AppError> for InvokeError` — Tauri v2's blanket impl covers it.
+- Use `handle.emit()`, not `emit_all()` (removed in Tauri v2).
+- A `notify` watcher must be kept in managed state — dropping it silently stops watching.
+- Every config struct needs `#[serde(default)]` for forward-compatible migration.
+- `Arc<EventBus>` must be constructed *before* `.manage()` — never rebuild an `Arc` from
+  `app.state()`.
+- `PathBuf` doesn't serialize cleanly over Tauri IPC — use `Option<String>`.
+- `AppEvent`'s TypeScript union must stay a fully discriminated union (`{ type, payload }`
+  per variant) or type narrowing breaks.
+- `DeckEnd`/`DeckStart` are emitted **instead of** `SlideUpdate` at deck boundaries, not
+  alongside it.
+- Tauri global-shortcut callbacks can't `await` directly — spawn onto
+  `tauri::async_runtime::spawn`, including for unregistering (never unregister from inside
+  the callback itself — deadlocks).
+- CPU-bound work (PPTX/PDF parsing) must run via `tokio::task::spawn_blocking` or it stalls
+  the whole async runtime.
+- Don't poll `deckGetAllSlides()` on every `DeckImportProgress` tick — IPC overhead scales
+  with slide count; fetch once on completion.
+- File-size limits (10 MB image / 500 MB video) are validated in the Rust command, before
+  any copy or path storage — never trust the frontend to pre-validate.
+- Windows AV may flag the dev binary (`VHO:Trojan-PSW`) due to `keyring` + being unsigned —
+  add the project/`target` dirs to AV exclusions locally; code-sign for real distribution.
+
+## Working agreement for AI-assisted sessions
+
+- Treat `dev-docs/streamdeck_product_roadmap_2026.md` as the spec of record for scope;
+  treat this file as the spec of record for *how* to work in this repo day to day.
+- `dev-docs/*-handoff.md` are historical, feature-scoped session logs (pre-Claude-Code
+  workflow) — useful for lessons/context on a specific past feature, not a template to keep
+  producing per-feature going forward now that context persists across a session.
+- A feature isn't done until `bash scripts/verify.sh <feature>` passes — not just
+  `cargo test`.
+- Commit as you go. Don't let multiple completed features accumulate uncommitted — see
+  "Current status" above for what that already cost once.
+- Windows/CRLF: `.gitattributes` now normalizes line endings (`eol=lf`) — don't fight it
+  by re-adding per-file `core.autocrlf` overrides.
