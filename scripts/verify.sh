@@ -410,6 +410,14 @@ run_f1_1() {
   file_contains "zustand in presentation" "presentation/package.json" "zustand"
   file_contains "zustand in controller" "controller/package.json" "zustand"
 
+  subsection "Multi-window dev/build wiring (regression check — see CLAUDE.md)"
+  file_contains "presentation window uses dev server URL in debug builds" "src-tauri/src/app.rs" "localhost:5174"
+  file_contains "beforeDevCommand runs both dev servers" "src-tauri/tauri.conf.json" "dev-both.cjs"
+  file_contains "beforeBuildCommand merges presentation dist" "src-tauri/tauri.conf.json" "merge-presentation-dist.cjs"
+  file_contains "presentation build uses relative asset base" "presentation/vite.config.ts" 'base: "./"'
+  file_exists "scripts/dev-both.cjs"
+  file_exists "scripts/merge-presentation-dist.cjs"
+
   check "F1.1 unit tests pass" \
     bash -c 'cd src-tauri && cargo test slide 2>&1 | tee /tmp/sd-test.log \
     && ! grep -q "FAILED" /tmp/sd-test.log'

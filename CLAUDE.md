@@ -20,6 +20,27 @@ wholesale into context — reference the specific phase/feature section needed.
 | Frontend state | Zustand (`slideStore.ts`, `sceneStore.ts`, one per window) |
 | Not yet started | GStreamer/NDI/WHIP media pipeline (Phase 2+) — no camera, compositor, or streaming code exists yet |
 
+## Multi-window dev/build wiring
+
+Tauri only has one `devUrl`/`frontendDist` in config (controller's). The presentation
+window's URL is set explicitly in `app.rs::run()`, branching on `cfg!(debug_assertions)`:
+`WebviewUrl::External("http://localhost:5174")` in dev, `WebviewUrl::App("presentation/index.html")`
+in release. This requires:
+- `scripts/dev-both.cjs` runs both windows' Vite dev servers (`beforeDevCommand` in
+  `tauri.conf.json`) — controller's alone isn't enough.
+- `scripts/merge-presentation-dist.cjs` copies `presentation/dist/` into
+  `controller/dist/presentation/` after both builds (`beforeBuildCommand`), since
+  `frontendDist` only points at `controller/dist`. `presentation/vite.config.ts` uses
+  `base: "./"` so its asset references still resolve once relocated there.
+
+This was broken from F1.1 through 2026-09-18 — the presentation window silently loaded
+controller's own dev server/SPA fallback instead (it looked like a duplicate of the
+controller UI). `verify.sh` never caught it: it builds each frontend independently and
+never exercises `beforeDevCommand`/`beforeBuildCommand` or actually launches the app, so it
+can't see this class of bug. **Only an actual `cargo tauri dev` launch would have caught
+this** — which is exactly why a manual launch test matters before considering any
+multi-window feature done, not just `verify.sh` passing.
+
 ## Repo map
 
 ```

@@ -45,11 +45,13 @@ pub fn run() {
             crate::commands::display::display_assign_presentation,
         ])
         .setup(move |app| {
-            WebviewWindowBuilder::new(
-                app,
-                "presentation",
-                WebviewUrl::App("presentation/index.html".into()),
-            )
+            let presentation_url = if cfg!(debug_assertions) {
+                WebviewUrl::External("http://localhost:5174".parse().expect("valid URL"))
+            } else {
+                WebviewUrl::App("presentation/index.html".into())
+            };
+
+            WebviewWindowBuilder::new(app, "presentation", presentation_url)
             .title("StreamDeck — Presentation")
             .inner_size(1920.0, 1080.0)
             .visible(false)
@@ -153,6 +155,9 @@ pub fn run() {
                     }
                     if let Some(abort) = window.app_handle().try_state::<DisplayWatchAbortHandle>() {
                         abort.0.abort();
+                    }
+                    if let Some(presentation) = window.app_handle().get_webview_window("presentation") {
+                        let _ = presentation.close();
                     }
                     window.app_handle().exit(0);
                 }
