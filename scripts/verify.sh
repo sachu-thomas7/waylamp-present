@@ -417,6 +417,7 @@ run_f1_1() {
 
   subsection "Multi-window dev/build wiring (regression check — see CLAUDE.md)"
   file_contains "presentation window uses dev server URL in debug builds" "src-tauri/src/app.rs" "localhost:5174"
+  file_contains "presentation capability allows remote dev-server IPC" "src-tauri/capabilities/presentation.json" "remote"
   file_contains "beforeDevCommand runs both dev servers" "src-tauri/tauri.conf.json" "dev-both.cjs"
   file_contains "beforeBuildCommand merges presentation dist" "src-tauri/tauri.conf.json" "merge-presentation-dist.cjs"
   file_contains "presentation build uses relative asset base" "presentation/vite.config.ts" 'base: "./"'

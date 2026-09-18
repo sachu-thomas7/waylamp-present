@@ -3,6 +3,9 @@
   "identifier": "presentation",
   "description": "Listen-only capability for the Presentation window. No invoke permissions — all state changes flow from the Controller through Rust commands and are pushed here via the event bus.",
   "windows": ["presentation"],
+  "remote": {
+    "urls": ["http://localhost:5174/*"]
+  },
   "permissions": [
     "core:event:default"
   ]

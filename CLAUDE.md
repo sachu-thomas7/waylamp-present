@@ -52,6 +52,20 @@ multi-display is checked via `display::list_displays` and only goes fullscreen/a
 with 2+ displays, otherwise a resizable floating window; Escape shortcut registration is
 now defensively cleared first and never fails the command.
 
+**Third bug, same launch test (fixed 2026-09-18):** even with the window fixed, presentation
+showed no content at all. Root cause: `WebviewUrl::External("http://localhost:5174")` (dev
+mode) is *remote* content from Tauri's perspective — remote content gets zero IPC access
+(not even `listen()`) unless a capability explicitly allowlists the origin via a `remote.urls`
+field (URLPattern syntax; separate from the `windows` label-matching we already had). Without
+it, `onAppEvent()`'s `listen()` call in the presentation frontend silently never attaches, so
+no `SlideUpdate` ever arrives regardless of what the Rust side publishes or when. Fixed by
+adding `"remote": { "urls": ["http://localhost:5174/*"] }` to
+`src-tauri/capabilities/presentation.json`. Only matters in dev — production loads local
+bundled content, which doesn't need it. **This is the kind of gap `verify.sh` structurally
+cannot detect** (no real IPC round-trip, no browser); three bugs in three rounds of manual
+launch testing, all invisible to the automated gate, is the real lesson here — don't treat
+`verify.sh` passing as evidence a multi-window/IPC change works without an actual launch.
+
 ## Repo map
 
 ```
