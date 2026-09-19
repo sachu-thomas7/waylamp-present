@@ -1,10 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useControllerSlideStore } from '../store/slideStore';
 import { onAppEvent } from '../lib/events';
 import {
   slideAdvance, slideRewind, slideJumpTo, slideGetCurrent, slideTimerReset, pickDeckFile, deckImport, deckGetAllSlides,
 } from '../lib/ipc';
 import { SlideCanvas } from './SlideCanvas';
+import { Card } from './ui/Card';
+import { Button } from './ui/Button';
+import { IconButton } from './ui/IconButton';
+import { Badge } from './ui/Badge';
+import { IconChevronLeft, IconChevronRight, IconReset, IconSearch, IconUpload, IconWarning } from './ui/icons';
 
 const THUMB_SCALE = 160 / 1920;
 const CURRENT_PREVIEW_SCALE = 380 / 1920;
@@ -23,17 +28,19 @@ function formatTimer(secs: number | null): string {
 
 export function SlideDeckPanel() {
   const {
-    current, atDeckStart, atDeckEnd, elapsedSecs, isCollapsed,
-    setSlide, setAtDeckEnd, setAtDeckStart, setElapsedSecs, resetTimer, toggleCollapse,
+    current, slides, atDeckStart, atDeckEnd, elapsedSecs,
+    setSlide, setSlides, setAtDeckEnd, setAtDeckStart, setElapsedSecs, resetTimer,
     importProgress, importError, setImportProgress, setImportError,
   } = useControllerSlideStore();
 
   const [jumpIndex, setJumpIndex] = useState('');
+  const [filter, setFilter] = useState('');
 
   useEffect(() => {
     slideGetCurrent()
       .then((slide) => { if (slide) setSlide(slide); })
       .catch(console.error);
+    deckGetAllSlides().then(setSlides).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -69,7 +76,7 @@ export function SlideDeckPanel() {
         setImportProgress(event.payload);
       } else if (event.type === 'DeckImportComplete') {
         setImportProgress(null);
-        deckGetAllSlides().then(/* repopulate thumbnail state */).catch(console.error);
+        deckGetAllSlides().then(setSlides).catch(console.error);
       } else if (event.type === 'DeckImportFailed') {
         setImportError(event.payload);
       }
@@ -84,125 +91,137 @@ export function SlideDeckPanel() {
     }
   }
 
+  const filteredIndices = useMemo(() => {
+    if (!filter.trim()) return slides.map((_, i) => i);
+    const q = filter.trim().toLowerCase();
+    return slides.reduce<number[]>((acc, s, i) => {
+      if (s.title.toLowerCase().includes(q)) acc.push(i);
+      return acc;
+    }, []);
+  }, [slides, filter]);
+
   return (
-    <section style={{ border: '1px solid #333', borderRadius: 8, margin: 8, overflow: 'hidden' }}>
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '8px 12px', background: '#222', cursor: 'default',
-      }}>
-        <span style={{ color: '#ccc', fontWeight: 600 }}>▼ Slide Deck</span>
-        <button onClick={toggleCollapse} style={{ fontSize: 12 }}>
-          {isCollapsed ? '▼ Expand' : '▲ Collapse'}
-        </button>
+    <Card
+      title="Slide Deck"
+      headerRight={<Badge>{totalSlides ? `${currentIndex + 1} / ${totalSlides}` : '-- / --'}</Badge>}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: -6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 7, width: 150 }}>
+          <IconSearch style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          <input
+            placeholder="Filter slides…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            style={{ border: 'none', background: 'transparent', color: 'var(--color-text)', fontSize: 12, outline: 'none', width: '100%' }}
+          />
+        </div>
+        <Button variant="secondary" icon={<IconUpload />} onClick={handleImport}>Import Deck</Button>
+      </div>
+      {importProgress && (
+        <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Importing… slide {importProgress.slide} / {importProgress.total}</span>
+      )}
+      {importError && (
+        <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>⚠ Slide {importError.slide}: {importError.reason}</span>
+      )}
+
+      {/* Thumbnail strip */}
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
+        {filteredIndices.map((i) => (
+          <div
+            key={i}
+            onClick={() => slideJumpTo(i).catch(console.error)}
+            style={{
+              flexShrink: 0,
+              borderRadius: 8,
+              cursor: 'pointer',
+              overflow: 'hidden',
+              position: 'relative',
+              outline: i === currentIndex ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+              boxShadow: i === currentIndex ? '0 0 0 3px rgba(79,152,163,0.22)' : undefined,
+            }}
+          >
+            {slides[i] && (
+              <>
+                <SlideCanvas slide={slides[i]} scale={THUMB_SCALE} />
+                {slides[i].layout_unsupported && (
+                  <div
+                    title="Unsupported layout — imported with blank body"
+                    style={{ position: 'absolute', top: 5, right: 5, color: 'var(--color-warn)' }}
+                  >
+                    <IconWarning />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ))}
       </div>
 
-      {!isCollapsed && (
-        <>
-          <div>
-            <button onClick={handleImport}>Import Deck</button>
-            {importProgress && (
-              <span>Importing… slide {importProgress.slide} / {importProgress.total}</span>
-            )}
-            {importError && (
-              <span>⚠ Slide {importError.slide}: {importError.reason}</span>
-            )}
-          </div>
-          {/* Thumbnail grid */}
-          <div style={{ display: 'flex', overflowX: 'auto', gap: 6, padding: 8, background: '#111' }}>
-            {Array.from({ length: totalSlides }, (_, i) => (
-              <div
-                key={i}
-                onClick={() => slideJumpTo(i).catch(console.error)}
-                style={{
-                  outline: i === currentIndex ? '2px solid #4af' : '1px solid #444',
-                  cursor: 'pointer', flexShrink: 0, borderRadius: 3, overflow: 'hidden',
-                }}
-              >
-                {current && (
-                  <SlideCanvas
-                    slide={{ ...current, index: i, title: current.title, body: current.body }}
-                    scale={THUMB_SCALE}
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+      {/* Current + Next preview */}
+      <div style={{ display: 'flex', gap: 14 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Current</div>
+          {current && <SlideCanvas slide={current} scale={CURRENT_PREVIEW_SCALE} />}
+        </div>
+        <div style={{ flex: 0.5 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Next</div>
+          {slides[currentIndex + 1] && (
+            <SlideCanvas slide={slides[currentIndex + 1]} scale={NEXT_PREVIEW_SCALE} />
+          )}
+        </div>
+      </div>
 
-          {/* Current + Next preview */}
-          <div style={{ display: 'flex', gap: 8, padding: 8, background: '#181818' }}>
-            <div>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Current</div>
-              {current && <SlideCanvas slide={current} scale={CURRENT_PREVIEW_SCALE} />}
-            </div>
-            <div>
-              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>Next</div>
-              {current && currentIndex < totalSlides - 1 && (
-                <SlideCanvas
-                  slide={{ ...current, index: currentIndex + 1 }}
-                  scale={NEXT_PREVIEW_SCALE}
-                />
-              )}
-            </div>
-          </div>
+      <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>
+        Notes — {current?.notes || '—'}
+      </div>
 
-          {/* Speaker notes */}
-          <textarea
-            readOnly
-            value={current?.notes ?? ''}
-            rows={3}
-            style={{
-              width: '100%', resize: 'none', background: '#111', color: '#ddd',
-              padding: '6px 8px', boxSizing: 'border-box', border: 'none',
-              borderTop: '1px solid #2a2a2a', fontFamily: 'inherit', fontSize: 13,
-            }}
+      {/* Timer + nav */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid var(--color-border)', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 19, fontWeight: 600, letterSpacing: '0.02em', minWidth: 64 }}>
+            {formatTimer(elapsedSecs)}
+          </span>
+          <IconButton title="Reset timer" onClick={() => slideTimerReset().catch(console.error)}>
+            <IconReset />
+          </IconButton>
+        </div>
+
+        {/* Boundary banners */}
+        {atDeckStart && <span style={{ color: 'var(--color-warn)', fontSize: 12, flexShrink: 0 }}>◀ Start of deck</span>}
+        {atDeckEnd && <span style={{ color: 'var(--color-warn)', fontSize: 12, flexShrink: 0 }}>End of deck ▶</span>}
+
+        {/* Primary: Prev/Next, adjacent and prominent — this is what an operator clicks constantly */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <Button variant="secondary" icon={<IconChevronLeft />} onClick={() => slideRewind().catch(console.error)}>
+            Prev
+          </Button>
+          <Button variant="secondary" icon={<IconChevronRight />} onClick={() => slideAdvance().catch(console.error)} style={{ flexDirection: 'row-reverse' }}>
+            Next
+          </Button>
+        </div>
+
+        {/* Secondary: jump to an arbitrary slide by index — smaller, visually de-emphasized */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, opacity: 0.75 }}>
+          <input
+            type="number"
+            value={jumpIndex}
+            onChange={(e) => setJumpIndex(e.target.value)}
+            placeholder="Idx"
+            min={0}
+            max={totalSlides - 1}
+            style={{ width: 44, height: 26, textAlign: 'center', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: 11.5 }}
           />
-
-          {/* Timer + counter */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '4px 8px', background: '#1a1a1a', borderTop: '1px solid #2a2a2a',
-          }}>
-            <span style={{ fontVariantNumeric: 'tabular-nums', color: '#ccc' }}>
-              ⏱ {formatTimer(elapsedSecs)}
-            </span>
-            <button onClick={() => slideTimerReset().catch(console.error)}>Reset</button>
-            <span style={{ marginLeft: 'auto', color: '#888' }}>
-              {current ? `${currentIndex + 1} / ${totalSlides}` : '-- / --'}
-            </span>
-          </div>
-
-          {/* Boundary banners */}
-          {atDeckStart && (
-            <div style={{ color: '#fa0', padding: '2px 8px', fontSize: 12 }}>◀ Start of deck</div>
-          )}
-          {atDeckEnd && (
-            <div style={{ color: '#fa0', padding: '2px 8px', fontSize: 12 }}>End of deck ▶</div>
-          )}
-
-          {/* Navigation */}
-          <div style={{ display: 'flex', gap: 6, padding: 8, background: '#1a1a1a' }}>
-            <button onClick={() => slideRewind().catch(console.error)}>← Prev</button>
-            <button onClick={() => slideAdvance().catch(console.error)}>Next →</button>
-            <input
-              type="number"
-              value={jumpIndex}
-              onChange={(e) => setJumpIndex(e.target.value)}
-              style={{ width: 48 }}
-              placeholder="idx"
-              min={0}
-              max={totalSlides - 1}
-            />
-            <button
-              onClick={() => {
-                const idx = parseInt(jumpIndex, 10);
-                if (!Number.isNaN(idx)) slideJumpTo(idx).catch(console.error);
-              }}
-            >
-              Jump
-            </button>
-          </div>
-        </>
-      )}
-    </section>
+          <button
+            onClick={() => {
+              const idx = parseInt(jumpIndex, 10);
+              if (!Number.isNaN(idx)) slideJumpTo(idx).catch(console.error);
+            }}
+            style={{ height: 26, padding: '0 9px', borderRadius: 6, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'var(--font-body)', cursor: 'pointer' }}
+          >
+            Go
+          </button>
+        </div>
+      </div>
+    </Card>
   );
 }

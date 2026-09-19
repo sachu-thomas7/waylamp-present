@@ -34,37 +34,43 @@ in release. This requires:
   `base: "./"` so its asset references still resolve once relocated there.
 
 This was broken from F1.1 through 2026-09-18 — the presentation window silently loaded
-controller's own dev server/SPA fallback instead (it looked like a duplicate of the
-controller UI). `verify.sh` never caught it: it builds each frontend independently and
-never exercises `beforeDevCommand`/`beforeBuildCommand` or actually launches the app, so it
-can't see this class of bug. **Only an actual `cargo tauri dev` launch would have caught
-this** — which is exactly why a manual launch test matters before considering any
-multi-window feature done, not just `verify.sh` passing.
+controller's own dev server/SPA fallback instead. `verify.sh` structurally cannot catch
+this class of bug: it builds each frontend independently and never exercises
+`beforeDevCommand`/`beforeBuildCommand`, does a real IPC round-trip, or launches the app.
+**A manual `cargo tauri dev` launch is required before considering any multi-window or
+IPC change done** — five rounds of manual launch testing on 2026-09-18/19 each found a
+real bug `verify.sh` passed anyway (chronological detail in git history / this section's
+prior revisions if needed):
 
-**Second bug found by the same launch test (fixed 2026-09-18):** `presentation_show`
-always went exclusive fullscreen + always-on-top, even with only one display — trapping the
-operator, since F1.1's own AC calls for a floating-window fallback on a single display,
-which was never implemented. It also published the slide content *after* registering the
-global Escape shortcut, so a registration failure (plausible after repeated dev hot-reloads
-leave a stale OS-level hotkey binding) skipped the content entirely while the window was
-already fullscreen-focused with no way out. Fixed: content now publishes first; single vs.
-multi-display is checked via `display::list_displays` and only goes fullscreen/always-on-top
-with 2+ displays, otherwise a resizable floating window; Escape shortcut registration is
-now defensively cleared first and never fails the command.
+1. Dev/build wiring above (presentation loaded controller's own dev server).
+2. `presentation_show` had no single-display handling at all, trapping the operator in
+   fullscreen — fixed with a floating-window fallback, later superseded (below).
+3. Remote dev-server content (`WebviewUrl::External`) gets zero IPC access unless a
+   capability explicitly allowlists the origin via `remote.urls` (separate from the
+   `windows` label-matching) — `onAppEvent()`'s `listen()` silently never attached.
+   Fixed via `"remote": {"urls": ["http://localhost:5174/*"]}` in
+   `src-tauri/capabilities/presentation.json`. Dev-only; production loads local bundled
+   content.
+4. The floating-window fallback from #2 was reverted: presenting should always go
+   fullscreen, single display or several, matching PowerPoint's own behavior — not a
+   mitigation, a product decision. Operator-trapping is now prevented by two safety nets
+   instead of avoiding fullscreen: Escape is defensively cleared and re-registered on
+   every `presentation_show` call (unconditionally, not just for 2+ displays), and
+   closing the presentation window via Alt+F4/OS close no longer destroys it —
+   `app.rs`'s `on_window_event` intercepts `CloseRequested` for the `presentation` label
+   with `api.prevent_close()` and routes it through the same `hide_presentation()` used
+   by "Stop Presenting".
+5. `always_on_top(true)` was still unconditional after #4, which blocks Alt+Tab from
+   ever bringing another window to the front regardless of focus — a real complaint on a
+   single display mirrored to a projector via a casting dongle (e.g. ClickShare), which
+   Windows reports as 1 display, same as a laptop-only setup. Fixed: `always_on_top` is
+   now only set when `display::list_displays` reports 2+ real displays; fullscreen stays
+   unconditional. This doesn't (can't) fix the mirrored case fully — whatever the
+   operator switches to also appears on the mirrored output, since mirroring duplicates
+   the same pixels; that's a hardware limitation.
 
-**Third bug, same launch test (fixed 2026-09-18):** even with the window fixed, presentation
-showed no content at all. Root cause: `WebviewUrl::External("http://localhost:5174")` (dev
-mode) is *remote* content from Tauri's perspective — remote content gets zero IPC access
-(not even `listen()`) unless a capability explicitly allowlists the origin via a `remote.urls`
-field (URLPattern syntax; separate from the `windows` label-matching we already had). Without
-it, `onAppEvent()`'s `listen()` call in the presentation frontend silently never attaches, so
-no `SlideUpdate` ever arrives regardless of what the Rust side publishes or when. Fixed by
-adding `"remote": { "urls": ["http://localhost:5174/*"] }` to
-`src-tauri/capabilities/presentation.json`. Only matters in dev — production loads local
-bundled content, which doesn't need it. **This is the kind of gap `verify.sh` structurally
-cannot detect** (no real IPC round-trip, no browser); three bugs in three rounds of manual
-launch testing, all invisible to the automated gate, is the real lesson here — don't treat
-`verify.sh` passing as evidence a multi-window/IPC change works without an actual launch.
+**Current behavior**: `presentation_show` always goes fullscreen; `always_on_top` only
+with 2+ displays; Escape always registered; OS-close always hides, never destroys.
 
 ## Repo map
 
@@ -80,6 +86,10 @@ src-tauri/src/
   deck_importer.rs         .pptx/.pdf import → SlideDeck (spawn_blocking — CPU-bound)
   commands/                 One #[tauri::command] module per feature area — thin wrappers, no business logic
 controller/src/            Operator UI — the only window with invoke() permissions
+controller/src/components/ui/  Design-system primitives (Button, IconButton, Badge, Card,
+                            SegmentedControl, Popover, icons.tsx) — reuse these for any new
+                            controller panel instead of hand-rolled inline styles; see
+                            "Design system" below
 presentation/src/          Projector output — listen-only, zero invoke permissions
 dev-docs/                  Roadmap + one "AI handoff" doc per shipped feature (historical record)
 scripts/verify.sh          Acceptance-gate script — see "Verification" below
@@ -89,6 +99,26 @@ scripts/verify.sh          Acceptance-gate script — see "Verification" below
 (`SlideCanvas.tsx`, `ipc.ts`, `events.ts` shape) — they are separate Vite projects with
 separate `package.json`s, not a monorepo with shared packages. This is a deliberate
 choice, not drift; don't "fix" it by extracting a shared package unless asked.
+
+## Design system (controller only)
+
+`controller/src/index.css` defines the token set (`--color-bg`, `--color-surface`,
+`--color-primary`, `--color-live` [presenting, violet — deliberately distinct from the
+red/green/amber the roadmap reserves for streaming health in Phase 4, see F4.2],
+`--color-warn`, `--slide-bg`, `--font-mono`, `--radius-*`) and
+`controller/src/components/ui/` has the primitives built on them (`Button`, `IconButton`
+— requires a `title` prop, every icon-only control needs a stated label, `Badge`,
+`Card`, `SegmentedControl`, `Popover`, `icons.tsx`). Every controller panel
+(`SlideDeckPanel`, `SceneMediaPanel`, `DisplayPanel`, `PresentButton`) is built from
+these — new Phase 2+ panels (camera tiles, scene cards, stream controls) should be too,
+rather than hand-rolling inline styles again. `presentation/` doesn't get this kit — it
+has no buttons/panels, and `controller`/`presentation` are deliberately separate
+projects (see above), not sharing a package.
+
+A design canvas exploring this system, including a Phase 2/3/4 direction sketch
+(cameras + scenes + streaming coexisting) and empty/first-run states, exists as a
+published Claude artifact — ask the user for the link if picking this back up, since it
+isn't tracked in the repo.
 
 ## Architecture invariants (do not violate)
 
@@ -114,7 +144,7 @@ choice, not drift; don't "fix" it by extracting a shared package unless asked.
 7. **`app.rs` stays gated** — `#[cfg(not(test))] mod app;` in `lib.rs`, so `cargo test`
    never needs to build the Tauri runtime wiring.
 
-## Current status (2026-09-18)
+## Current status (2026-09-19)
 
 - **Phase 0** (F0.1–F0.4: bootstrap, IPC layer, event bus, TOML config) — done.
 - **Phase 1 — all of F1.1–F1.5 done**: presentation window + slide renderer, slide state
@@ -149,6 +179,23 @@ choice, not drift; don't "fix" it by extracting a shared package unless asked.
   and the scene/deck-import system existed only as uncommitted/untracked changes. Now
   clean and committed; keep commits current going forward — don't let multiple shipped
   features pile up uncommitted.
+- **Controller UI redesign (2026-09-19)**: the design-system pass above — replaced every
+  hand-rolled inline-style panel with the `ui/` primitives, added `SlidePayload.
+  layout_unsupported` end-to-end (was on the internal `SlideEntry` since F1.4 but never
+  reached the frontend, despite F1.4's own AC requiring it visible in the controller),
+  moved Displays/Build Info behind a Settings popover and Shortcuts behind a Help popover
+  (progressive disclosure — they're configured once, not touched during a show), and
+  fixed three UX issues found in manual testing: an unstyled native scrollbar on the
+  thumbnail strip, the Scene Media active-source toggle having no visible on-screen
+  consequence (pushing media only stages it — the toggle is what actually puts it on the
+  projector, and nothing said so), and Prev/Next being squeezed into tiny icon buttons
+  sandwiched inside the Jump-to-slide group instead of being the prominent, adjacent pair
+  an operator clicks constantly.
+- Removed a dead scaffold leftover at the repo root (`tsconfig.json`, `tsconfig.node.json`,
+  `package.json` from before the repo split into `controller/`/`presentation/` — the
+  tsconfig's `include: ["src"]` pointed at a `src/` containing only an icon `assets/`
+  folder, no TypeScript; confirmed unused by both `verify.sh` and CI, which always use
+  `--prefix controller`/`--prefix presentation` explicitly).
 
 ## Verification — `scripts/verify.sh`
 
@@ -194,6 +241,20 @@ eval "$(fnm env --shell bash)"
 ```
 (`.claude/hooks/*.sh` fall back through `/c/Users/sachu/.cargo/bin` → `$HOME/.cargo/bin` →
 `$USERPROFILE/.cargo/bin` for exactly this reason — don't "simplify" that to just `$HOME`.)
+
+## Editor / LSP setup
+
+No special config needed, and don't add a root-level tsconfig/package.json to "unify"
+the two frontends — that's exactly the dead scaffold pattern just removed (see Current
+status). `controller/` and `presentation/` each carry their own `tsconfig.json`; every
+editor's TypeScript server resolves the nearest one per file automatically. For
+rust-analyzer: no extra settings required beyond what `cargo build`/`clippy` already
+need — `controller/dist`/`presentation/dist` must exist first (the default
+`custom-protocol` feature embeds them via `rust-embed` at compile time), or
+rust-analyzer's background `cargo check` will show spurious errors around the embed
+macros the same way a bare `cargo build` would fail. Run `bash scripts/verify.sh
+--no-frontend` once (it bootstraps both frontend builds) before expecting a clean
+rust-analyzer state on a fresh checkout.
 
 ## Hard-won lessons (curated — see individual `dev-docs/*-handoff.md` for the full running list)
 

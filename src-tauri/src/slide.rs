@@ -8,6 +8,7 @@ pub struct SlidePayload {
     pub body: String,
     pub notes: String,
     pub background_path: Option<String>,
+    pub layout_unsupported: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -108,6 +109,7 @@ impl SlidePayload {
             body: "Ready to present".into(),
             notes: String::new(),
             background_path: None,
+            layout_unsupported: false,
         }
     }
 }
@@ -121,6 +123,7 @@ impl SlidePayload {
             body: entry.body.clone(),
             notes: entry.notes.clone(),
             background_path: entry.background_path.clone(),
+            layout_unsupported: entry.layout_unsupported,
         }
     }
 }

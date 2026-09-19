@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useDisplayStore } from '../store/displayStore';
 import { onAppEvent } from '../lib/events';
 import { displayList, displayAssignPresentation } from '../lib/ipc';
+import { Button } from './ui/Button';
+import { IconCheck, IconMonitor } from './ui/icons';
 
 export function DisplayPanel() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const {
     displays, assignedDisplayId, lostWarning,
     setDisplays, setAssignedDisplayId, setLostWarning,
@@ -34,33 +35,44 @@ export function DisplayPanel() {
   }
 
   return (
-    <section>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>▼ Displays</span>
-        <button onClick={() => setIsCollapsed((c) => !c)}>
-          {isCollapsed ? '▼ Expand' : '▲ Collapse'}
-        </button>
-      </div>
-
-      {!isCollapsed && (
-        <>
-          {lostWarning && (
-            <p>⚠ Assigned display disconnected — presentation fell back to the primary display.</p>
-          )}
-          <ul>
-            {displays.map((d) => (
-              <li key={d.id}>
-                {d.name} — {d.width}×{d.height} at ({d.x}, {d.y}){d.is_primary ? ' (primary)' : ''}
-                {' '}
-                <button disabled={assignedDisplayId === d.id} onClick={() => handleAssign(d.id)}>
-                  {assignedDisplayId === d.id ? 'Assigned' : 'Assign to Presentation'}
-                </button>
-              </li>
-            ))}
-            {displays.length === 0 && <li>No displays detected</li>}
-          </ul>
-        </>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+        Displays
+      </span>
+      {lostWarning && (
+        <p style={{ fontSize: 11.5, color: 'var(--color-warn)', margin: 0 }}>
+          ⚠ Assigned display disconnected — presentation fell back to the primary display.
+        </p>
       )}
-    </section>
+      {displays.length === 0 && (
+        <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>No displays detected</span>
+      )}
+      {displays.map((d) => {
+        const assigned = assignedDisplayId === d.id;
+        return (
+          <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--color-bg)', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--color-text-muted)' }}>
+                <IconMonitor />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3, minWidth: 0 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{d.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
+                  {d.width}×{d.height}{d.is_primary ? ' · Primary' : ''}
+                </span>
+              </div>
+            </div>
+            {assigned ? (
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: 'rgba(79,152,163,0.14)', borderRadius: 7, color: 'var(--color-primary)' }}>
+                <IconCheck />
+                <span style={{ fontSize: 11, fontWeight: 600 }}>Assigned</span>
+              </div>
+            ) : (
+              <Button variant="secondary" onClick={() => handleAssign(d.id)}>Assign</Button>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }

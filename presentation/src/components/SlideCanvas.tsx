@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSlideStore } from '../store/slideStore';
 
 function computeScale(containerWidth: number, containerHeight: number): {
@@ -14,15 +14,17 @@ function computeScale(containerWidth: number, containerHeight: number): {
 
 export function SlideCanvas() {
   const slide = useSlideStore((s) => s.current);
-  const [layout, setLayout] = useState(() =>
-    computeScale(window.innerWidth, window.innerHeight)
-  );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState(() => computeScale(0, 0));
 
   useEffect(() => {
-    const observer = new ResizeObserver(() => {
-      setLayout(computeScale(window.innerWidth, window.innerHeight));
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect;
+      setLayout(computeScale(width, height));
     });
-    observer.observe(document.body);
+    observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
@@ -30,25 +32,24 @@ export function SlideCanvas() {
 
   return (
     <div
+      ref={containerRef}
       style={{
         width: '100vw',
         height: '100vh',
         background: '#000',
         overflow: 'hidden',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        position: 'relative',
       }}
     >
       <div
         style={{
           width: 1920,
           height: 1080,
-          position: 'relative',
+          position: 'absolute',
+          left: marginLeft,
+          top: marginTop,
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
-          marginLeft,
-          marginTop,
           background: slide?.background_path ? undefined : '#1a1a2e',
         }}
       >

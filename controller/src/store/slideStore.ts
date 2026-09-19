@@ -3,11 +3,13 @@ import type { SlidePayload } from '../lib/ipc';
 
 interface ControllerSlideStore {
   current: SlidePayload | null;
+  slides: SlidePayload[];
   atDeckStart: boolean;
   atDeckEnd: boolean;
   elapsedSecs: number | null;
   isCollapsed: boolean;
   setSlide: (payload: SlidePayload) => void;
+  setSlides: (slides: SlidePayload[]) => void;
   setAtDeckEnd: (val: boolean) => void;
   setAtDeckStart: (val: boolean) => void;
   setElapsedSecs: (secs: number) => void;
@@ -21,6 +23,7 @@ interface ControllerSlideStore {
 
 export const useControllerSlideStore = create<ControllerSlideStore>((set) => ({
   current: null,
+  slides: [],
   atDeckStart: false,
   atDeckEnd: false,
   elapsedSecs: null,
@@ -28,6 +31,7 @@ export const useControllerSlideStore = create<ControllerSlideStore>((set) => ({
   importProgress: null,
   importError: null,
   setSlide: (payload) => set({ current: payload, atDeckEnd: false, atDeckStart: false }),
+  setSlides: (slides) => set({ slides }),
   setAtDeckEnd: (val) => set({ atDeckEnd: val }),
   setAtDeckStart: (val) => set({ atDeckStart: val }),
   setElapsedSecs: (secs) => set({ elapsedSecs: secs }),

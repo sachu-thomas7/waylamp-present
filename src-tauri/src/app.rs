@@ -4,6 +4,7 @@ use tauri::Emitter;
 use tauri::Manager;
 use tauri::WebviewWindowBuilder;
 use tauri::WebviewUrl;
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::bus::EventBus;
 use crate::events::AppEvent;
@@ -160,6 +161,20 @@ pub fn run() {
                         let _ = presentation.close();
                     }
                     window.app_handle().exit(0);
+                }
+            } else if window.label() == "presentation" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // Treat the OS close button the same as "Stop Presenting": hide, don't
+                    // destroy, this single long-lived window, and sync state back to the
+                    // controller (which otherwise never learns presenting stopped).
+                    api.prevent_close();
+                    let app_handle = window.app_handle().clone();
+                    if let Some(bus) = app_handle.try_state::<Arc<EventBus>>() {
+                        crate::commands::presentation::hide_presentation(&app_handle, &bus);
+                    }
+                    let _ = app_handle
+                        .global_shortcut()
+                        .unregister(crate::commands::presentation::escape_shortcut());
                 }
             }
         })

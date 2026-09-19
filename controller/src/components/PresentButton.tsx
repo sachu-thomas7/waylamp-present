@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { presentationShow, presentationHide } from '../lib/ipc';
 import { onAppEvent } from '../lib/events';
+import { Button } from './ui/Button';
+import { IconPlay, IconStop } from './ui/icons';
 
 export function PresentButton() {
   const [presenting, setPresenting] = useState(false);
@@ -30,8 +32,14 @@ export function PresentButton() {
   }
 
   return (
-    <button onClick={handleClick} type="button">
+    <Button
+      type="button"
+      pill
+      variant={presenting ? 'live' : 'primary'}
+      icon={presenting ? <IconStop /> : <IconPlay />}
+      onClick={handleClick}
+    >
       {presenting ? 'Stop Presenting' : 'Present'}
-    </button>
+    </Button>
   );
 }
