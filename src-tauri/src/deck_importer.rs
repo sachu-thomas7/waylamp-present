@@ -192,7 +192,12 @@ fn parse_pptx_slide(
                 }
             }
             Ok(Event::Text(ref e)) => {
-                let text = e.unescape().unwrap_or_default().to_string();
+                // quick-xml 0.41 split the old combined `.unescape()` into decode + unescape.
+                let text = e
+                    .decode()
+                    .ok()
+                    .and_then(|d| quick_xml::escape::unescape(&d).ok().map(|u| u.into_owned()))
+                    .unwrap_or_default();
                 if text.is_empty() { buf.clear(); continue; }
                 if in_title_ph && title.is_empty() {
                     title = text.clone();

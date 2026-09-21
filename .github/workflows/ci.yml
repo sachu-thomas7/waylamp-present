@@ -23,8 +23,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      # Pinned by rust-toolchain.toml; matching it here avoids installing (and caching)
+      # two separate toolchains in the same job.
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: clippy
 
@@ -68,9 +70,19 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
 
-  # ── Frontend type-checks ───────────────────────────────────────────────────
-  typecheck:
-    name: TypeScript typecheck
+  # ── Rust dependency security / license / bans ───────────────────────────────
+  cargo-deny:
+    name: cargo-deny (advisories, licenses, bans, sources)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: src-tauri/Cargo.toml
+
+  # ── Frontend type-checks, lint, unit tests ──────────────────────────────────
+  frontend:
+    name: Frontend (typecheck + lint + test)
     runs-on: ubuntu-22.04
 
     steps:
@@ -96,3 +108,15 @@ jobs:
 
       - name: Typecheck presentation
         run: npm run typecheck --prefix presentation
+
+      - name: Lint controller (Biome)
+        run: npm run lint --prefix controller
+
+      - name: Lint presentation (Biome)
+        run: npm run lint --prefix presentation
+
+      - name: Unit tests controller (Vitest)
+        run: npm test --prefix controller
+
+      - name: Unit tests presentation (Vitest)
+        run: npm test --prefix presentation

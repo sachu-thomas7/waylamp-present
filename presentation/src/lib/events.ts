@@ -9,6 +9,7 @@ export interface SlidePayload {
   body: string;
   notes: string;
   background_path: string | null;
+  layout_unsupported: boolean;
 }
 
 export type AppEvent =

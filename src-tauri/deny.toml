@@ -1,0 +1,60 @@
+# cargo-deny config — run via `cargo deny check` or the EmbarkStudios/cargo-deny-action in CI.
+# Regenerate the license/bans baseline with `cargo deny check` after adding a dependency;
+# only widen the `licenses.allow` / `bans.skip` lists deliberately, not to silence a failure.
+
+[graph]
+all-features = false
+no-default-features = false
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "deny"
+ignore = [
+  # unic-* family — unmaintained, transitive via Tauri's own urlpattern
+  # dependency (tauri-utils). No safe upgrade exists upstream yet;
+  # re-evaluate on the next tauri bump.
+  { id = "RUSTSEC-2025-0100", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
+  { id = "RUSTSEC-2025-0098", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
+  { id = "RUSTSEC-2025-0080", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
+  { id = "RUSTSEC-2025-0081", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
+  { id = "RUSTSEC-2025-0075", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
+  # proc-macro-error — unmaintained, transitive via Tauri's Linux GTK menu
+  # bindings (muda -> glib-macros). Linux-only build path; no safe upgrade yet.
+  { id = "RUSTSEC-2024-0370", reason = "transitive via tauri's Linux GTK menu bindings (muda/glib-macros); no upstream fix yet" },
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.8
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "MPL-2.0",
+]
+
+[licenses.private]
+# streamdeck itself is a private commercial app (publish = false in Cargo.toml) —
+# it has no license of its own to check, only its dependencies do.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

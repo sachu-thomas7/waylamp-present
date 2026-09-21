@@ -506,6 +506,7 @@ run_f1_4() {
   file_contains "is_code_slide field"         "src-tauri/src/slide.rs"                        "is_code_slide"
   file_contains "deck_import cmd"             "src-tauri/src/commands/deck.rs"                "deck_import"
   file_contains "deck_restore cmd"            "src-tauri/src/commands/deck.rs"                "deck_restore"
+  file_contains "deck_clear cmd (empty-deck support)" "src-tauri/src/commands/deck.rs"        "deck_clear"
   file_contains "scene_push_image cmd"        "src-tauri/src/commands/scene.rs"               "scene_push_image"
   file_contains "scene_set_source cmd"        "src-tauri/src/commands/scene.rs"               "scene_set_source"
   file_contains "spawn_blocking"              "src-tauri/src/deck_importer.rs"                "spawn_blocking"
@@ -605,6 +606,31 @@ run_core() {
       skip "$win: no typecheck script"
     fi
   done
+
+  subsection "Frontend lint — Biome (always independent)"
+  for win in controller presentation; do
+    if grep -q '"lint"' "$win/package.json" 2>/dev/null; then
+      check "$win: npm run lint" bash -c "cd $win && npm run lint"
+    else
+      skip "$win: no lint script"
+    fi
+  done
+
+  subsection "Frontend unit tests — Vitest (always independent)"
+  for win in controller presentation; do
+    if grep -q '"test"' "$win/package.json" 2>/dev/null; then
+      check "$win: npm test" bash -c "cd $win && npm test"
+    else
+      skip "$win: no test script"
+    fi
+  done
+
+  subsection "cargo-deny — advisories/licenses/bans/sources (non-blocking locally)"
+  if command -v cargo-deny >/dev/null 2>&1; then
+    check_warn "cargo deny check" bash -c 'cd src-tauri && cargo deny check'
+  else
+    skip "cargo-deny not installed locally — runs in CI via cargo-deny-action (cargo install cargo-deny to check here)"
+  fi
 }
 
 # ══════════════════════════════════════════════════════════════════
