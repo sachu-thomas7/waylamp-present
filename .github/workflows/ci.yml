@@ -39,7 +39,7 @@ jobs:
       # Pinned by rust-toolchain.toml; matching it here avoids installing (and caching)
       # two separate toolchains in the same job.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.96.0
+        uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: clippy
 
