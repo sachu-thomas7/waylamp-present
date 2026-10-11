@@ -17,8 +17,8 @@ fn classify_ph(e: &quick_xml::events::BytesStart) -> PhKind {
     let type_attr = e
         .attributes()
         .filter_map(|a| a.ok())
-        .find(|a| a.key.local_name().as_ref() == b"type");
-    match type_attr.as_ref().and_then(|a| std::str::from_utf8(&a.value).ok()) {
+        .find(|a| a.key.local_name().as_ref() == "type");
+    match type_attr.as_ref().map(|a| a.value.as_ref()) {
         Some("title") | Some("ctrTitle") => PhKind::Title,
         Some("body") | None => PhKind::Body,
         Some(_) => PhKind::Other,
@@ -139,36 +139,36 @@ fn parse_pptx_slide(
             Ok(Event::Start(ref e)) => {
                 let local = e.local_name();
                 match local.as_ref() {
-                    b"sp" => {
+                    "sp" => {
                         // Detect placeholder type via ph element inside spPr/nvSpPr
                     }
-                    b"ph" => match classify_ph(e) {
+                    "ph" => match classify_ph(e) {
                         PhKind::Title => { in_title_ph = true; in_body_ph = false; }
                         PhKind::Body => { in_body_ph = true; in_title_ph = false; }
                         PhKind::Other => { layout_unsupported = true; }
                     },
-                    b"rPr" if in_title_ph || in_body_ph => {
+                    "rPr" if in_title_ph || in_body_ph => {
                         current_bold = e.attributes().filter_map(|a| a.ok())
-                            .any(|a| a.key.local_name().as_ref() == b"b" && a.value.as_ref() == b"1");
+                            .any(|a| a.key.local_name().as_ref() == "b" && a.value.as_ref() == "1");
                         current_italic = e.attributes().filter_map(|a| a.ok())
-                            .any(|a| a.key.local_name().as_ref() == b"i" && a.value.as_ref() == b"1");
+                            .any(|a| a.key.local_name().as_ref() == "i" && a.value.as_ref() == "1");
                         current_font_size = e.attributes().filter_map(|a| a.ok())
-                            .find(|a| a.key.local_name().as_ref() == b"sz")
-                            .and_then(|a| std::str::from_utf8(&a.value).ok()
+                            .find(|a| a.key.local_name().as_ref() == "sz")
+                            .and_then(|a| Some(a.value.as_ref())
                                 .and_then(|v| v.parse::<u32>().ok().map(|v| v / 100)));
                     }
-                    b"pPr" if in_body_ph => {
+                    "pPr" if in_body_ph => {
                         current_indent = e.attributes().filter_map(|a| a.ok())
-                            .find(|a| a.key.local_name().as_ref() == b"lvl")
-                            .and_then(|a| std::str::from_utf8(&a.value).ok()
+                            .find(|a| a.key.local_name().as_ref() == "lvl")
+                            .and_then(|a| Some(a.value.as_ref())
                                 .and_then(|v| v.parse::<u8>().ok()))
                             .unwrap_or(0);
                         current_align = e.attributes().filter_map(|a| a.ok())
-                            .find(|a| a.key.local_name().as_ref() == b"algn")
+                            .find(|a| a.key.local_name().as_ref() == "algn")
                             .map(|a| match a.value.as_ref() {
-                                b"ctr" => TextAlignment::Center,
-                                b"r" => TextAlignment::Right,
-                                b"just" => TextAlignment::Justify,
+                                "ctr" => TextAlignment::Center,
+                                "r" => TextAlignment::Right,
+                                "just" => TextAlignment::Justify,
                                 _ => TextAlignment::Left,
                             })
                             .unwrap_or(TextAlignment::Left);
@@ -178,12 +178,12 @@ fn parse_pptx_slide(
             }
             Ok(Event::Empty(ref e)) => {
                 match e.local_name().as_ref() {
-                    b"latin" if in_title_ph || in_body_ph => {
+                    "latin" if in_title_ph || in_body_ph => {
                         current_font_family = e.attributes().filter_map(|a| a.ok())
-                            .find(|a| a.key.local_name().as_ref() == b"typeface")
-                            .and_then(|a| String::from_utf8(a.value.into_owned()).ok());
+                            .find(|a| a.key.local_name().as_ref() == "typeface")
+                            .map(|a| a.value.into_owned());
                     }
-                    b"ph" => match classify_ph(e) {
+                    "ph" => match classify_ph(e) {
                         PhKind::Title => { in_title_ph = true; in_body_ph = false; }
                         PhKind::Body => { in_body_ph = true; in_title_ph = false; }
                         PhKind::Other => { layout_unsupported = true; }
@@ -192,12 +192,8 @@ fn parse_pptx_slide(
                 }
             }
             Ok(Event::Text(ref e)) => {
-                // quick-xml 0.41 split the old combined `.unescape()` into decode + unescape.
-                let text = e
-                    .decode()
-                    .ok()
-                    .and_then(|d| quick_xml::escape::unescape(&d).ok().map(|u| u.into_owned()))
-                    .unwrap_or_default();
+                let text = e.xml10_content().into_owned();
+
                 if text.is_empty() { buf.clear(); continue; }
                 if in_title_ph && title.is_empty() {
                     title = text.clone();
@@ -215,7 +211,7 @@ fn parse_pptx_slide(
             }
             Ok(Event::End(ref e)) => {
                 match e.local_name().as_ref() {
-                    b"p" if in_body_ph && !current_runs.is_empty() => {
+                    "p" if in_body_ph && !current_runs.is_empty() => {
                         rich_body.push(SlideTextBlock {
                             runs: std::mem::take(&mut current_runs),
                             alignment: match current_align {
@@ -229,7 +225,7 @@ fn parse_pptx_slide(
                         current_indent = 0;
                         current_align = TextAlignment::Left;
                     }
-                    b"sp" => {
+                    "sp" => {
                         in_title_ph = false;
                         in_body_ph = false;
                         current_bold = false;
@@ -298,13 +294,13 @@ fn extract_pptx_background(
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(ref e)) if e.local_name().as_ref() == b"Relationship" => {
+            Ok(Event::Empty(ref e)) if e.local_name().as_ref() == "Relationship" => {
                 let rel_type = e.attributes().filter_map(|a| a.ok())
-                    .find(|a| a.key.local_name().as_ref() == b"Type")
-                    .and_then(|a| String::from_utf8(a.value.into_owned()).ok());
+                    .find(|a| a.key.local_name().as_ref() == "Type")
+                    .map(|a| a.value.into_owned());
                 let target = e.attributes().filter_map(|a| a.ok())
-                    .find(|a| a.key.local_name().as_ref() == b"Target")
-                    .and_then(|a| String::from_utf8(a.value.into_owned()).ok());
+                    .find(|a| a.key.local_name().as_ref() == "Target")
+                    .map(|a| a.value.into_owned());
 
                 if let (Some(rt), Some(tgt)) = (rel_type, target) {
                     if rt.ends_with("/image") && tgt.contains("media/") {
