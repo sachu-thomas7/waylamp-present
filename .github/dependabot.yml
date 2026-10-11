@@ -45,6 +45,9 @@ updates:
     labels: ["dependencies"]
     commit-message:
       prefix: "deps"
+    ignore:
+      # Tag is the toolchain version; it must match rust-toolchain.toml, not drift.
+      - dependency-name: "dtolnay/rust-toolchain"
     groups:
       actions:
         patterns: ["*"]

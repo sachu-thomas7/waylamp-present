@@ -35,7 +35,7 @@ jobs:
         os: ${{ fromJSON(github.event.pull_request.user.login == 'dependabot[bot]' && '["ubuntu-24.04"]' || '["ubuntu-24.04","macos-15","windows-2022"]') }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Pinned by rust-toolchain.toml; matching it here avoids installing (and caching)
       # two separate toolchains in the same job.
@@ -89,7 +89,7 @@ jobs:
     name: cargo-deny (advisories, licenses, bans, sources)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: src-tauri/Cargo.toml
@@ -100,7 +100,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
