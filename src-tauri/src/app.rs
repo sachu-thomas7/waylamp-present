@@ -38,6 +38,7 @@ pub fn run() {
             crate::commands::deck::deck_import,
             crate::commands::deck::deck_get_all_slides,
             crate::commands::deck::deck_restore,
+            crate::commands::deck::deck_clear,
             crate::commands::scene::scene_push_image,
             crate::commands::scene::scene_push_video,
             crate::commands::scene::scene_set_source,
@@ -86,10 +87,7 @@ pub fn run() {
                             let first_payload = {
                                 let mut m = machine_for_restore.write().await;
                                 m.load_deck(deck);
-                                crate::slide::SlidePayload::from_entry(
-                                    m.current_slide_entry(),
-                                    m.deck_len() as u32,
-                                )
+                                m.current_payload()
                             };
                             bus_for_restore.publish(crate::events::AppEvent::SlideUpdate(first_payload));
                         }

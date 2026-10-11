@@ -64,6 +64,10 @@ export async function deckImport(path: string): Promise<string> {
   return invoke<string>('deck_import', { path });
 }
 
+export async function deckClear(): Promise<void> {
+  return invoke<void>('deck_clear');
+}
+
 export async function deckGetAllSlides(): Promise<SlidePayload[]> {
   return invoke<SlidePayload[]>('deck_get_all_slides');
 }

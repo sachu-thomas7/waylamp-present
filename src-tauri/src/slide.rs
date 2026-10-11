@@ -56,6 +56,10 @@ pub struct SlideDeck {
 }
 
 impl SlideDeck {
+    pub fn empty() -> Self {
+        Self { slides: Vec::new() }
+    }
+
     /// Hardcoded 5-slide stub deck for F1.2. Replaced by file import in F1.4.
     pub fn stub() -> Self {
         Self {
@@ -101,6 +105,19 @@ impl SlideDeck {
 }
 
 impl SlidePayload {
+    /// Sentinel for "no slides loaded" — a valid, non-panicking payload with `total: 0`.
+    pub fn empty() -> Self {
+        Self {
+            index: 0,
+            total: 0,
+            title: String::new(),
+            body: String::new(),
+            notes: String::new(),
+            background_path: None,
+            layout_unsupported: false,
+        }
+    }
+
     pub fn stub() -> Self {
         Self {
             index: 0,

@@ -3,9 +3,12 @@ import { presentationShow, presentationHide } from '../lib/ipc';
 import { onAppEvent } from '../lib/events';
 import { Button } from './ui/Button';
 import { IconPlay, IconStop } from './ui/icons';
+import { useControllerSlideStore } from '../store/slideStore';
 
 export function PresentButton() {
   const [presenting, setPresenting] = useState(false);
+  const totalSlides = useControllerSlideStore((s) => s.current?.total ?? 0);
+  const nothingToPresent = totalSlides === 0 && !presenting;
 
   useEffect(() => {
     const unlistenPromise = onAppEvent((event) => {
@@ -38,6 +41,8 @@ export function PresentButton() {
       variant={presenting ? 'live' : 'primary'}
       icon={presenting ? <IconStop /> : <IconPlay />}
       onClick={handleClick}
+      disabled={nothingToPresent}
+      title={nothingToPresent ? 'Import a deck to enable presenting' : undefined}
     >
       {presenting ? 'Stop Presenting' : 'Present'}
     </Button>

@@ -100,6 +100,35 @@ export function SlideDeckPanel() {
     }, []);
   }, [slides, filter]);
 
+  if (totalSlides === 0) {
+    return (
+      <Card title="Slide Deck" headerRight={<Badge>0 slides</Badge>}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '40px 20px', textAlign: 'center' }}>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: 'var(--color-bg)', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)' }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="13" height="9" rx="1.4" />
+              <rect x="7" y="8" width="14" height="10" rx="1.4" fill="var(--color-surface)" />
+              <path d="M14 11v6M11 14h6" />
+            </svg>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 340 }}>
+            <span style={{ fontSize: 16, fontWeight: 700 }}>No slides yet</span>
+            <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
+              Import a PowerPoint or PDF file to build your deck — StreamDeck extracts titles, body text, and backgrounds automatically.
+            </span>
+          </div>
+          <Button variant="primary" pill icon={<IconUpload />} onClick={handleImport}>Import a Deck</Button>
+          {importError && (
+            <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>⚠ Slide {importError.slide}: {importError.reason}</span>
+          )}
+          {importProgress && (
+            <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Importing… slide {importProgress.slide} / {importProgress.total}</span>
+          )}
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card
       title="Slide Deck"

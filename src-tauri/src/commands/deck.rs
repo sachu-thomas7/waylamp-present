@@ -37,7 +37,7 @@ pub async fn deck_import(
     let first_payload = {
         let mut m = machine.write().await;
         m.load_deck(deck);
-        SlidePayload::from_entry(m.current_slide_entry(), m.deck_len() as u32)
+        m.current_payload()
     };
 
     {
@@ -50,6 +50,35 @@ pub async fn deck_import(
     bus.publish(AppEvent::DeckImportComplete { deck_id: deck_id.clone() });
 
     Ok(deck_id)
+}
+
+#[tauri::command]
+pub async fn deck_clear(
+    bus: tauri::State<'_, Arc<EventBus>>,
+    machine: tauri::State<'_, StateMachineHandle>,
+    scene: tauri::State<'_, SceneStateHandle>,
+    app: tauri::AppHandle,
+) -> Result<(), AppError> {
+    let data_dir = app.path().app_data_dir()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let active_id_path = data_dir.join("decks").join("active_deck_id.txt");
+    // Ignore "not found" — clearing an already-empty deck is a no-op, not an error.
+    let _ = std::fs::remove_file(&active_id_path);
+
+    let payload = {
+        let mut m = machine.write().await;
+        m.load_deck(SlideDeck::empty());
+        m.current_payload()
+    };
+
+    {
+        let mut s = scene.write().await;
+        s.active_source = SceneSource::SlideDeck;
+    }
+
+    bus.publish(AppEvent::SlideUpdate(payload));
+    bus.publish(AppEvent::SceneSourceChanged { source: SceneSource::SlideDeck });
+    Ok(())
 }
 
 #[tauri::command]
@@ -88,7 +117,7 @@ pub async fn deck_restore(
     let first_payload = {
         let mut m = machine.write().await;
         m.load_deck(deck);
-        SlidePayload::from_entry(m.current_slide_entry(), m.deck_len() as u32)
+        m.current_payload()
     };
 
     bus.publish(AppEvent::SlideUpdate(first_payload));

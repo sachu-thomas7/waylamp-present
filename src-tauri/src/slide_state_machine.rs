@@ -34,18 +34,16 @@ impl SlideStateMachine {
     }
 
     pub fn current_payload(&self) -> SlidePayload {
-        let entry = self.deck.get(self.current_index)
-            .expect("current_index always within bounds");
-        SlidePayload::from_entry(entry, self.deck.len() as u32)
+        match self.deck.get(self.current_index) {
+            Some(entry) => SlidePayload::from_entry(entry, self.deck.len() as u32),
+            None => SlidePayload::empty(),
+        }
     }
 
     pub fn current_index(&self) -> usize { self.current_index }
     pub fn total(&self) -> usize { self.deck.len() }
     pub fn data_dir(&self) -> &Path { &self.data_dir }
     pub fn timer_started_at(&self) -> Option<u64> { self.timer_started_at }
-    pub fn current_slide_entry(&self) -> &crate::slide::SlideEntry {
-        &self.deck.slides[self.current_index]
-    }
 
     pub fn deck_len(&self) -> usize {
         self.deck.slides.len()
@@ -360,6 +358,20 @@ mod tests {
         let restored = handle.read().await.timer_started_at().unwrap();
         let elapsed = (now_ms - restored) / 1000;
         assert!(elapsed >= 30, "elapsed {elapsed} should be >= 30");
+    }
+
+    #[test]
+    fn current_payload_on_empty_deck_returns_sentinel_not_panic() {
+        use crate::slide::SlideDeck;
+        let machine = SlideStateMachine {
+            deck: SlideDeck::empty(),
+            current_index: 0,
+            data_dir: std::path::PathBuf::from("/tmp"),
+            timer_started_at: None,
+        };
+        let payload = machine.current_payload();
+        assert_eq!(payload.total, 0);
+        assert_eq!(payload.title, "");
     }
 
     #[test]

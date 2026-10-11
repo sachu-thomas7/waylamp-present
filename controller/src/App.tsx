@@ -1,12 +1,13 @@
 // controller/src/App.tsx
 import { useEffect, useState } from 'react';
-import { getBuildInfo } from './lib/ipc';
+import { getBuildInfo, deckClear } from './lib/ipc';
 import { PresentButton } from './components/PresentButton';
 import { SlideDeckPanel } from './components/SlideDeckPanel';
 import { SceneMediaPanel } from './components/SceneMediaPanel';
 import { DisplayPanel } from './components/DisplayPanel';
 import { Popover } from './components/ui/Popover';
 import { IconButton } from './components/ui/IconButton';
+import { Button } from './components/ui/Button';
 import { IconHelp, IconPlay, IconSettings } from './components/ui/icons';
 
 interface BuildInfo {
@@ -76,6 +77,16 @@ export default function App() {
             )}
           >
             <DisplayPanel />
+            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Deck</span>
+              <Button
+                variant="secondary"
+                onClick={() => deckClear().catch(console.error)}
+                title="Clears the loaded deck for this session — imported files aren't deleted, just unloaded"
+              >
+                Clear Deck
+              </Button>
+            </div>
             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 3 }}>
               <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Build Info</span>
               {error && <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>IPC error: {error}</span>}
