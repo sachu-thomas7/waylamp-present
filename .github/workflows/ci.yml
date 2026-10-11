@@ -31,7 +31,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2022]
+        # Dependabot PRs run Ubuntu only; macOS/Windows still run on pushes to main.
+        os: ${{ fromJSON(github.event.pull_request.user.login == 'dependabot[bot]' && '["ubuntu-24.04"]' || '["ubuntu-24.04","macos-15","windows-2022"]') }}
 
     steps:
       - uses: actions/checkout@v6
