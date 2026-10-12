@@ -4,6 +4,10 @@
 # this hook enforces it at the one point that matters most: before code reaches
 # the shared GitHub remote.
 set -u
+
+# Only act on `git push`; the settings.json `if:` filter isn't honoured for compound commands.
+grep -q 'git push' <<<"$(cat)" || exit 0
+
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
 # $HOME resolves to the MSYS home (/c/msys64/home/...), NOT the Windows user profile,

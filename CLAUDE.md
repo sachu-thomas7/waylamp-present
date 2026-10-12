@@ -309,7 +309,8 @@ rust-analyzer state on a fresh checkout.
   feature end-to-end (Rust + frontend + verify.sh gate + tests) following this file's
   conventions. Invoke it for "implement FX.Y"-shaped requests; it never runs git commands.
 - A `PreToolUse` hook (`.claude/settings.json` → `.claude/hooks/pre-push-verify.sh`) runs
-  `verify.sh core` before any `git push` and blocks the push if it fails. A `PostToolUse`
+  `verify.sh core` before any `git push` and blocks the push if it fails (the script
+  itself early-exits unless stdin contains `git push`, since the `if:` filter misfires). A `PostToolUse`
   hook (`.claude/hooks/fmt-rust.sh`) auto-runs `cargo fmt` after editing any `.rs` file.
 - Testing: `dev-docs/test_framework_roadmap.md` (build order, items T0–T7) and
   `dev-docs/test_plan.md` (coverage, journeys, upgrade protocol, manual checklist). The
