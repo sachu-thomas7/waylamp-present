@@ -1,12 +1,14 @@
 // Shared mock-runtime harness for L2 Rust integration tests (real bus, real state, no webview).
 #![allow(dead_code)]
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
 use streamdeck_lib::bus::EventBus;
 use streamdeck_lib::config::StreamDeckConfig;
+use streamdeck_lib::display::{DisplayInfo, DisplayProvider};
+use streamdeck_lib::error::AppError;
 use streamdeck_lib::events::AppEvent;
 use streamdeck_lib::slide_state_machine::StateMachineHandle;
 use tauri::test::{get_ipc_response, mock_context, noop_assets, MockRuntime};
@@ -20,6 +22,55 @@ pub struct TestApp {
     pub bus: Arc<EventBus>,
     pub machine: StateMachineHandle,
     pub data_dir: tempfile::TempDir,
+    pub displays: Arc<FakeDisplays>,
+}
+
+/// Scriptable monitor list standing in for the OS (mock `available_monitors` is unimplemented).
+pub struct FakeDisplays {
+    list: Mutex<Result<Vec<DisplayInfo>, String>>,
+}
+
+impl FakeDisplays {
+    pub fn new(displays: Vec<DisplayInfo>) -> Self {
+        Self {
+            list: Mutex::new(Ok(displays)),
+        }
+    }
+
+    pub fn set(&self, displays: Vec<DisplayInfo>) {
+        *self.list.lock().expect("fake displays lock") = Ok(displays);
+    }
+
+    pub fn list_now(&self) -> Vec<DisplayInfo> {
+        self.list().expect("fake displays are healthy")
+    }
+
+    pub fn fail(&self, reason: &str) {
+        *self.list.lock().expect("fake displays lock") = Err(reason.into());
+    }
+}
+
+impl DisplayProvider for FakeDisplays {
+    fn list(&self) -> Result<Vec<DisplayInfo>, AppError> {
+        self.list
+            .lock()
+            .expect("fake displays lock")
+            .clone()
+            .map_err(AppError::Internal)
+    }
+}
+
+/// A 1920x1080 display named `name` at horizontal offset `x`; its id is `name@x,0`.
+pub fn display(name: &str, x: i32, is_primary: bool) -> DisplayInfo {
+    DisplayInfo {
+        id: format!("{name}@{x},0"),
+        name: name.into(),
+        width: 1920,
+        height: 1080,
+        x,
+        y: 0,
+        is_primary,
+    }
 }
 
 impl TestApp {
@@ -45,9 +96,14 @@ impl TestApp {
             &app,
             Arc::clone(&bus),
             data_dir.path().to_path_buf(),
+            data_dir.path().join("config").join("streamdeck.toml"),
             config.clone(),
         );
-        streamdeck_lib::state::manage_display(&app, &config);
+        let displays = Arc::new(FakeDisplays::new(vec![
+            display("Primary", 0, true),
+            display("Projector", 1920, false),
+        ]));
+        streamdeck_lib::state::manage_display(&app, &config, displays.clone());
 
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()
@@ -59,7 +115,13 @@ impl TestApp {
             bus,
             machine,
             data_dir,
+            displays,
         }
+    }
+
+    /// The `streamdeck.toml` the app under test reads/writes (inside the temp data dir).
+    pub fn config_path(&self) -> std::path::PathBuf {
+        self.data_dir.path().join("config").join("streamdeck.toml")
     }
 
     /// Subscribe before acting so no event published by the command is missed.

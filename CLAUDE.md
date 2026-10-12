@@ -16,7 +16,7 @@ wholesale into context — reference the specific phase/feature section needed.
 | Backend | Rust 1.78 + Tokio (`src-tauri/`) |
 | Frontend | Two **independent** Vite + React 18 + TypeScript projects: `controller/` and `presentation/` |
 | State sync | `tokio::sync::broadcast::<AppEvent>` — the only channel for cross-subsystem state. No direct function calls across subsystem boundaries. |
-| Config | TOML (`streamdeck.toml` in app config dir), hot-reloaded via `notify`, secrets in OS keychain via `keyring` — never in TOML |
+| Config | TOML (`streamdeck.toml` in app config dir), watched via `notify` (publishes `ConfigReloaded` only; nothing re-reads it yet — `get_config` is startup-time), secrets in OS keychain via `keyring` — never in TOML |
 | Frontend state | Zustand (`slideStore.ts`, `sceneStore.ts`, one per window) |
 | Not yet started | GStreamer/NDI/WHIP media pipeline (Phase 2+) — no camera, compositor, or streaming code exists yet |
 
@@ -314,6 +314,7 @@ rust-analyzer state on a fresh checkout.
   hook (`.claude/hooks/fmt-rust.sh`) auto-runs `cargo fmt` after editing any `.rs` file.
 - T1.1 done: mock-runtime harness in `src-tauri/tests/common/mod.rs` (`TestApp`, `collect_events`) over `state::manage_core`/`mock_invoke_handler` (shared with `app.rs`); only runtime-generic commands are reachable in the mock until the `tauri::AppHandle` commands are made generic. Gate: `bash scripts/verify.sh t1`.
 - T1.2 done: every command is runtime-generic and on the shared `handler!` list; deck/scene commands read the managed `state::AppDataDir` (not `app.path()`); deck restore, timer spawn and display-state creation moved from `app.rs` into `state.rs` (`restore_on_startup`, `spawn_timer`, `manage_display`). `tests/deck_journeys.rs` covers import/nav/boundaries/clear/restore. Gate: `bash scripts/verify.sh t1.2`. **Manual `cargo tauri dev` launch required** (app.rs wiring changed). Fixed product bug found by T1.2: startup restore applied the saved slide index/timer to the stub deck before `load_deck` reset them; `restore_on_startup` now loads the deck first.
+- T1.3 done: display commands take an injected `display::DisplayProvider` (production `TauriDisplayProvider`, harness `FakeDisplays`) and a managed `state::ConfigPath` (never `app_config_dir`); the 2s poll body is `display::reconcile_displays`; `error` module is now `pub`. `tests/{scene,display,timer,config}_journeys.rs` (34 tests). Gate: `bash scripts/verify.sh t1.3`. **Manual `cargo tauri dev` launch required** (app.rs/display wiring changed: confirm display list, assignment, hotplug fallback).
 - Testing: `dev-docs/test_framework_roadmap.md` (build order, items T0–T7) and
   `dev-docs/test_plan.md` (coverage, journeys, upgrade protocol, manual checklist). The
   `test-authoring` skill (`.claude/skills/test-authoring/`) is the how-to; the `test-engineer`

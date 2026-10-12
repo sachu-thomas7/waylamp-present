@@ -724,9 +724,38 @@ run_t1_2() {
   rm -f "$t12_log"
 }
 
+run_t1_3() {
+  section "T1.3 — Scene, timer, display, config commands"
+
+  file_exists "src-tauri/tests/scene_journeys.rs"
+  file_exists "src-tauri/tests/display_journeys.rs"
+  file_exists "src-tauri/tests/timer_journeys.rs"
+  file_exists "src-tauri/tests/config_journeys.rs"
+  file_contains "display seam: DisplayProvider trait" "src-tauri/src/display.rs" "pub trait DisplayProvider"
+  file_contains "display seam: reconcile_displays is testable" "src-tauri/src/display.rs" "pub async fn reconcile_displays"
+  file_contains "state.rs manages ConfigPath" "src-tauri/src/state.rs" "pub struct ConfigPath"
+  file_contains "harness fakes the monitor list" "src-tauri/tests/common/mod.rs" "impl DisplayProvider for FakeDisplays"
+  if grep -rnE 'resolve_path|app_config_dir|app_data_dir|available_monitors' src-tauri/src/commands >/dev/null 2>&1; then
+    fail "commands must use managed ConfigPath/AppDataDir/DisplayProvider, not OS lookups"
+  else
+    pass "commands never resolve OS paths or monitors directly"
+  fi
+
+  local t13_log
+  t13_log=$(mktemp)
+  check "T1.3 journeys pass (scene>=10, display>=12, timer>=5, config>=7, none failed)" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --test scene_journeys --test display_journeys --test timer_journeys --test config_journeys 2>&1 | tee "$1" \
+      && ! grep -q "FAILED" "$1" \
+      && [ "$(grep -c "test result: ok" "$1")" -eq 4 ] \
+      && n=$(grep -o "test result: ok\. [0-9]* passed" "$1" | grep -o "[0-9]*" | awk "{s+=\$1} END {print s}") \
+      && [ "${n:-0}" -ge 34 ]' _ "$t13_log"
+  rm -f "$t13_log"
+}
+
 run_t1() {
   run_t1_1
   run_t1_2
+  run_t1_3
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -782,6 +811,9 @@ case "$FILTER" in
     ;;
   t1.1)
     run_t1_1
+    ;;
+  t1.3)
+    run_t1_3
     ;;
   t1.2)
     run_t1_2

@@ -5,7 +5,7 @@ use tauri::{Manager, Runtime};
 
 use crate::bus::EventBus;
 use crate::config::StreamDeckConfig;
-use crate::display::DisplayStateHandle;
+use crate::display::{DisplayProviderHandle, DisplayStateHandle};
 use crate::error::AppError;
 use crate::events::AppEvent;
 use crate::slide::{SlideDeck, SlidePayload};
@@ -14,6 +14,9 @@ use crate::slide_state_machine::{self, StateMachineHandle};
 /// The app data directory, managed so commands (and tests) never re-resolve it from the OS.
 pub struct AppDataDir(pub PathBuf);
 
+/// Path of `streamdeck.toml`, managed so commands (and tests) never re-resolve it from the OS.
+pub struct ConfigPath(pub PathBuf);
+
 pub struct TimerAbortHandle(pub tokio::task::AbortHandle);
 
 /// Registers the managed state shared by the app and the mock-runtime test harness.
@@ -21,10 +24,12 @@ pub fn manage_core<R: Runtime, M: Manager<R>>(
     manager: &M,
     bus: Arc<EventBus>,
     data_dir: PathBuf,
+    config_path: PathBuf,
     config: StreamDeckConfig,
 ) -> StateMachineHandle {
     let machine = slide_state_machine::new_handle(SlideDeck::stub(), data_dir.clone());
     manager.manage(AppDataDir(data_dir));
+    manager.manage(ConfigPath(config_path));
     manager.manage(bus);
     manager.manage(Arc::clone(&machine));
     manager.manage(crate::scene::new_scene_handle());
@@ -32,11 +37,13 @@ pub fn manage_core<R: Runtime, M: Manager<R>>(
     machine
 }
 
-/// Creates and manages the display state, seeded with the persisted assignment.
+/// Creates and manages the display state (seeded with the persisted assignment) and provider.
 pub fn manage_display<R: Runtime, M: Manager<R>>(
     manager: &M,
     config: &StreamDeckConfig,
+    provider: DisplayProviderHandle,
 ) -> DisplayStateHandle {
+    manager.manage(provider);
     let handle = crate::display::new_display_handle(config.presentation.display_id.clone());
     manager.manage(Arc::clone(&handle));
     handle

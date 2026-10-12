@@ -4,7 +4,7 @@ pub mod config;
 pub mod config_loader;
 pub mod deck_importer;
 pub mod display;
-mod error;
+pub mod error;
 pub mod events;
 pub mod scene;
 pub mod slide;

@@ -62,15 +62,15 @@ test you add.
 | Feature | Behaviour under test | L1 | L2 | L3 | L4 |
 |---|---|---|---|---|---|
 | F0.1 bootstrap | two windows launch | — | — | — | ⬜ T4.2 smoke (J1) |
-| F0.2 IPC layer | typed commands, `AppError` discriminated, no `.unwrap()` | ✅ `commands::system` | 🟡 T1.1 harness (`harness_smoke`: `get_build_info`, `get_config`, unknown cmd, `slide_get_current`/`slide_advance` + events) → more in T1.2/T1.3. All commands are now runtime-generic and registered on the mock handler; `display_list`/`display_assign_presentation` still cannot run in the mock (mock `available_monitors` is `unimplemented!`) -> T1.3 needs a seam. | ⬜ T3.2 | ⬜ J1 |
+| F0.2 IPC layer | typed commands, `AppError` discriminated, no `.unwrap()` | ✅ `commands::system` | 🟡 T1.1 harness (`harness_smoke`: `get_build_info`, `get_config`, unknown cmd, `slide_get_current`/`slide_advance` + events) → T1.2/T1.3 journeys. All commands are runtime-generic and registered on the mock handler; display commands use an injected `DisplayProvider` (faked in the harness) and a managed `ConfigPath` (temp dir), so nothing touches the real app-data/config dirs. | ⬜ T3.2 | ⬜ J1 |
 | F0.3 event bus | broadcast, lag handling | ✅ `bus::tests` | ✅ T1.2 real-bus event-sequence assertions | ⬜ T3.2 | ⬜ J2 |
-| F0.4 TOML config | load, invalid TOML error, hot reload | ✅ `config`, `config_loader` | ⬜ T1.3 | — | ⬜ (J9 optional) |
+| F0.4 TOML config | load, invalid TOML error, hot reload | ✅ `config`, `config_loader` | ✅ T1.3 `config_journeys` (`get_config` default/non-default; real notify watcher: edit/create/corrupt edit -> `ConfigReloaded`, sibling file ignored, parentless path rejected). Covers `ConfigReloaded` publication only: currently nothing consumes it and `get_config` is not refreshed after a reload (pending product decision) | — | ⬜ (J9 optional) |
 | F1.1 presentation window | renders slide from events; listen-only | ✅ presentation `slideStore` | 🟡 `appEventWiring.integration` → ⬜ T2.3 | ⬜ T1.4 | ⬜ J2, J4 |
-| F1.2 slide state machine | advance/rewind/jump/timer, boundaries, `DeckEnd`/`DeckStart` instead of `SlideUpdate` | ✅ `slide_state_machine` | ✅ `deck_journeys` (advance/rewind/jump, `DeckEnd`/`DeckStart` instead of `SlideUpdate`, out-of-range jump) | ⬜ T3.2 | ⬜ J3, J8 |
+| F1.2 slide state machine | advance/rewind/jump/timer, boundaries, `DeckEnd`/`DeckStart` instead of `SlideUpdate` | ✅ `slide_state_machine` | ✅ T1.3 `timer_journeys` (timer reset events/persist/restart/persist failure leaves in-memory timer unchanged; `slide_get_current`, `deck_get_all_slides` on stub deck) + `deck_journeys` (advance/rewind/jump, `DeckEnd`/`DeckStart` instead of `SlideUpdate`, out-of-range jump) | ⬜ T3.2 | ⬜ J3, J8 |
 | F1.3 controller panel + timer | Prev/Next/Jump, thumbnails, timer, shortcuts | ✅ controller `slideStore` | 🟡 `eventWiring.integration` → ⬜ T2.2 | ⬜ T5.1 | ⬜ J3, J8 |
 | F1.4 PPTX/PDF import | title/body/formatting extraction, progress, failures | ✅ `deck_importer` | ✅ fixture test (pptx); ✅ `deck_journeys` import (progress → `SlideUpdate` 0 → scene → complete, bad path/extension) | ⬜ T3.1 | ⬜ J2 |
-| F1.4 scene media | push image/video, size limits, active source toggle | ✅ `scene` | ⬜ T1.3, T2.2 | — | ⬜ J5 |
-| F1.5 multi-display | enumerate, assign, fallback on `DisplayLost` | ✅ `display` | ⬜ T1.3 | — | 🟡 J9 (read-only) + §9 manual |
+| F1.4 scene media | push image/video, size limits, active source toggle | ✅ `scene` | ✅ T1.3 `scene_journeys` (image copy + event, exact 10 MB / 500 MB boundary, reject before copy, bad ext/missing file, staged vs active source, `scene_set_source` event + unknown source); ⬜ T2.2 | — | ⬜ J5 |
+| F1.5 multi-display | enumerate, assign, fallback on `DisplayLost` | ✅ `display` | ✅ T1.3 `display_journeys` (list, assign persisted to temp `streamdeck.toml`, NotFound, corrupt config, `reconcile_displays`: `DisplaysChanged`/`DisplayLost`, stable, provider failure, no displays); the mock window's `set_position` is a no-op, so window repositioning (assign and the DisplayLost fallback to primary) is manual-only (checklist M1); `display_assign_presentation` persists config first, then moves the window, updates state and publishes (on config failure state and window are unchanged) | — | 🟡 J9 (read-only) + §9 manual |
 | Empty deck / Clear Deck (2026-10) | `SlidePayload::empty`, `deck_clear`, Present disabled | ✅ `current_payload_on_empty_deck…` | ✅ `deck_journeys` clear (+idempotent, empty-deck boundaries); ⬜ T2.2 | — | ⬜ J6 |
 | Persistence | `active_deck_id.txt`, restore on startup | — | ✅ `deck_journeys` restore/no-op/corrupt/clear-then-restart/`restore_on_startup` (saved index + timer survive restart; product bug fixed), re-import resets index/timer, `spawn_timer` ticks | — | ⬜ J7 |
 | Window safety (Esc, hide-on-close) | Esc re-registered; OS close hides | — | — | — | ⬜ J4 (+ §9 for Esc) |
@@ -184,7 +184,7 @@ Tauri/OS-integration bumps.
 
 | Metric | Baseline 2026-10-11 | Target |
 |---|---|---|
-| Rust tests | 55 unit + 1 integration + 7 harness smoke + 17 deck journeys (the only `#[ignore]` is the pdfium PDF fixture test) (2026-10-12, T1.2) | grows with T1/T3 |
+| Rust tests | 55 unit + 1 integration + 7 harness smoke + 17 deck journeys + 34 T1.3 journeys (10 scene, 12 display, 5 timer/slide-query, 7 config) (the only `#[ignore]` is the pdfium PDF fixture test) (2026-10-12, T1.3) | grows with T1/T3 |
 | Frontend test files | controller 4, presentation 2 | T2 adds component tests |
 | E2E journeys green | 0 / 9 | 9 / 9 (T4.3) |
 | Line coverage (frontends) | controller 45.5% lines / 45% branches; presentation 81.4% lines / 83.3% branches (v8, 2026-10-12; `npm run test:coverage`) | floor at T6.3 |

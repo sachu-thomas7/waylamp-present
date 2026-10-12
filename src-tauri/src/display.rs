@@ -22,6 +22,22 @@ pub struct DisplayState {
 
 pub type DisplayStateHandle = Arc<RwLock<DisplayState>>;
 
+/// Source of connected displays; the OS boundary that tests replace.
+pub trait DisplayProvider: Send + Sync {
+    fn list(&self) -> Result<Vec<DisplayInfo>, AppError>;
+}
+
+pub type DisplayProviderHandle = Arc<dyn DisplayProvider>;
+
+/// Production provider: asks the Tauri window manager for monitors.
+pub struct TauriDisplayProvider<R: Runtime>(pub AppHandle<R>);
+
+impl<R: Runtime> DisplayProvider for TauriDisplayProvider<R> {
+    fn list(&self) -> Result<Vec<DisplayInfo>, AppError> {
+        list_displays(&self.0)
+    }
+}
+
 pub fn new_display_handle(assigned_display_id: Option<String>) -> DisplayStateHandle {
     Arc::new(RwLock::new(DisplayState {
         displays: Vec::new(),
@@ -87,11 +103,10 @@ pub fn apply_position<R: Runtime>(
     Ok(())
 }
 
-/// Poll for display hotplug changes every 2s. Publishes DisplaysChanged when the id set
-/// changes, and DisplayLost + repositions the presentation window to the fallback display
-/// when the currently assigned display disappears.
+/// Poll for display hotplug changes every 2s via `reconcile_displays`.
 pub fn spawn_watch_task<R: Runtime>(
     app: AppHandle<R>,
+    provider: DisplayProviderHandle,
     bus: Arc<crate::bus::EventBus>,
     display_state: DisplayStateHandle,
 ) -> tauri::async_runtime::JoinHandle<()> {
@@ -100,32 +115,43 @@ pub fn spawn_watch_task<R: Runtime>(
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
         loop {
             interval.tick().await;
-            let Ok(current) = list_displays(&app) else {
-                continue;
-            };
-
-            let (previous, assigned) = {
-                let state = display_state.read().await;
-                (state.displays.clone(), state.assigned_display_id.clone())
-            };
-
-            if displays_changed(&previous, &current) {
-                display_state.write().await.displays = current.clone();
-                bus.publish(crate::events::AppEvent::DisplaysChanged(current.clone()));
-            }
-
-            if is_assigned_display_lost(&assigned, &current) {
-                display_state.write().await.assigned_display_id = None;
-                bus.publish(crate::events::AppEvent::DisplayLost);
-                if let (Some(window), Some(fallback)) = (
-                    app.get_webview_window("presentation"),
-                    pick_fallback(&current),
-                ) {
-                    let _ = apply_position(&window, fallback);
-                }
-            }
+            reconcile_displays(&app, provider.as_ref(), &bus, &display_state).await;
         }
     })
+}
+
+/// One poll step: publishes DisplaysChanged when the id set changes, and DisplayLost +
+/// repositions the presentation window to the fallback display when the assigned one vanishes.
+pub async fn reconcile_displays<R: Runtime>(
+    app: &AppHandle<R>,
+    provider: &dyn DisplayProvider,
+    bus: &crate::bus::EventBus,
+    display_state: &DisplayStateHandle,
+) {
+    let Ok(current) = provider.list() else {
+        return;
+    };
+
+    let (previous, assigned) = {
+        let state = display_state.read().await;
+        (state.displays.clone(), state.assigned_display_id.clone())
+    };
+
+    if displays_changed(&previous, &current) {
+        display_state.write().await.displays = current.clone();
+        bus.publish(crate::events::AppEvent::DisplaysChanged(current.clone()));
+    }
+
+    if is_assigned_display_lost(&assigned, &current) {
+        display_state.write().await.assigned_display_id = None;
+        bus.publish(crate::events::AppEvent::DisplayLost);
+        if let (Some(window), Some(fallback)) = (
+            app.get_webview_window("presentation"),
+            pick_fallback(&current),
+        ) {
+            let _ = apply_position(&window, fallback);
+        }
+    }
 }
 
 /// True when the display list changed in a way the controller needs to know about

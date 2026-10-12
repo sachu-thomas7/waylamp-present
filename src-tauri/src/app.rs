@@ -57,6 +57,7 @@ pub fn run() {
                 app,
                 Arc::clone(&bus_arc),
                 data_dir.clone(),
+                config_path.clone(),
                 config.clone(),
             );
             let machine_for_restore = Arc::clone(&machine);
@@ -80,9 +81,12 @@ pub fn run() {
                     Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
                 })?;
 
-            let display_handle = crate::state::manage_display(app, &config);
+            let display_provider: crate::display::DisplayProviderHandle =
+                Arc::new(crate::display::TauriDisplayProvider(app.handle().clone()));
+            let display_handle =
+                crate::state::manage_display(app, &config, Arc::clone(&display_provider));
             if let Some(id) = &config.presentation.display_id {
-                if let Ok(displays) = crate::display::list_displays(app.handle()) {
+                if let Ok(displays) = display_provider.list() {
                     if let Some(target) = displays.iter().find(|d| &d.id == id) {
                         if let Some(window) = app.get_webview_window("presentation") {
                             let _ = crate::display::apply_position(&window, target);
@@ -92,6 +96,7 @@ pub fn run() {
             }
             let display_watch_abort = crate::display::spawn_watch_task(
                 app.handle().clone(),
+                display_provider,
                 Arc::clone(&bus_arc),
                 Arc::clone(&display_handle),
             );

@@ -140,11 +140,14 @@ pub async fn reset_timer(handle: &StateMachineHandle, bus: &Arc<EventBus>) -> Re
         sm.data_dir().to_path_buf()
     };
     let now_ms = now_unix_ms()?;
-    {
+    let previous = {
         let mut sm = handle.write().await;
-        sm.timer_started_at = Some(now_ms);
+        sm.timer_started_at.replace(now_ms)
+    };
+    if let Err(e) = persist_index(handle, &data_dir).await {
+        handle.write().await.timer_started_at = previous;
+        return Err(e);
     }
-    persist_index(handle, &data_dir).await?;
     bus.publish(AppEvent::TimerReset);
     bus.publish(AppEvent::TimerTick { elapsed_secs: 0 });
     Ok(())
