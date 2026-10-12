@@ -73,6 +73,7 @@ test you add.
 | F1.5 multi-display | enumerate, assign, fallback on `DisplayLost` | ✅ `display` | ✅ T1.3 `display_journeys` (list, assign persisted to temp `streamdeck.toml`, NotFound, corrupt config, `reconcile_displays`: `DisplaysChanged`/`DisplayLost`, stable, provider failure, no displays); the mock window's `set_position` is a no-op, so window repositioning (assign and the DisplayLost fallback to primary) is manual-only (checklist M1); `display_assign_presentation` persists config first, then moves the window, updates state and publishes (on config failure state and window are unchanged) | — | 🟡 J9 (read-only) + §9 manual |
 | Empty deck / Clear Deck (2026-10) | `SlidePayload::empty`, `deck_clear`, Present disabled | ✅ `current_payload_on_empty_deck…` | ✅ `deck_journeys` clear (+idempotent, empty-deck boundaries); ⬜ T2.2 | — | ⬜ J6 |
 | Persistence | `active_deck_id.txt`, restore on startup | — | ✅ `deck_journeys` restore/no-op/corrupt/clear-then-restart/`restore_on_startup` (saved index + timer survive restart; product bug fixed), re-import resets index/timer, `spawn_timer` ticks | — | ⬜ J7 |
+| Architecture invariants (CLAUDE.md) | no unwrap/expect in `commands/`, `mod app` gated, presentation capability listen-only (`core:event:default` only, dev `remote.urls`), controller capability, every window label in a capability, controller TS `AppEvent` union == Rust variants (presentation subset, same shapes), `{type,payload}` tagging, no secret-like config fields, `tauri/test` dev-only, no `withGlobalTauri`, presentation never imports invoke wrappers | — | ✅ T1.4 `tests/invariants.rs` (28 tests incl. scanner self-tests; every capability file + inline conf capabilities scanned for presentation grants, wildcard-aware; `.emit(` only in `app.rs` bridge (#2); unwrap/expect/panic!/todo! ban also covers `state.rs`; mutation-proven). **Not covered / deferred:** #1 process separation (no pipeline exists until Phase 2) and #4 coexistence (no static check possible). `state::mock_invoke_handler` is a non-gated test seam, accepted as harmless (not reachable from release IPC). | — | — |
 | Window safety (Esc, hide-on-close) | Esc re-registered; OS close hides | — | — | — | ⬜ J4 (+ §9 for Esc) |
 
 Current baseline (2026-10-11): Rust 55 unit tests + 1 fixture integration (+1 `#[ignore]`d PDF);
@@ -184,7 +185,7 @@ Tauri/OS-integration bumps.
 
 | Metric | Baseline 2026-10-11 | Target |
 |---|---|---|
-| Rust tests | 55 unit + 1 integration + 7 harness smoke + 17 deck journeys + 34 T1.3 journeys (10 scene, 12 display, 5 timer/slide-query, 7 config) (the only `#[ignore]` is the pdfium PDF fixture test) (2026-10-12, T1.3) | grows with T1/T3 |
+| Rust tests | 55 unit + 1 integration + 7 harness smoke + 17 deck journeys + 34 T1.3 journeys (10 scene, 12 display, 5 timer/slide-query, 7 config) + 28 T1.4 invariants (the only `#[ignore]` is the pdfium PDF fixture test) (2026-10-12, T1.4) | grows with T1/T3 |
 | Frontend test files | controller 4, presentation 2 | T2 adds component tests |
 | E2E journeys green | 0 / 9 | 9 / 9 (T4.3) |
 | Line coverage (frontends) | controller 45.5% lines / 45% branches; presentation 81.4% lines / 83.3% branches (v8, 2026-10-12; `npm run test:coverage`) | floor at T6.3 |

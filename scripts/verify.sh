@@ -752,10 +752,27 @@ run_t1_3() {
   rm -f "$t13_log"
 }
 
+run_t1_4() {
+  section "T1.4 — Architecture invariants as tests"
+
+  file_exists "src-tauri/tests/invariants.rs"
+  file_contains "invariants test covers capabilities" "src-tauri/tests/invariants.rs" "fn presentation_capability_is_listen_only"
+  file_contains "invariants test covers event union parity" "src-tauri/tests/invariants.rs" "fn controller_event_union_mirrors_every_rust_variant"
+  file_contains "invariants test covers unwrap ban" "src-tauri/tests/invariants.rs" "fn command_handlers_never_unwrap_or_expect"
+  file_contains "invariants test covers every capability file" "src-tauri/tests/invariants.rs" "fn no_capability_grants_presentation_more_than_core_event_default"
+  file_contains "invariants test covers emit allow-list" "src-tauri/tests/invariants.rs" "fn emit_is_only_called_from_the_app_event_bridge"
+
+  local t14_log
+  t14_log=$(mktemp)
+  check "T1.4 invariant tests pass (>=28, none failed)"     bash -c 'set -o pipefail; cd src-tauri && cargo test --test invariants 2>&1 | tee "$1"       && ! grep -q "FAILED" "$1"       && n=$(grep -o "test result: ok. [0-9]* passed" "$1" | grep -o "[0-9]*" | head -1)       && [ "${n:-0}" -ge 28 ]' _ "$t14_log"
+  rm -f "$t14_log"
+}
+
 run_t1() {
   run_t1_1
   run_t1_2
   run_t1_3
+  run_t1_4
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -817,6 +834,9 @@ case "$FILTER" in
     ;;
   t1.2)
     run_t1_2
+    ;;
+  t1.4)
+    run_t1_4
     ;;
   t1)
     run_t1
