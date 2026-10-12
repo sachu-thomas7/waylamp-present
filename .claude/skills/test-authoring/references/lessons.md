@@ -22,3 +22,4 @@ Keep entries to one or two lines: what happened → what to do. Date them.
 - 2026-10 — React 19 / Vite 8 were checked by mounting in a plain browser; Tauri IPC errors
   (`transformCallback`) are expected there. → Don't treat those as failures in browser mode;
   assert with `mockIPC` instead.
+- 2026-10 — A fault injected to prove a gate can fail also trips the pre-push-style Bash hook (it runs `verify.sh core` on every call), blocking the revert via Bash. → Revert with the Edit tool; prove fmt/lint faults with `verify.sh t0` (cheap) and revert before any further Bash call.

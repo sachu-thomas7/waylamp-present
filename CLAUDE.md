@@ -145,6 +145,7 @@ isn't tracked in the repo.
    never needs to build the Tauri runtime wiring.
 
 ## Current status (2026-09-19)
+- **T0.2 (2026-10)**: `cargo fmt --check` is now in `verify.sh core` (and `verify.sh t0`); tree was reformatted once. CI does not yet run it (needs human-approved workflow edit).
 
 - **Phase 0** (F0.1–F0.4: bootstrap, IPC layer, event bus, TOML config) — done.
 - **Phase 1 — all of F1.1–F1.5 done**: presentation window + slide renderer, slide state

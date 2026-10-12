@@ -570,6 +570,10 @@ run_f1_5() {
 run_core() {
   section "Core Build & Lint"
 
+  subsection "cargo fmt --check (always independent)"
+  check "cargo fmt --check" \
+    bash -c 'cd src-tauri && cargo fmt --check'
+
   # Check frontend dist exists before attempting cargo build/clippy
   local frontend_ready=true
   for win in controller presentation; do
@@ -634,6 +638,18 @@ run_core() {
 }
 
 # ══════════════════════════════════════════════════════════════════
+# T0 — Test-framework foundations (T0.2: fmt gate)
+# ══════════════════════════════════════════════════════════════════
+run_t0() {
+  section "T0 — Test framework foundations"
+
+  subsection "T0.2 — rustfmt gate"
+  file_contains "run_core runs cargo fmt --check" "scripts/verify.sh" "cargo fmt --check"
+  check "cargo fmt --check" \
+    bash -c 'cd src-tauri && cargo fmt --check'
+}
+
+# ══════════════════════════════════════════════════════════════════
 # DISPATCH
 # ══════════════════════════════════════════════════════════════════
 echo ""
@@ -681,11 +697,14 @@ case "$FILTER" in
   f1|phase1)
     run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_core
     ;;
+  t0)
+    run_t0
+    ;;
   core)
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_t0; run_core
     ;;
 esac
 
