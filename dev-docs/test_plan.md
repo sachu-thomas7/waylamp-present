@@ -62,17 +62,17 @@ test you add.
 | Feature | Behaviour under test | L1 | L2 | L3 | L4 |
 |---|---|---|---|---|---|
 | F0.1 bootstrap | two windows launch | — | — | — | ⬜ T4.2 smoke (J1) |
-| F0.2 IPC layer | typed commands, `AppError` discriminated, no `.unwrap()` | ✅ `commands::system` | 🟡 T1.1 harness (`harness_smoke`: `get_build_info`, `get_config`, unknown cmd, `slide_get_current`/`slide_advance` + events) → more in T1.2/T1.3. Not yet reachable from the harness (T1.2 prerequisite): restore/display/timer handles and the 8 commands taking a concrete `tauri::AppHandle` (presentation_show/hide, deck_import/restore/clear, scene_push_image, display_list, display_assign_presentation) | ⬜ T3.2 | ⬜ J1 |
-| F0.3 event bus | broadcast, lag handling | ✅ `bus::tests` | ⬜ T1.2 | ⬜ T3.2 | ⬜ J2 |
+| F0.2 IPC layer | typed commands, `AppError` discriminated, no `.unwrap()` | ✅ `commands::system` | 🟡 T1.1 harness (`harness_smoke`: `get_build_info`, `get_config`, unknown cmd, `slide_get_current`/`slide_advance` + events) → more in T1.2/T1.3. All commands are now runtime-generic and registered on the mock handler; `display_list`/`display_assign_presentation` still cannot run in the mock (mock `available_monitors` is `unimplemented!`) -> T1.3 needs a seam. | ⬜ T3.2 | ⬜ J1 |
+| F0.3 event bus | broadcast, lag handling | ✅ `bus::tests` | ✅ T1.2 real-bus event-sequence assertions | ⬜ T3.2 | ⬜ J2 |
 | F0.4 TOML config | load, invalid TOML error, hot reload | ✅ `config`, `config_loader` | ⬜ T1.3 | — | ⬜ (J9 optional) |
 | F1.1 presentation window | renders slide from events; listen-only | ✅ presentation `slideStore` | 🟡 `appEventWiring.integration` → ⬜ T2.3 | ⬜ T1.4 | ⬜ J2, J4 |
-| F1.2 slide state machine | advance/rewind/jump/timer, boundaries, `DeckEnd`/`DeckStart` instead of `SlideUpdate` | ✅ `slide_state_machine` | ⬜ T1.2 | ⬜ T3.2 | ⬜ J3, J8 |
+| F1.2 slide state machine | advance/rewind/jump/timer, boundaries, `DeckEnd`/`DeckStart` instead of `SlideUpdate` | ✅ `slide_state_machine` | ✅ `deck_journeys` (advance/rewind/jump, `DeckEnd`/`DeckStart` instead of `SlideUpdate`, out-of-range jump) | ⬜ T3.2 | ⬜ J3, J8 |
 | F1.3 controller panel + timer | Prev/Next/Jump, thumbnails, timer, shortcuts | ✅ controller `slideStore` | 🟡 `eventWiring.integration` → ⬜ T2.2 | ⬜ T5.1 | ⬜ J3, J8 |
-| F1.4 PPTX/PDF import | title/body/formatting extraction, progress, failures | ✅ `deck_importer` | ✅ fixture test (pptx) → ⬜ T1.2 | ⬜ T3.1 | ⬜ J2 |
+| F1.4 PPTX/PDF import | title/body/formatting extraction, progress, failures | ✅ `deck_importer` | ✅ fixture test (pptx); ✅ `deck_journeys` import (progress → `SlideUpdate` 0 → scene → complete, bad path/extension) | ⬜ T3.1 | ⬜ J2 |
 | F1.4 scene media | push image/video, size limits, active source toggle | ✅ `scene` | ⬜ T1.3, T2.2 | — | ⬜ J5 |
 | F1.5 multi-display | enumerate, assign, fallback on `DisplayLost` | ✅ `display` | ⬜ T1.3 | — | 🟡 J9 (read-only) + §9 manual |
-| Empty deck / Clear Deck (2026-10) | `SlidePayload::empty`, `deck_clear`, Present disabled | ✅ `current_payload_on_empty_deck…` | ⬜ T1.2, T2.2 | — | ⬜ J6 |
-| Persistence | `active_deck_id.txt`, restore on startup | — | ⬜ T1.2 | — | ⬜ J7 |
+| Empty deck / Clear Deck (2026-10) | `SlidePayload::empty`, `deck_clear`, Present disabled | ✅ `current_payload_on_empty_deck…` | ✅ `deck_journeys` clear (+idempotent, empty-deck boundaries); ⬜ T2.2 | — | ⬜ J6 |
+| Persistence | `active_deck_id.txt`, restore on startup | — | ✅ `deck_journeys` restore/no-op/corrupt/clear-then-restart/`restore_on_startup` (saved index + timer survive restart; product bug fixed), re-import resets index/timer, `spawn_timer` ticks | — | ⬜ J7 |
 | Window safety (Esc, hide-on-close) | Esc re-registered; OS close hides | — | — | — | ⬜ J4 (+ §9 for Esc) |
 
 Current baseline (2026-10-11): Rust 55 unit tests + 1 fixture integration (+1 `#[ignore]`d PDF);
@@ -184,7 +184,7 @@ Tauri/OS-integration bumps.
 
 | Metric | Baseline 2026-10-11 | Target |
 |---|---|---|
-| Rust tests | 55 unit + 1 integration + 6 harness smoke (+1 ignored) (2026-10-12, T1.1) | grows with T1/T3 |
+| Rust tests | 55 unit + 1 integration + 7 harness smoke + 17 deck journeys (the only `#[ignore]` is the pdfium PDF fixture test) (2026-10-12, T1.2) | grows with T1/T3 |
 | Frontend test files | controller 4, presentation 2 | T2 adds component tests |
 | E2E journeys green | 0 / 9 | 9 / 9 (T4.3) |
 | Line coverage (frontends) | controller 45.5% lines / 45% branches; presentation 81.4% lines / 83.3% branches (v8, 2026-10-12; `npm run test:coverage`) | floor at T6.3 |

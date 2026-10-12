@@ -14,7 +14,7 @@ pub(crate) fn escape_shortcut() -> Shortcut {
     Shortcut::new(None::<Modifiers>, Code::Escape)
 }
 
-pub(crate) fn hide_presentation(app: &tauri::AppHandle, bus: &Arc<EventBus>) {
+pub(crate) fn hide_presentation<R: tauri::Runtime>(app: &tauri::AppHandle<R>, bus: &Arc<EventBus>) {
     if let Some(win) = app.get_webview_window("presentation") {
         let _ = win.set_fullscreen(false);
         let _ = win.hide();
@@ -24,8 +24,8 @@ pub(crate) fn hide_presentation(app: &tauri::AppHandle, bus: &Arc<EventBus>) {
 }
 
 #[tauri::command]
-pub async fn presentation_show(
-    app: tauri::AppHandle,
+pub async fn presentation_show<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     bus: tauri::State<'_, Arc<EventBus>>,
     machine: tauri::State<'_, crate::slide_state_machine::StateMachineHandle>,
 ) -> Result<(), AppError> {
@@ -114,8 +114,8 @@ pub async fn presentation_show(
 }
 
 #[tauri::command]
-pub async fn presentation_hide(
-    app: tauri::AppHandle,
+pub async fn presentation_hide<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     bus: tauri::State<'_, Arc<EventBus>>,
 ) -> Result<(), AppError> {
     if !PRESENTING.load(Ordering::SeqCst) {

@@ -17,7 +17,7 @@ use crate::events::AppEvent;
 pub struct ConfigLoader;
 
 impl ConfigLoader {
-    pub fn resolve_path(app: &tauri::AppHandle) -> Result<PathBuf, AppError> {
+    pub fn resolve_path<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, AppError> {
         use tauri::Manager;
         Ok(app
             .path()

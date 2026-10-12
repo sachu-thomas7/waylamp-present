@@ -8,8 +8,8 @@ use crate::error::AppError;
 use crate::events::AppEvent;
 
 #[tauri::command]
-pub async fn display_list(
-    app: tauri::AppHandle,
+pub async fn display_list<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     display_state: tauri::State<'_, DisplayStateHandle>,
 ) -> Result<Vec<DisplayInfo>, AppError> {
     let displays = display::list_displays(&app)?;
@@ -18,9 +18,9 @@ pub async fn display_list(
 }
 
 #[tauri::command]
-pub async fn display_assign_presentation(
+pub async fn display_assign_presentation<R: tauri::Runtime>(
     id: String,
-    app: tauri::AppHandle,
+    app: tauri::AppHandle<R>,
     bus: tauri::State<'_, Arc<EventBus>>,
     display_state: tauri::State<'_, DisplayStateHandle>,
 ) -> Result<(), AppError> {

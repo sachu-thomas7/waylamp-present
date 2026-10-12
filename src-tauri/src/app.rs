@@ -9,9 +9,8 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use crate::bus::EventBus;
 use crate::config_loader::ConfigLoader;
 use crate::events::AppEvent;
-use crate::slide_state_machine;
 
-pub struct TimerAbortHandle(pub tokio::task::AbortHandle);
+use crate::state::TimerAbortHandle;
 pub struct DisplayWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 
 pub fn run() {
@@ -65,33 +64,13 @@ pub fn run() {
             let app_handle_for_restore = app.handle().clone();
 
             tauri::async_runtime::spawn(async move {
-                slide_state_machine::restore_state(&machine_for_restore, &data_dir).await;
-                let payload = machine_for_restore.read().await.current_payload();
-                bus_for_restore.publish(crate::events::AppEvent::SlideUpdate(payload));
-
-                let deck_data_dir = data_dir.join("decks");
-                let active_id_path = deck_data_dir.join("active_deck_id.txt");
-                if let Ok(raw) = std::fs::read_to_string(&active_id_path) {
-                    let deck_id = raw.trim().to_string();
-                    let deck_json_path = deck_data_dir.join(&deck_id).join("deck.json");
-                    if deck_json_path.exists() {
-                        if let Ok(deck) = crate::slide::SlideDeck::load_from_json(&deck_json_path) {
-                            let first_payload = {
-                                let mut m = machine_for_restore.write().await;
-                                m.load_deck(deck);
-                                m.current_payload()
-                            };
-                            bus_for_restore
-                                .publish(crate::events::AppEvent::SlideUpdate(first_payload));
-                        }
-                    }
-                }
-
-                let abort = slide_state_machine::spawn_timer_task(
-                    Arc::clone(&machine_for_restore),
-                    Arc::clone(&bus_for_restore),
+                crate::state::restore_on_startup(&machine_for_restore, &bus_for_restore, &data_dir)
+                    .await;
+                crate::state::spawn_timer(
+                    &app_handle_for_restore,
+                    machine_for_restore,
+                    bus_for_restore,
                 );
-                app_handle_for_restore.manage(TimerAbortHandle(abort));
             });
 
             tauri::async_runtime::spawn(run_event_bridge(app.handle().clone(), rx));
@@ -101,8 +80,7 @@ pub fn run() {
                     Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
                 })?;
 
-            let display_handle =
-                crate::display::new_display_handle(config.presentation.display_id.clone());
+            let display_handle = crate::state::manage_display(app, &config);
             if let Some(id) = &config.presentation.display_id {
                 if let Ok(displays) = crate::display::list_displays(app.handle()) {
                     if let Some(target) = displays.iter().find(|d| &d.id == id) {
@@ -117,7 +95,6 @@ pub fn run() {
                 Arc::clone(&bus_arc),
                 Arc::clone(&display_handle),
             );
-            app.manage(display_handle);
             app.manage(DisplayWatchAbortHandle(display_watch_abort));
 
             app.manage(watcher);

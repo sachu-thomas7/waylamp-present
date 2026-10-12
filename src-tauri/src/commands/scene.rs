@@ -3,7 +3,6 @@ use crate::error::AppError;
 use crate::events::AppEvent;
 use crate::scene::{SceneMediaPayload, SceneMediaType, SceneSource, SceneStateHandle};
 use std::sync::Arc;
-use tauri::Manager;
 
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES: u64 = 500 * 1024 * 1024;
@@ -13,7 +12,7 @@ pub async fn scene_push_image(
     path: String,
     bus: tauri::State<'_, Arc<EventBus>>,
     scene: tauri::State<'_, SceneStateHandle>,
-    app: tauri::AppHandle,
+    data_dir: tauri::State<'_, crate::state::AppDataDir>,
 ) -> Result<(), AppError> {
     let src = std::path::Path::new(&path);
 
@@ -35,11 +34,7 @@ pub async fn scene_push_image(
         return Err(AppError::InvalidInput("image exceeds 10 MB limit".into()));
     }
 
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-    let scene_dir = data_dir.join("scene_media");
+    let scene_dir = data_dir.0.join("scene_media");
     std::fs::create_dir_all(&scene_dir).map_err(|e| AppError::Internal(e.to_string()))?;
 
     let filename = src.file_name().and_then(|n| n.to_str()).unwrap_or("image");

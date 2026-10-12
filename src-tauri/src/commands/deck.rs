@@ -4,8 +4,8 @@ use crate::events::AppEvent;
 use crate::scene::{SceneSource, SceneStateHandle};
 use crate::slide::{SlideDeck, SlidePayload};
 use crate::slide_state_machine::StateMachineHandle;
+use crate::state::AppDataDir;
 use std::sync::Arc;
-use tauri::Manager;
 
 #[tauri::command]
 pub async fn deck_import(
@@ -13,13 +13,10 @@ pub async fn deck_import(
     bus: tauri::State<'_, Arc<EventBus>>,
     machine: tauri::State<'_, StateMachineHandle>,
     scene: tauri::State<'_, SceneStateHandle>,
-    app: tauri::AppHandle,
+    data_dir: tauri::State<'_, AppDataDir>,
 ) -> Result<String, AppError> {
     let deck_id = uuid::Uuid::new_v4().to_string();
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let data_dir = data_dir.0.clone();
     let dest_dir = data_dir.join("decks").join(&deck_id);
 
     let bus_arc = Arc::clone(&*bus);
@@ -59,13 +56,9 @@ pub async fn deck_clear(
     bus: tauri::State<'_, Arc<EventBus>>,
     machine: tauri::State<'_, StateMachineHandle>,
     scene: tauri::State<'_, SceneStateHandle>,
-    app: tauri::AppHandle,
+    data_dir: tauri::State<'_, AppDataDir>,
 ) -> Result<(), AppError> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-    let active_id_path = data_dir.join("decks").join("active_deck_id.txt");
+    let active_id_path = data_dir.0.join("decks").join("active_deck_id.txt");
     // Ignore "not found" — clearing an already-empty deck is a no-op, not an error.
     let _ = std::fs::remove_file(&active_id_path);
 
@@ -103,31 +96,10 @@ pub async fn deck_get_all_slides(
 pub async fn deck_restore(
     bus: tauri::State<'_, Arc<EventBus>>,
     machine: tauri::State<'_, StateMachineHandle>,
-    app: tauri::AppHandle,
+    data_dir: tauri::State<'_, AppDataDir>,
 ) -> Result<(), AppError> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-    let active_id_path = data_dir.join("decks").join("active_deck_id.txt");
-
-    let deck_id = match std::fs::read_to_string(&active_id_path) {
-        Ok(id) => id.trim().to_string(),
-        Err(_) => return Ok(()),
-    };
-
-    let deck_json_path = data_dir.join("decks").join(&deck_id).join("deck.json");
-    if !deck_json_path.exists() {
-        return Ok(());
+    if let Some(first_payload) = crate::state::restore_deck(&machine, &data_dir.0).await? {
+        bus.publish(AppEvent::SlideUpdate(first_payload));
     }
-
-    let deck = SlideDeck::load_from_json(&deck_json_path)?;
-    let first_payload = {
-        let mut m = machine.write().await;
-        m.load_deck(deck);
-        m.current_payload()
-    };
-
-    bus.publish(AppEvent::SlideUpdate(first_payload));
     Ok(())
 }

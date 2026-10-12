@@ -28,7 +28,11 @@ impl TestApp {
     }
 
     pub fn with_config(config: StreamDeckConfig) -> Self {
-        let data_dir = tempfile::tempdir().expect("temp app-data dir");
+        Self::with_data_dir(tempfile::tempdir().expect("temp app-data dir"), config)
+    }
+
+    /// Boots an app on an existing data dir, simulating a restart over persisted files.
+    pub fn with_data_dir(data_dir: tempfile::TempDir, config: StreamDeckConfig) -> Self {
         let (bus, _rx) = EventBus::new();
         let bus = Arc::new(bus);
 
@@ -41,8 +45,9 @@ impl TestApp {
             &app,
             Arc::clone(&bus),
             data_dir.path().to_path_buf(),
-            config,
+            config.clone(),
         );
+        streamdeck_lib::state::manage_display(&app, &config);
 
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()

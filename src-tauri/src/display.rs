@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, Runtime};
 use tokio::sync::RwLock;
 
 use crate::error::AppError;
@@ -43,7 +43,7 @@ fn monitor_id(name: Option<&String>, x: i32, y: i32) -> String {
 /// Enumerate connected displays via the Tauri window manager. Thin wrapper around
 /// platform monitor APIs — not unit tested directly; the pure logic below (diffing,
 /// fallback selection, disconnect detection) is what's tested.
-pub fn list_displays(app: &AppHandle) -> Result<Vec<DisplayInfo>, AppError> {
+pub fn list_displays<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<DisplayInfo>, AppError> {
     let monitors = app
         .available_monitors()
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -74,7 +74,10 @@ pub fn list_displays(app: &AppHandle) -> Result<Vec<DisplayInfo>, AppError> {
 }
 
 /// Move (but do not show/fullscreen) the presentation window onto the given display.
-pub fn apply_position(window: &tauri::WebviewWindow, target: &DisplayInfo) -> Result<(), AppError> {
+pub fn apply_position<R: Runtime>(
+    window: &tauri::WebviewWindow<R>,
+    target: &DisplayInfo,
+) -> Result<(), AppError> {
     window
         .set_position(PhysicalPosition::new(target.x, target.y))
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -87,8 +90,8 @@ pub fn apply_position(window: &tauri::WebviewWindow, target: &DisplayInfo) -> Re
 /// Poll for display hotplug changes every 2s. Publishes DisplaysChanged when the id set
 /// changes, and DisplayLost + repositions the presentation window to the fallback display
 /// when the currently assigned display disappears.
-pub fn spawn_watch_task(
-    app: AppHandle,
+pub fn spawn_watch_task<R: Runtime>(
+    app: AppHandle<R>,
     bus: Arc<crate::bus::EventBus>,
     display_state: DisplayStateHandle,
 ) -> tauri::async_runtime::JoinHandle<()> {

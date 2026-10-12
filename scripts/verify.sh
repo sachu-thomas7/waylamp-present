@@ -699,8 +699,34 @@ run_t1_1() {
   rm -f "$t11_log"
 }
 
+run_t1_2() {
+  section "T1.2 — Deck & slide command journeys"
+
+  file_exists "src-tauri/tests/deck_journeys.rs"
+  file_contains "state.rs extracts restore_deck" "src-tauri/src/state.rs" "pub async fn restore_deck"
+  file_contains "state.rs extracts restore_on_startup" "src-tauri/src/state.rs" "pub async fn restore_on_startup"
+  file_contains "state.rs extracts spawn_timer" "src-tauri/src/state.rs" "pub fn spawn_timer"
+  file_contains "state.rs extracts manage_display" "src-tauri/src/state.rs" "pub fn manage_display"
+  file_contains "mock handler registers deck_import" "src-tauri/src/state.rs" "commands::deck::deck_import"
+  file_contains "mock handler registers display_list" "src-tauri/src/state.rs" "commands::display::display_list"
+  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::restore_on_startup"     && pass "app.rs uses shared restore_on_startup" || fail "app.rs must call state::restore_on_startup"
+  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::manage_display"     && pass "app.rs uses shared manage_display" || fail "app.rs must call state::manage_display"
+  if grep -rnE 'tauri::AppHandle[,)>;]|: AppHandle[,)>;]' src-tauri/src/commands >/dev/null 2>&1; then
+    fail "commands must take AppHandle<R>, not a concrete AppHandle"
+  else
+    pass "commands are runtime-generic"
+  fi
+  file_contains "app.rs stays gated" "src-tauri/src/lib.rs" "cfg(not(test))"
+
+  local t12_log
+  t12_log=$(mktemp)
+  check "T1.2 deck journeys pass (>=17, none failed)"     bash -c 'set -o pipefail; cd src-tauri && cargo test --test deck_journeys 2>&1 | tee "$1"       && ! grep -q "FAILED" "$1"       && n=$(grep -o "test result: ok. [0-9]* passed" "$1" | grep -o "[0-9]*" | head -1)       && [ "${n:-0}" -ge 17 ]' _ "$t12_log"
+  rm -f "$t12_log"
+}
+
 run_t1() {
   run_t1_1
+  run_t1_2
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -756,6 +782,9 @@ case "$FILTER" in
     ;;
   t1.1)
     run_t1_1
+    ;;
+  t1.2)
+    run_t1_2
     ;;
   t1)
     run_t1

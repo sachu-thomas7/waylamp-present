@@ -103,3 +103,14 @@ async fn bus_collector_helper_sees_events_published_after_subscribing() {
         [AppEvent::Ping { message }] if message == "hello"
     ));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn runtime_generic_presentation_command_registers_on_the_mock_runtime() {
+    let t = TestApp::new();
+
+    let res: Result<(), serde_json::Value> = t.invoke("presentation_show", serde_json::json!({}));
+    assert_eq!(
+        res.expect_err("no presentation window in the harness")["type"],
+        "NotFound"
+    );
+}
