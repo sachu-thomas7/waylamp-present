@@ -4,9 +4,11 @@ interface CardProps {
   title: string;
   headerRight?: ReactNode;
   children: ReactNode;
+  /** Grow to fill the remaining height of a flex-column parent. */
+  fill?: boolean;
 }
 
-export function Card({ title, headerRight, children }: CardProps) {
+export function Card({ title, headerRight, children, fill = false }: CardProps) {
   return (
     <div
       style={{
@@ -17,6 +19,7 @@ export function Card({ title, headerRight, children }: CardProps) {
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
+        ...(fill ? { flex: 1, minHeight: 0 } : {}),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

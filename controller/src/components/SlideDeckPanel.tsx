@@ -12,8 +12,6 @@ import { Badge } from './ui/Badge';
 import { IconChevronLeft, IconChevronRight, IconReset, IconSearch, IconUpload, IconWarning } from './ui/icons';
 
 const THUMB_SCALE = 160 / 1920;
-const CURRENT_PREVIEW_SCALE = 380 / 1920;
-const NEXT_PREVIEW_SCALE = 190 / 1920;
 
 function formatTimer(secs: number | null): string {
   if (secs === null) return '--:--';
@@ -131,6 +129,7 @@ export function SlideDeckPanel() {
 
   return (
     <Card
+      fill
       title="Slide Deck"
       headerRight={<Badge>{totalSlides ? `${currentIndex + 1} / ${totalSlides}` : '-- / --'}</Badge>}
     >
@@ -187,15 +186,15 @@ export function SlideDeckPanel() {
       </div>
 
       {/* Current + Next preview */}
-      <div style={{ display: 'flex', gap: 14 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start' }}>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Current</div>
-          {current && <SlideCanvas slide={current} scale={CURRENT_PREVIEW_SCALE} />}
+          {current && <SlideCanvas slide={current} fluid />}
         </div>
-        <div style={{ flex: 0.5 }}>
+        <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Next</div>
           {slides[currentIndex + 1] && (
-            <SlideCanvas slide={slides[currentIndex + 1]} scale={NEXT_PREVIEW_SCALE} />
+            <SlideCanvas slide={slides[currentIndex + 1]} fluid />
           )}
         </div>
       </div>
@@ -205,7 +204,7 @@ export function SlideDeckPanel() {
       </div>
 
       {/* Timer + nav */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid var(--color-border)', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid var(--color-border)', gap: 12, marginTop: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 19, fontWeight: 600, letterSpacing: '0.02em', minWidth: 64 }}>
             {formatTimer(elapsedSecs)}
@@ -229,23 +228,25 @@ export function SlideDeckPanel() {
           </Button>
         </div>
 
-        {/* Secondary: jump to an arbitrary slide by index — smaller, visually de-emphasized */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, opacity: 0.75 }}>
+        {/* Secondary: jump to an arbitrary slide by index — smaller than Prev/Next but still clearly legible */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Jump to</span>
           <input
             type="number"
+            aria-label="Jump to slide index"
             value={jumpIndex}
             onChange={(e) => setJumpIndex(e.target.value)}
             placeholder="Idx"
             min={0}
             max={totalSlides - 1}
-            style={{ width: 44, height: 26, textAlign: 'center', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: 11.5 }}
+            style={{ width: 52, height: 30, textAlign: 'center', background: 'var(--color-bg)', border: '1px solid var(--color-text-muted)', borderRadius: 6, color: 'var(--color-text)', fontSize: 12.5 }}
           />
           <button
             onClick={() => {
               const idx = parseInt(jumpIndex, 10);
               if (!Number.isNaN(idx)) slideJumpTo(idx).catch(console.error);
             }}
-            style={{ height: 26, padding: '0 9px', borderRadius: 6, background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', fontSize: 11, fontFamily: 'var(--font-body)', cursor: 'pointer' }}
+            style={{ height: 30, padding: '0 12px', borderRadius: 6, background: 'transparent', border: '1px solid var(--color-text-muted)', color: 'var(--color-text)', fontSize: 12, fontFamily: 'var(--font-body)', cursor: 'pointer' }}
           >
             Go
           </button>
