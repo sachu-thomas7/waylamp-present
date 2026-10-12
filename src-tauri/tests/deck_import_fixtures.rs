@@ -9,7 +9,9 @@ use streamdeck_lib::bus::EventBus;
 use streamdeck_lib::deck_importer::import_deck;
 
 fn fixture(name: &str) -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
 }
 
 #[tokio::test]
@@ -25,21 +27,35 @@ async fn pptx_fixture_extracts_titles_body_code_and_layout_flags() {
     assert_eq!(deck.slides.len(), 5);
 
     assert_eq!(deck.slides[0].title, "StreamDeck Test Deck");
-    assert!(deck.slides[0].body.contains("A sample presentation for testing deck import."));
+    assert!(deck.slides[0]
+        .body
+        .contains("A sample presentation for testing deck import."));
 
     assert_eq!(deck.slides[1].title, "Feature Overview");
     assert!(deck.slides[1].body.contains("Live presentation control"));
 
     assert_eq!(deck.slides[2].title, "Sample Code");
-    assert!(deck.slides[2].is_code_slide, "slide 3 uses a Consolas run and should be flagged as code");
+    assert!(
+        deck.slides[2].is_code_slide,
+        "slide 3 uses a Consolas run and should be flagged as code"
+    );
 
     assert_eq!(deck.slides[3].title, "Visual Slide");
-    assert!(deck.slides[3].has_background_image, "slide 4 embeds ppt/media/image1.png via slide rels");
+    assert!(
+        deck.slides[3].has_background_image,
+        "slide 4 embeds ppt/media/image1.png via slide rels"
+    );
     assert!(deck.slides[3].background_path.is_some());
 
     assert_eq!(deck.slides[4].title, "Unsupported Layout Demo");
-    assert!(deck.slides[4].layout_unsupported, "slide 5 uses a subTitle placeholder StreamDeck doesn't classify as body");
-    assert!(deck.slides[4].body.is_empty(), "unsupported placeholder text must not leak into body");
+    assert!(
+        deck.slides[4].layout_unsupported,
+        "slide 5 uses a subTitle placeholder StreamDeck doesn't classify as body"
+    );
+    assert!(
+        deck.slides[4].body.is_empty(),
+        "unsupported placeholder text must not leak into body"
+    );
 }
 
 // Ignored by default: pdfium-render's Pdfium::default() dynamically loads a native

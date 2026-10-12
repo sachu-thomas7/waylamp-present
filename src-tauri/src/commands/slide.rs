@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use crate::bus::EventBus;
 use crate::error::AppError;
 use crate::slide::SlidePayload;
 use crate::slide_state_machine::{self, StateMachineHandle};
+use std::sync::Arc;
 
 #[tauri::command]
 pub async fn slide_advance(

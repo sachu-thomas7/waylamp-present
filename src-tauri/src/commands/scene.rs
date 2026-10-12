@@ -1,9 +1,9 @@
-use std::sync::Arc;
-use tauri::Manager;
 use crate::bus::EventBus;
 use crate::error::AppError;
 use crate::events::AppEvent;
 use crate::scene::{SceneMediaPayload, SceneMediaType, SceneSource, SceneStateHandle};
+use std::sync::Arc;
+use tauri::Manager;
 
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
 const MAX_VIDEO_BYTES: u64 = 500 * 1024 * 1024;
@@ -17,32 +17,34 @@ pub async fn scene_push_image(
 ) -> Result<(), AppError> {
     let src = std::path::Path::new(&path);
 
-    let ext = src.extension()
+    let ext = src
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
     if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp") {
-        return Err(AppError::InvalidInput("image must be PNG, JPEG, or WebP".into()));
+        return Err(AppError::InvalidInput(
+            "image must be PNG, JPEG, or WebP".into(),
+        ));
     }
 
     let size = std::fs::metadata(src)
-        .map_err(|e| AppError::Internal(e.to_string()))?.len();
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .len();
     if size > MAX_IMAGE_BYTES {
         return Err(AppError::InvalidInput("image exceeds 10 MB limit".into()));
     }
 
-    let data_dir = app.path().app_data_dir()
+    let data_dir = app
+        .path()
+        .app_data_dir()
         .map_err(|e| AppError::Internal(e.to_string()))?;
     let scene_dir = data_dir.join("scene_media");
-    std::fs::create_dir_all(&scene_dir)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    std::fs::create_dir_all(&scene_dir).map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let filename = src.file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("image");
+    let filename = src.file_name().and_then(|n| n.to_str()).unwrap_or("image");
     let dest = scene_dir.join(filename);
-    std::fs::copy(src, &dest)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    std::fs::copy(src, &dest).map_err(|e| AppError::Internal(e.to_string()))?;
 
     let payload = SceneMediaPayload {
         media_type: SceneMediaType::Image,
@@ -67,7 +69,8 @@ pub async fn scene_push_video(
 ) -> Result<(), AppError> {
     let src = std::path::Path::new(&path);
 
-    let ext = src.extension()
+    let ext = src
+        .extension()
         .and_then(|e| e.to_str())
         .map(|e| e.to_lowercase())
         .unwrap_or_default();
@@ -76,14 +79,13 @@ pub async fn scene_push_video(
     }
 
     let size = std::fs::metadata(src)
-        .map_err(|e| AppError::Internal(e.to_string()))?.len();
+        .map_err(|e| AppError::Internal(e.to_string()))?
+        .len();
     if size > MAX_VIDEO_BYTES {
         return Err(AppError::InvalidInput("video exceeds 500 MB limit".into()));
     }
 
-    let filename = src.file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("video");
+    let filename = src.file_name().and_then(|n| n.to_str()).unwrap_or("video");
 
     let payload = SceneMediaPayload {
         media_type: SceneMediaType::Video,

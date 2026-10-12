@@ -30,7 +30,12 @@ impl SlideStateMachine {
     }
 
     pub fn new(deck: SlideDeck, data_dir: PathBuf) -> Self {
-        Self { deck, current_index: 0, data_dir, timer_started_at: None }
+        Self {
+            deck,
+            current_index: 0,
+            data_dir,
+            timer_started_at: None,
+        }
     }
 
     pub fn current_payload(&self) -> SlidePayload {
@@ -40,10 +45,18 @@ impl SlideStateMachine {
         }
     }
 
-    pub fn current_index(&self) -> usize { self.current_index }
-    pub fn total(&self) -> usize { self.deck.len() }
-    pub fn data_dir(&self) -> &Path { &self.data_dir }
-    pub fn timer_started_at(&self) -> Option<u64> { self.timer_started_at }
+    pub fn current_index(&self) -> usize {
+        self.current_index
+    }
+    pub fn total(&self) -> usize {
+        self.deck.len()
+    }
+    pub fn data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+    pub fn timer_started_at(&self) -> Option<u64> {
+        self.timer_started_at
+    }
 
     pub fn deck_len(&self) -> usize {
         self.deck.slides.len()
@@ -166,8 +179,12 @@ pub async fn persist_state(handle: &StateMachineHandle, data_dir: &Path) -> Resu
 
 pub async fn restore_state(handle: &StateMachineHandle, data_dir: &Path) {
     let path = data_dir.join("slide_state.json");
-    let Ok(bytes) = std::fs::read(&path) else { return };
-    let Ok(state) = serde_json::from_slice::<SlideState>(&bytes) else { return };
+    let Ok(bytes) = std::fs::read(&path) else {
+        return;
+    };
+    let Ok(state) = serde_json::from_slice::<SlideState>(&bytes) else {
+        return;
+    };
     let mut sm = handle.write().await;
     if state.current_index < sm.total() {
         sm.current_index = state.current_index;
@@ -206,7 +223,10 @@ async fn persist_index(handle: &StateMachineHandle, data_dir: &Path) -> Result<(
         let sm = handle.read().await;
         (sm.current_index(), sm.timer_started_at())
     };
-    let state = SlideState { current_index: index, timer_started_at };
+    let state = SlideState {
+        current_index: index,
+        timer_started_at,
+    };
     let json = serde_json::to_string(&state)
         .map_err(|e| AppError::Internal(format!("serialize slide state: {e}")))?;
     std::fs::create_dir_all(data_dir)
@@ -346,13 +366,19 @@ mod tests {
     async fn timer_tick_emits_correct_elapsed_after_restore() {
         let dir = tempdir().unwrap();
         let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
         let started_at = now_ms - 30_000; // 30 seconds ago
-        let state = SlideState { current_index: 0, timer_started_at: Some(started_at) };
+        let state = SlideState {
+            current_index: 0,
+            timer_started_at: Some(started_at),
+        };
         std::fs::write(
             dir.path().join("slide_state.json"),
             serde_json::to_string(&state).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         let handle = new_handle(SlideDeck::stub(), dir.path().to_path_buf());
         restore_state(&handle, dir.path()).await;
         let restored = handle.read().await.timer_started_at().unwrap();

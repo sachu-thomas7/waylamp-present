@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use tauri::Emitter;
 use tauri::Manager;
-use tauri::WebviewWindowBuilder;
 use tauri::WebviewUrl;
+use tauri::WebviewWindowBuilder;
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 use crate::bus::EventBus;
-use crate::events::AppEvent;
 use crate::config_loader::ConfigLoader;
+use crate::events::AppEvent;
 use crate::slide::SlideDeck;
 use crate::slide_state_machine;
 
@@ -54,16 +54,18 @@ pub fn run() {
             };
 
             WebviewWindowBuilder::new(app, "presentation", presentation_url)
-            .title("StreamDeck — Presentation")
-            .inner_size(1920.0, 1080.0)
-            .visible(false)
-            .decorations(false)
-            .always_on_top(true)
-            .fullscreen(false)
-            .resizable(false)
-            .build()?;
+                .title("StreamDeck — Presentation")
+                .inner_size(1920.0, 1080.0)
+                .visible(false)
+                .decorations(false)
+                .always_on_top(true)
+                .fullscreen(false)
+                .resizable(false)
+                .build()?;
 
-            let data_dir = app.path().app_data_dir()
+            let data_dir = app
+                .path()
+                .app_data_dir()
                 .map_err(|e| std::io::Error::other(e.to_string()))?;
 
             let deck = SlideDeck::stub();
@@ -89,7 +91,8 @@ pub fn run() {
                                 m.load_deck(deck);
                                 m.current_payload()
                             };
-                            bus_for_restore.publish(crate::events::AppEvent::SlideUpdate(first_payload));
+                            bus_for_restore
+                                .publish(crate::events::AppEvent::SlideUpdate(first_payload));
                         }
                     }
                 }
@@ -108,22 +111,22 @@ pub fn run() {
 
             tauri::async_runtime::spawn(run_event_bridge(app.handle().clone(), rx));
 
-            let config_path = ConfigLoader::resolve_path(app.handle())
-                .map_err(|e| Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>)?;
+            let config_path = ConfigLoader::resolve_path(app.handle()).map_err(|e| {
+                Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
+            })?;
 
             let config = ConfigLoader::load_or_default(&config_path).map_err(|e| {
                 eprintln!("Config load failed: {e}");
-                Box::new(std::io::Error::other(e.to_string()))
-                    as Box<dyn std::error::Error>
+                Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
             })?;
 
-            let watcher = ConfigLoader::spawn_watcher(config_path, Arc::clone(&bus_arc))
-                .map_err(|e| {
-                    Box::new(std::io::Error::other(e.to_string()))
-                        as Box<dyn std::error::Error>
+            let watcher =
+                ConfigLoader::spawn_watcher(config_path, Arc::clone(&bus_arc)).map_err(|e| {
+                    Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
                 })?;
 
-            let display_handle = crate::display::new_display_handle(config.presentation.display_id.clone());
+            let display_handle =
+                crate::display::new_display_handle(config.presentation.display_id.clone());
             if let Some(id) = &config.presentation.display_id {
                 if let Ok(displays) = crate::display::list_displays(app.handle()) {
                     if let Some(target) = displays.iter().find(|d| &d.id == id) {
@@ -152,10 +155,13 @@ pub fn run() {
                     if let Some(abort) = window.app_handle().try_state::<TimerAbortHandle>() {
                         abort.0.abort();
                     }
-                    if let Some(abort) = window.app_handle().try_state::<DisplayWatchAbortHandle>() {
+                    if let Some(abort) = window.app_handle().try_state::<DisplayWatchAbortHandle>()
+                    {
                         abort.0.abort();
                     }
-                    if let Some(presentation) = window.app_handle().get_webview_window("presentation") {
+                    if let Some(presentation) =
+                        window.app_handle().get_webview_window("presentation")
+                    {
                         let _ = presentation.close();
                     }
                     window.app_handle().exit(0);

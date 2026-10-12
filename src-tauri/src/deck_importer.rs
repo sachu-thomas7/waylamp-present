@@ -1,9 +1,9 @@
-use std::path::Path;
-use std::sync::Arc;
 use crate::bus::EventBus;
 use crate::error::AppError;
-use crate::slide::{SlideDeck, SlideEntry, SlideTextBlock, SlideTextRun, TextAlignment};
 use crate::events::AppEvent;
+use crate::slide::{SlideDeck, SlideEntry, SlideTextBlock, SlideTextRun, TextAlignment};
+use std::path::Path;
+use std::sync::Arc;
 
 enum PhKind {
     Title,
@@ -34,10 +34,10 @@ impl DeckFormat {
     pub fn detect(path: &Path) -> Result<Self, AppError> {
         match path.extension().and_then(|e| e.to_str()) {
             Some("pptx") => Ok(Self::Pptx),
-            Some("pdf")  => Ok(Self::Pdf),
-            Some(ext)    => Err(AppError::InvalidInput(
-                format!("unsupported format: .{ext} — only .pptx and .pdf are supported")
-            )),
+            Some("pdf") => Ok(Self::Pdf),
+            Some(ext) => Err(AppError::InvalidInput(format!(
+                "unsupported format: .{ext} — only .pptx and .pdf are supported"
+            ))),
             None => Err(AppError::InvalidInput("file has no extension".into())),
         }
     }
@@ -52,21 +52,17 @@ pub async fn import_deck(
     let path = path.to_path_buf();
     let dest_dir = dest_dir.to_path_buf();
 
-    tokio::task::spawn_blocking(move || {
-        match format {
-            DeckFormat::Pptx => import_pptx(&path, &dest_dir, &bus),
-            DeckFormat::Pdf  => import_pdf(&path, &dest_dir, &bus),
-        }
+    tokio::task::spawn_blocking(move || match format {
+        DeckFormat::Pptx => import_pptx(&path, &dest_dir, &bus),
+        DeckFormat::Pdf => import_pdf(&path, &dest_dir, &bus),
     })
     .await
     .map_err(|e| AppError::Internal(e.to_string()))?
 }
 
 fn import_pptx(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<SlideDeck, AppError> {
-    let file = std::fs::File::open(path)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    let file = std::fs::File::open(path).map_err(|e| AppError::Internal(e.to_string()))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| AppError::Internal(e.to_string()))?;
 
     // Count slides by enumerating ppt/slides/slide*.xml entries
     let slide_count = (1..)
@@ -74,8 +70,7 @@ fn import_pptx(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<Slid
         .count() as u32;
 
     let media_dir = dest_dir.join("media");
-    std::fs::create_dir_all(&media_dir)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    std::fs::create_dir_all(&media_dir).map_err(|e| AppError::Internal(e.to_string()))?;
 
     let mut slides = Vec::new();
 
@@ -83,11 +78,17 @@ fn import_pptx(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<Slid
         let result = parse_pptx_slide(&mut archive, n, &media_dir);
         match result {
             Ok(entry) => {
-                bus.publish(AppEvent::DeckImportProgress { slide: n, total: slide_count });
+                bus.publish(AppEvent::DeckImportProgress {
+                    slide: n,
+                    total: slide_count,
+                });
                 slides.push(entry);
             }
             Err(reason) => {
-                bus.publish(AppEvent::DeckImportFailed { slide: n, reason: reason.to_string() });
+                bus.publish(AppEvent::DeckImportFailed {
+                    slide: n,
+                    reason: reason.to_string(),
+                });
             }
         }
     }
@@ -106,9 +107,11 @@ fn parse_pptx_slide(
 
     let mut xml_content = String::new();
     {
-        let mut slide_file = archive.by_name(&format!("ppt/slides/slide{n}.xml"))
+        let mut slide_file = archive
+            .by_name(&format!("ppt/slides/slide{n}.xml"))
             .map_err(|e| AppError::Internal(e.to_string()))?;
-        slide_file.read_to_string(&mut xml_content)
+        slide_file
+            .read_to_string(&mut xml_content)
             .map_err(|e| AppError::Internal(e.to_string()))?;
     }
 
@@ -143,27 +146,46 @@ fn parse_pptx_slide(
                         // Detect placeholder type via ph element inside spPr/nvSpPr
                     }
                     "ph" => match classify_ph(e) {
-                        PhKind::Title => { in_title_ph = true; in_body_ph = false; }
-                        PhKind::Body => { in_body_ph = true; in_title_ph = false; }
-                        PhKind::Other => { layout_unsupported = true; }
+                        PhKind::Title => {
+                            in_title_ph = true;
+                            in_body_ph = false;
+                        }
+                        PhKind::Body => {
+                            in_body_ph = true;
+                            in_title_ph = false;
+                        }
+                        PhKind::Other => {
+                            layout_unsupported = true;
+                        }
                     },
                     "rPr" if in_title_ph || in_body_ph => {
-                        current_bold = e.attributes().filter_map(|a| a.ok())
+                        current_bold = e
+                            .attributes()
+                            .filter_map(|a| a.ok())
                             .any(|a| a.key.local_name().as_ref() == "b" && a.value.as_ref() == "1");
-                        current_italic = e.attributes().filter_map(|a| a.ok())
+                        current_italic = e
+                            .attributes()
+                            .filter_map(|a| a.ok())
                             .any(|a| a.key.local_name().as_ref() == "i" && a.value.as_ref() == "1");
-                        current_font_size = e.attributes().filter_map(|a| a.ok())
+                        current_font_size = e
+                            .attributes()
+                            .filter_map(|a| a.ok())
                             .find(|a| a.key.local_name().as_ref() == "sz")
-                            .and_then(|a| Some(a.value.as_ref())
-                                .and_then(|v| v.parse::<u32>().ok().map(|v| v / 100)));
+                            .and_then(|a| {
+                                Some(a.value.as_ref())
+                                    .and_then(|v| v.parse::<u32>().ok().map(|v| v / 100))
+                            });
                     }
                     "pPr" if in_body_ph => {
-                        current_indent = e.attributes().filter_map(|a| a.ok())
+                        current_indent = e
+                            .attributes()
+                            .filter_map(|a| a.ok())
                             .find(|a| a.key.local_name().as_ref() == "lvl")
-                            .and_then(|a| Some(a.value.as_ref())
-                                .and_then(|v| v.parse::<u8>().ok()))
+                            .and_then(|a| Some(a.value.as_ref()).and_then(|v| v.parse::<u8>().ok()))
                             .unwrap_or(0);
-                        current_align = e.attributes().filter_map(|a| a.ok())
+                        current_align = e
+                            .attributes()
+                            .filter_map(|a| a.ok())
                             .find(|a| a.key.local_name().as_ref() == "algn")
                             .map(|a| match a.value.as_ref() {
                                 "ctr" => TextAlignment::Center,
@@ -176,25 +198,36 @@ fn parse_pptx_slide(
                     _ => {}
                 }
             }
-            Ok(Event::Empty(ref e)) => {
-                match e.local_name().as_ref() {
-                    "latin" if in_title_ph || in_body_ph => {
-                        current_font_family = e.attributes().filter_map(|a| a.ok())
-                            .find(|a| a.key.local_name().as_ref() == "typeface")
-                            .map(|a| a.value.into_owned());
-                    }
-                    "ph" => match classify_ph(e) {
-                        PhKind::Title => { in_title_ph = true; in_body_ph = false; }
-                        PhKind::Body => { in_body_ph = true; in_title_ph = false; }
-                        PhKind::Other => { layout_unsupported = true; }
-                    },
-                    _ => {}
+            Ok(Event::Empty(ref e)) => match e.local_name().as_ref() {
+                "latin" if in_title_ph || in_body_ph => {
+                    current_font_family = e
+                        .attributes()
+                        .filter_map(|a| a.ok())
+                        .find(|a| a.key.local_name().as_ref() == "typeface")
+                        .map(|a| a.value.into_owned());
                 }
-            }
+                "ph" => match classify_ph(e) {
+                    PhKind::Title => {
+                        in_title_ph = true;
+                        in_body_ph = false;
+                    }
+                    PhKind::Body => {
+                        in_body_ph = true;
+                        in_title_ph = false;
+                    }
+                    PhKind::Other => {
+                        layout_unsupported = true;
+                    }
+                },
+                _ => {}
+            },
             Ok(Event::Text(ref e)) => {
                 let text = e.xml10_content().into_owned();
 
-                if text.is_empty() { buf.clear(); continue; }
+                if text.is_empty() {
+                    buf.clear();
+                    continue;
+                }
                 if in_title_ph && title.is_empty() {
                     title = text.clone();
                 } else if in_body_ph {
@@ -209,34 +242,32 @@ fn parse_pptx_slide(
                     });
                 }
             }
-            Ok(Event::End(ref e)) => {
-                match e.local_name().as_ref() {
-                    "p" if in_body_ph && !current_runs.is_empty() => {
-                        rich_body.push(SlideTextBlock {
-                            runs: std::mem::take(&mut current_runs),
-                            alignment: match current_align {
-                                TextAlignment::Left    => TextAlignment::Left,
-                                TextAlignment::Center  => TextAlignment::Center,
-                                TextAlignment::Right   => TextAlignment::Right,
-                                TextAlignment::Justify => TextAlignment::Justify,
-                            },
-                            indent_level: current_indent,
-                        });
-                        current_indent = 0;
-                        current_align = TextAlignment::Left;
-                    }
-                    "sp" => {
-                        in_title_ph = false;
-                        in_body_ph = false;
-                        current_bold = false;
-                        current_italic = false;
-                        current_font_size = None;
-                        current_color = None;
-                        current_font_family = None;
-                    }
-                    _ => {}
+            Ok(Event::End(ref e)) => match e.local_name().as_ref() {
+                "p" if in_body_ph && !current_runs.is_empty() => {
+                    rich_body.push(SlideTextBlock {
+                        runs: std::mem::take(&mut current_runs),
+                        alignment: match current_align {
+                            TextAlignment::Left => TextAlignment::Left,
+                            TextAlignment::Center => TextAlignment::Center,
+                            TextAlignment::Right => TextAlignment::Right,
+                            TextAlignment::Justify => TextAlignment::Justify,
+                        },
+                        indent_level: current_indent,
+                    });
+                    current_indent = 0;
+                    current_align = TextAlignment::Left;
                 }
-            }
+                "sp" => {
+                    in_title_ph = false;
+                    in_body_ph = false;
+                    current_bold = false;
+                    current_italic = false;
+                    current_font_size = None;
+                    current_color = None;
+                    current_font_family = None;
+                }
+                _ => {}
+            },
             Ok(Event::Eof) => break,
             Err(e) => return Err(AppError::Internal(e.to_string())),
             _ => {}
@@ -279,7 +310,8 @@ fn extract_pptx_background(
             Ok(f) => f,
             Err(_) => return Ok(None),
         };
-        rels_file.read_to_string(&mut rels_content)
+        rels_file
+            .read_to_string(&mut rels_content)
             .map_err(|e| AppError::Internal(e.to_string()))?;
     }
 
@@ -295,10 +327,14 @@ fn extract_pptx_background(
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Empty(ref e)) if e.local_name().as_ref() == "Relationship" => {
-                let rel_type = e.attributes().filter_map(|a| a.ok())
+                let rel_type = e
+                    .attributes()
+                    .filter_map(|a| a.ok())
                     .find(|a| a.key.local_name().as_ref() == "Type")
                     .map(|a| a.value.into_owned());
-                let target = e.attributes().filter_map(|a| a.ok())
+                let target = e
+                    .attributes()
+                    .filter_map(|a| a.ok())
                     .find(|a| a.key.local_name().as_ref() == "Target")
                     .map(|a| a.value.into_owned());
 
@@ -322,7 +358,9 @@ fn extract_pptx_background(
 
     // target is like "../media/image1.png" — normalize to "ppt/media/image1.png"
     let filename = target.split('/').next_back().unwrap_or("");
-    if filename.is_empty() { return Ok(None); }
+    if filename.is_empty() {
+        return Ok(None);
+    }
 
     let ext = std::path::Path::new(filename)
         .extension()
@@ -340,13 +378,13 @@ fn extract_pptx_background(
             Err(_) => return Ok(None),
         };
         use std::io::Read;
-        media_file.read_to_end(&mut media_bytes)
+        media_file
+            .read_to_end(&mut media_bytes)
             .map_err(|e| AppError::Internal(e.to_string()))?;
     }
 
     let dest = media_dir.join(format!("slide_{n}_bg.{ext}"));
-    std::fs::write(&dest, &media_bytes)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    std::fs::write(&dest, &media_bytes).map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(dest.to_str().map(|s| s.to_string()))
 }
@@ -355,11 +393,11 @@ fn import_pdf(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<Slide
     use pdfium_render::prelude::*;
 
     let media_dir = dest_dir.join("media");
-    std::fs::create_dir_all(&media_dir)
-        .map_err(|e| AppError::Internal(e.to_string()))?;
+    std::fs::create_dir_all(&media_dir).map_err(|e| AppError::Internal(e.to_string()))?;
 
     let pdfium = Pdfium::default();
-    let document = pdfium.load_pdf_from_file(path, None)
+    let document = pdfium
+        .load_pdf_from_file(path, None)
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
     let page_count = document.pages().len() as u32;
@@ -372,19 +410,23 @@ fn import_pdf(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<Slide
                 .set_target_width(1920)
                 .set_target_height(1080);
 
-            let image = page.render_with_config(&render_config)
+            let image = page
+                .render_with_config(&render_config)
                 .map_err(|e| AppError::Internal(e.to_string()))?
                 .as_image();
 
             let bg_path = media_dir.join(format!("slide_{n}_bg.png"));
-            image.save(&bg_path)
+            image
+                .save(&bg_path)
                 .map_err(|e| AppError::Internal(e.to_string()))?;
 
-            let raw_text = page.text()
+            let raw_text = page
+                .text()
                 .map_err(|e| AppError::Internal(e.to_string()))?
                 .all();
 
-            let title = raw_text.lines()
+            let title = raw_text
+                .lines()
                 .next()
                 .unwrap_or("")
                 .chars()
@@ -409,11 +451,17 @@ fn import_pdf(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<Slide
 
         match result {
             Ok(entry) => {
-                bus.publish(AppEvent::DeckImportProgress { slide: n, total: page_count });
+                bus.publish(AppEvent::DeckImportProgress {
+                    slide: n,
+                    total: page_count,
+                });
                 slides.push(entry);
             }
             Err(reason) => {
-                bus.publish(AppEvent::DeckImportFailed { slide: n, reason: reason.to_string() });
+                bus.publish(AppEvent::DeckImportFailed {
+                    slide: n,
+                    reason: reason.to_string(),
+                });
             }
         }
     }
@@ -423,12 +471,17 @@ fn import_pdf(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<Slide
 
 pub fn is_code_slide(blocks: &[SlideTextBlock]) -> bool {
     const MONOSPACE_FAMILIES: &[&str] = &[
-        "Courier New", "Consolas", "Monaco",
-        "Fira Code", "JetBrains Mono", "Source Code Pro",
+        "Courier New",
+        "Consolas",
+        "Monaco",
+        "Fira Code",
+        "JetBrains Mono",
+        "Source Code Pro",
     ];
     blocks.iter().any(|block| {
         block.runs.iter().any(|run| {
-            run.font_family.as_deref()
+            run.font_family
+                .as_deref()
                 .map(|f| MONOSPACE_FAMILIES.contains(&f))
                 .unwrap_or(false)
         })
@@ -452,7 +505,11 @@ mod tests {
     }
 
     fn make_block(run: SlideTextRun) -> SlideTextBlock {
-        SlideTextBlock { runs: vec![run], alignment: TextAlignment::Left, indent_level: 0 }
+        SlideTextBlock {
+            runs: vec![run],
+            alignment: TextAlignment::Left,
+            indent_level: 0,
+        }
     }
 
     #[test]

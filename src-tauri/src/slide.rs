@@ -64,11 +64,71 @@ impl SlideDeck {
     pub fn stub() -> Self {
         Self {
             slides: vec![
-                SlideEntry { index: 0, title: "Welcome".into(), body: "StreamDeck F1.2 State Machine".into(), notes: "Welcome the audience. Mention the event name and your role.".into(), background_path: None, rich_body: Vec::new(), word_count: 0, has_background_image: false, is_code_slide: false, layout_unsupported: false },
-                SlideEntry { index: 1, title: "Architecture".into(), body: "Event bus · Rust state · React renderer".into(), notes: "Explain the three-layer architecture: Rust core, Tauri bridge, React UI.".into(), background_path: None, rich_body: Vec::new(), word_count: 0, has_background_image: false, is_code_slide: false, layout_unsupported: false },
-                SlideEntry { index: 2, title: "Navigation".into(), body: "Advance · Rewind · Jump · Boundary events".into(), notes: "Demo advance and rewind live. Show the boundary events in the log.".into(), background_path: None, rich_body: Vec::new(), word_count: 0, has_background_image: false, is_code_slide: false, layout_unsupported: false },
-                SlideEntry { index: 3, title: "Observability".into(), body: "Every transition is a typed AppEvent".into(), notes: "Point to the event log in the controller — every action is visible.".into(), background_path: None, rich_body: Vec::new(), word_count: 0, has_background_image: false, is_code_slide: false, layout_unsupported: false },
-                SlideEntry { index: 4, title: "Next: F1.3".into(), body: "Controller slide panel with thumbnails".into(), notes: "Preview F1.3 features: thumbnails, notes panel, keyboard shortcuts.".into(), background_path: None, rich_body: Vec::new(), word_count: 0, has_background_image: false, is_code_slide: false, layout_unsupported: false },
+                SlideEntry {
+                    index: 0,
+                    title: "Welcome".into(),
+                    body: "StreamDeck F1.2 State Machine".into(),
+                    notes: "Welcome the audience. Mention the event name and your role.".into(),
+                    background_path: None,
+                    rich_body: Vec::new(),
+                    word_count: 0,
+                    has_background_image: false,
+                    is_code_slide: false,
+                    layout_unsupported: false,
+                },
+                SlideEntry {
+                    index: 1,
+                    title: "Architecture".into(),
+                    body: "Event bus · Rust state · React renderer".into(),
+                    notes:
+                        "Explain the three-layer architecture: Rust core, Tauri bridge, React UI."
+                            .into(),
+                    background_path: None,
+                    rich_body: Vec::new(),
+                    word_count: 0,
+                    has_background_image: false,
+                    is_code_slide: false,
+                    layout_unsupported: false,
+                },
+                SlideEntry {
+                    index: 2,
+                    title: "Navigation".into(),
+                    body: "Advance · Rewind · Jump · Boundary events".into(),
+                    notes: "Demo advance and rewind live. Show the boundary events in the log."
+                        .into(),
+                    background_path: None,
+                    rich_body: Vec::new(),
+                    word_count: 0,
+                    has_background_image: false,
+                    is_code_slide: false,
+                    layout_unsupported: false,
+                },
+                SlideEntry {
+                    index: 3,
+                    title: "Observability".into(),
+                    body: "Every transition is a typed AppEvent".into(),
+                    notes: "Point to the event log in the controller — every action is visible."
+                        .into(),
+                    background_path: None,
+                    rich_body: Vec::new(),
+                    word_count: 0,
+                    has_background_image: false,
+                    is_code_slide: false,
+                    layout_unsupported: false,
+                },
+                SlideEntry {
+                    index: 4,
+                    title: "Next: F1.3".into(),
+                    body: "Controller slide panel with thumbnails".into(),
+                    notes: "Preview F1.3 features: thumbnails, notes panel, keyboard shortcuts."
+                        .into(),
+                    background_path: None,
+                    rich_body: Vec::new(),
+                    word_count: 0,
+                    has_background_image: false,
+                    is_code_slide: false,
+                    layout_unsupported: false,
+                },
             ],
         }
     }
@@ -76,8 +136,7 @@ impl SlideDeck {
     pub fn load_from_json(path: &std::path::Path) -> Result<Self, crate::error::AppError> {
         let data = std::fs::read_to_string(path)
             .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
-        serde_json::from_str(&data)
-            .map_err(|e| crate::error::AppError::Internal(e.to_string()))
+        serde_json::from_str(&data).map_err(|e| crate::error::AppError::Internal(e.to_string()))
     }
 
     pub fn save_to_json(&self, path: &std::path::Path) -> Result<(), crate::error::AppError> {
@@ -87,8 +146,7 @@ impl SlideDeck {
         }
         let data = serde_json::to_string_pretty(self)
             .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
-        std::fs::write(path, data)
-            .map_err(|e| crate::error::AppError::Internal(e.to_string()))
+        std::fs::write(path, data).map_err(|e| crate::error::AppError::Internal(e.to_string()))
     }
 
     pub fn get(&self, index: usize) -> Option<&SlideEntry> {
@@ -197,7 +255,11 @@ mod tests {
     fn stub_deck_notes_are_non_empty() {
         let deck = SlideDeck::stub();
         for entry in &deck.slides {
-            assert!(!entry.notes.is_empty(), "Slide {} has empty notes", entry.index);
+            assert!(
+                !entry.notes.is_empty(),
+                "Slide {} has empty notes",
+                entry.index
+            );
         }
     }
 

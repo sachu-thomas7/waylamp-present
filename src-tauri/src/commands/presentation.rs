@@ -1,10 +1,10 @@
-use std::sync::{Arc, Weak};
-use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::Manager;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use crate::bus::EventBus;
 use crate::error::AppError;
 use crate::events::AppEvent;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Weak};
+use tauri::Manager;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 // Tracks whether the presentation window is currently visible.
 // Prevents double-registration of the Escape shortcut.
@@ -50,9 +50,15 @@ pub async fn presentation_show(
     // viewport (100vw/100vh) for a resize applied while the window is still hidden, which
     // left the presentation content laid out against a stale, tiny size that no later
     // ResizeObserver firing ever corrected (confirmed via manual launch test).
-    window.show().map_err(|e| AppError::Internal(e.to_string()))?;
-    window.set_decorations(false).map_err(|e| AppError::Internal(e.to_string()))?;
-    window.set_fullscreen(true).map_err(|e| AppError::Internal(e.to_string()))?;
+    window
+        .show()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    window
+        .set_decorations(false)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+    window
+        .set_fullscreen(true)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     // Only pin always-on-top when there's a genuine second display: Windows doesn't expose
     // a mirrored output (e.g. a ClickShare dongle in mirror mode) as a second display, so a
@@ -60,10 +66,16 @@ pub async fn presentation_show(
     // presentation painted over everything even after Alt+Tab, since alt-tab only moves
     // keyboard focus, not stacking order — blocking the operator from ever bringing the
     // controller back to the front on a one-screen (or mirrored) rig.
-    let multi_display = crate::display::list_displays(&app).map(|d| d.len() >= 2).unwrap_or(false);
-    window.set_always_on_top(multi_display).map_err(|e| AppError::Internal(e.to_string()))?;
+    let multi_display = crate::display::list_displays(&app)
+        .map(|d| d.len() >= 2)
+        .unwrap_or(false);
+    window
+        .set_always_on_top(multi_display)
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    window.set_focus().map_err(|e| AppError::Internal(e.to_string()))?;
+    window
+        .set_focus()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     // Publish before the shortcut registration below, so a failure there can't skip this.
     let sm = machine.read().await;
@@ -78,20 +90,23 @@ pub async fn presentation_show(
 
     let app_handle = app.clone();
     let bus_weak: Weak<EventBus> = Arc::downgrade(&bus);
-    if let Err(e) = app.global_shortcut().on_shortcut(escape_shortcut(), move |_shortcut_app, _shortcut, event| {
-        if event.state() != ShortcutState::Pressed {
-            return;
-        }
-        let handle = app_handle.clone();
-        let bus_weak = bus_weak.clone();
-        // Spawn onto async runtime so the unregister happens outside this callback's lock
-        tauri::async_runtime::spawn(async move {
-            if let Some(bus_arc) = bus_weak.upgrade() {
-                hide_presentation(&handle, &bus_arc);
+    if let Err(e) = app.global_shortcut().on_shortcut(
+        escape_shortcut(),
+        move |_shortcut_app, _shortcut, event| {
+            if event.state() != ShortcutState::Pressed {
+                return;
             }
-            let _ = handle.global_shortcut().unregister(escape_shortcut());
-        });
-    }) {
+            let handle = app_handle.clone();
+            let bus_weak = bus_weak.clone();
+            // Spawn onto async runtime so the unregister happens outside this callback's lock
+            tauri::async_runtime::spawn(async move {
+                if let Some(bus_arc) = bus_weak.upgrade() {
+                    hide_presentation(&handle, &bus_arc);
+                }
+                let _ = handle.global_shortcut().unregister(escape_shortcut());
+            });
+        },
+    ) {
         eprintln!("Escape shortcut registration failed (non-fatal): {e}");
     }
 

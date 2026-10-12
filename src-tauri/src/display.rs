@@ -32,7 +32,12 @@ pub fn new_display_handle(assigned_display_id: Option<String>) -> DisplayStateHa
 // Tauri's Monitor exposes no stable hardware id — name + position is the closest stable
 // proxy available and holds across sleep/wake, but changes if the OS renumbers displays.
 fn monitor_id(name: Option<&String>, x: i32, y: i32) -> String {
-    format!("{}@{},{}", name.map(String::as_str).unwrap_or("unknown"), x, y)
+    format!(
+        "{}@{},{}",
+        name.map(String::as_str).unwrap_or("unknown"),
+        x,
+        y
+    )
 }
 
 /// Enumerate connected displays via the Tauri window manager. Thin wrapper around
@@ -54,7 +59,10 @@ pub fn list_displays(app: &AppHandle) -> Result<Vec<DisplayInfo>, AppError> {
             let is_primary = primary_id.as_deref() == Some(id.as_str());
             DisplayInfo {
                 id,
-                name: m.name().cloned().unwrap_or_else(|| "Unknown Display".into()),
+                name: m
+                    .name()
+                    .cloned()
+                    .unwrap_or_else(|| "Unknown Display".into()),
                 width: m.size().width,
                 height: m.size().height,
                 x: m.position().x,
@@ -89,7 +97,9 @@ pub fn spawn_watch_task(
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
         loop {
             interval.tick().await;
-            let Ok(current) = list_displays(&app) else { continue };
+            let Ok(current) = list_displays(&app) else {
+                continue;
+            };
 
             let (previous, assigned) = {
                 let state = display_state.read().await;
@@ -104,9 +114,10 @@ pub fn spawn_watch_task(
             if is_assigned_display_lost(&assigned, &current) {
                 display_state.write().await.assigned_display_id = None;
                 bus.publish(crate::events::AppEvent::DisplayLost);
-                if let (Some(window), Some(fallback)) =
-                    (app.get_webview_window("presentation"), pick_fallback(&current))
-                {
+                if let (Some(window), Some(fallback)) = (
+                    app.get_webview_window("presentation"),
+                    pick_fallback(&current),
+                ) {
                     let _ = apply_position(&window, fallback);
                 }
             }
@@ -135,7 +146,10 @@ pub fn is_assigned_display_lost(assigned: &Option<String>, current: &[DisplayInf
 /// Fallback target when the assigned display disappears: primary display, else the first
 /// available, else None (no displays at all).
 pub fn pick_fallback(current: &[DisplayInfo]) -> Option<&DisplayInfo> {
-    current.iter().find(|d| d.is_primary).or_else(|| current.first())
+    current
+        .iter()
+        .find(|d| d.is_primary)
+        .or_else(|| current.first())
 }
 
 #[cfg(test)]
@@ -156,7 +170,10 @@ mod tests {
 
     #[test]
     fn monitor_id_uses_name_and_position() {
-        assert_eq!(monitor_id(Some(&"DELL".to_string()), 1920, 0), "DELL@1920,0");
+        assert_eq!(
+            monitor_id(Some(&"DELL".to_string()), 1920, 0),
+            "DELL@1920,0"
+        );
     }
 
     #[test]

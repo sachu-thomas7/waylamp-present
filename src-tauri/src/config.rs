@@ -1,5 +1,5 @@
-use serde::Serialize;
 use serde::Deserialize;
+use serde::Serialize;
 
 pub const CONFIG_VERSION: u32 = 1;
 
@@ -58,7 +58,10 @@ mod tests {
         let restored: StreamDeckConfig = toml::from_str(&serialised).unwrap();
         assert_eq!(original.version, restored.version);
         assert_eq!(original.app.log_level, restored.app.log_level);
-        assert_eq!(original.presentation.display_id, restored.presentation.display_id);
+        assert_eq!(
+            original.presentation.display_id,
+            restored.presentation.display_id
+        );
     }
 
     #[test]
@@ -73,6 +76,9 @@ mod tests {
         original.presentation.display_id = Some("Built-in@0,0".into());
         let serialised = toml::to_string(&original).unwrap();
         let restored: StreamDeckConfig = toml::from_str(&serialised).unwrap();
-        assert_eq!(restored.presentation.display_id, Some("Built-in@0,0".into()));
+        assert_eq!(
+            restored.presentation.display_id,
+            Some("Built-in@0,0".into())
+        );
     }
 }

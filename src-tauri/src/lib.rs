@@ -1,14 +1,14 @@
-mod error;
-pub mod commands;
-pub mod events;
 pub mod bus;
+pub mod commands;
 pub mod config;
 pub mod config_loader;
-pub mod slide;
-pub mod slide_state_machine;
-pub mod scene;
 pub mod deck_importer;
 pub mod display;
+mod error;
+pub mod events;
+pub mod scene;
+pub mod slide;
+pub mod slide_state_machine;
 
 #[cfg(not(test))]
 mod app;

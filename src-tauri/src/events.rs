@@ -1,7 +1,7 @@
-use crate::slide::SlidePayload;
+use crate::display::DisplayInfo;
 use crate::scene::SceneMediaPayload;
 use crate::scene::SceneSource;
-use crate::display::DisplayInfo;
+use crate::slide::SlidePayload;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "payload")]
