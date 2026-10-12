@@ -9,6 +9,7 @@ pub mod events;
 pub mod scene;
 pub mod slide;
 pub mod slide_state_machine;
+pub mod state;
 
 #[cfg(not(test))]
 mod app;

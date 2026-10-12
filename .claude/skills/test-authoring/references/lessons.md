@@ -23,3 +23,4 @@ Keep entries to one or two lines: what happened → what to do. Date them.
   (`transformCallback`) are expected there. → Don't treat those as failures in browser mode;
   assert with `mockIPC` instead.
 - 2026-10 — A fault injected to prove a gate can fail also trips the pre-push-style Bash hook (it runs `verify.sh core` on every call), blocking the revert via Bash. → Revert with the Edit tool; prove fmt/lint faults with `verify.sh t0` (cheap) and revert before any further Bash call.
+- 2026-10 — Integration test binaries that touch the Tauri mock runtime exit with `STATUS_ENTRYPOINT_NOT_FOUND` on Windows: tauri-build's Common Controls v6 manifest is only linked into the bin. → `build.rs` emits `rustc-link-arg-tests` manifest args; also commands taking a concrete `tauri::AppHandle` can't register on `MockRuntime` (make them `AppHandle<R>` before testing them).

@@ -312,6 +312,7 @@ rust-analyzer state on a fresh checkout.
   `verify.sh core` before any `git push` and blocks the push if it fails (the script
   itself early-exits unless stdin contains `git push`, since the `if:` filter misfires). A `PostToolUse`
   hook (`.claude/hooks/fmt-rust.sh`) auto-runs `cargo fmt` after editing any `.rs` file.
+- T1.1 done: mock-runtime harness in `src-tauri/tests/common/mod.rs` (`TestApp`, `collect_events`) over `state::manage_core`/`mock_invoke_handler` (shared with `app.rs`); only runtime-generic commands are reachable in the mock until the `tauri::AppHandle` commands are made generic. Gate: `bash scripts/verify.sh t1`.
 - Testing: `dev-docs/test_framework_roadmap.md` (build order, items T0–T7) and
   `dev-docs/test_plan.md` (coverage, journeys, upgrade protocol, manual checklist). The
   `test-authoring` skill (`.claude/skills/test-authoring/`) is the how-to; the `test-engineer`

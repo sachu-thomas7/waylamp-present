@@ -9,7 +9,6 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 use crate::bus::EventBus;
 use crate::config_loader::ConfigLoader;
 use crate::events::AppEvent;
-use crate::slide::SlideDeck;
 use crate::slide_state_machine;
 
 pub struct TimerAbortHandle(pub tokio::task::AbortHandle);
@@ -23,29 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .manage(Arc::clone(&bus_arc))
-        .invoke_handler(tauri::generate_handler![
-            crate::commands::info::get_build_info,
-            crate::commands::system::ping,
-            crate::commands::config::get_config,
-            crate::commands::presentation::presentation_show,
-            crate::commands::presentation::presentation_hide,
-            crate::commands::slide::slide_advance,
-            crate::commands::slide::slide_rewind,
-            crate::commands::slide::slide_jump_to,
-            crate::commands::slide::slide_get_current,
-            crate::commands::slide::slide_timer_reset,
-            crate::commands::deck::deck_import,
-            crate::commands::deck::deck_get_all_slides,
-            crate::commands::deck::deck_restore,
-            crate::commands::deck::deck_clear,
-            crate::commands::scene::scene_push_image,
-            crate::commands::scene::scene_push_video,
-            crate::commands::scene::scene_set_source,
-            crate::commands::scene::scene_get_active_source,
-            crate::commands::display::display_list,
-            crate::commands::display::display_assign_presentation,
-        ])
+        .invoke_handler(crate::state::invoke_handler())
         .setup(move |app| {
             let presentation_url = if cfg!(debug_assertions) {
                 WebviewUrl::External("http://localhost:5174".parse().expect("valid URL"))
@@ -68,8 +45,21 @@ pub fn run() {
                 .app_data_dir()
                 .map_err(|e| std::io::Error::other(e.to_string()))?;
 
-            let deck = SlideDeck::stub();
-            let machine = slide_state_machine::new_handle(deck, data_dir.clone());
+            let config_path = ConfigLoader::resolve_path(app.handle()).map_err(|e| {
+                Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
+            })?;
+
+            let config = ConfigLoader::load_or_default(&config_path).map_err(|e| {
+                eprintln!("Config load failed: {e}");
+                Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
+            })?;
+
+            let machine = crate::state::manage_core(
+                app,
+                Arc::clone(&bus_arc),
+                data_dir.clone(),
+                config.clone(),
+            );
             let machine_for_restore = Arc::clone(&machine);
             let bus_for_restore = Arc::clone(&bus_arc);
             let app_handle_for_restore = app.handle().clone();
@@ -104,21 +94,7 @@ pub fn run() {
                 app_handle_for_restore.manage(TimerAbortHandle(abort));
             });
 
-            app.manage(machine);
-
-            let scene_handle = crate::scene::new_scene_handle();
-            app.manage(scene_handle);
-
             tauri::async_runtime::spawn(run_event_bridge(app.handle().clone(), rx));
-
-            let config_path = ConfigLoader::resolve_path(app.handle()).map_err(|e| {
-                Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
-            })?;
-
-            let config = ConfigLoader::load_or_default(&config_path).map_err(|e| {
-                eprintln!("Config load failed: {e}");
-                Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
-            })?;
 
             let watcher =
                 ConfigLoader::spawn_watcher(config_path, Arc::clone(&bus_arc)).map_err(|e| {
@@ -144,7 +120,6 @@ pub fn run() {
             app.manage(display_handle);
             app.manage(DisplayWatchAbortHandle(display_watch_abort));
 
-            app.manage(config);
             app.manage(watcher);
 
             Ok(())

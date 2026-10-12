@@ -667,6 +667,43 @@ run_t0() {
 }
 
 # ══════════════════════════════════════════════════════════════════
+# T1 — Rust integration tests (L2, mock runtime, no webview)
+# ══════════════════════════════════════════════════════════════════
+run_t1_1() {
+  section "T1.1 — Mock-runtime harness"
+
+  file_exists "src-tauri/src/state.rs"
+  file_exists "src-tauri/tests/common/mod.rs"
+  file_exists "src-tauri/tests/harness_smoke.rs"
+  file_contains "state.rs exposes manage_core" "src-tauri/src/state.rs" "pub fn manage_core"
+  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::manage_core" \
+    && pass "app.rs uses shared manage_core" || fail "app.rs must call state::manage_core (non-comment)"
+  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::invoke_handler" \
+    && pass "app.rs uses shared invoke_handler" || fail "app.rs must call state::invoke_handler (non-comment)"
+  file_contains "app.rs stays gated" "src-tauri/src/lib.rs" "cfg(not(test))"
+  file_contains "harness uses tauri mock runtime" "src-tauri/tests/common/mod.rs" "mock_builder"
+  file_contains "harness provides collect_events" "src-tauri/tests/common/mod.rs" "fn collect_events"
+  local cargo_toml="src-tauri/Cargo.toml"
+  local dev_deps prod_deps
+  dev_deps=$(awk '/^\[dev-dependencies\]/{f=1;next} /^\[/{f=0} f' "$cargo_toml")
+  prod_deps=$(awk '/^\[dependencies\]/{f=1;next} /^\[/{f=0} f' "$cargo_toml")
+  echo "$dev_deps" | grep -q '"test"' && ! echo "$prod_deps" | grep -q '"test"'     && pass "tauri test feature is dev-only" || fail "tauri test feature must be in [dev-dependencies] only"
+
+  local t11_log
+  t11_log=$(mktemp)
+  check "T1.1 harness smoke tests pass (>=6, none failed)" \
+    bash -c 'cd src-tauri && cargo test --test harness_smoke 2>&1 | tee "$1" \
+      && ! grep -q "FAILED" "$1" \
+      && n=$(grep -o "test result: ok\. [0-9]* passed" "$1" | grep -o "[0-9]*" | head -1) \
+      && [ "${n:-0}" -ge 6 ]' _ "$t11_log"
+  rm -f "$t11_log"
+}
+
+run_t1() {
+  run_t1_1
+}
+
+# ══════════════════════════════════════════════════════════════════
 # DISPATCH
 # ══════════════════════════════════════════════════════════════════
 echo ""
@@ -717,11 +754,17 @@ case "$FILTER" in
   t0)
     run_t0
     ;;
+  t1.1)
+    run_t1_1
+    ;;
+  t1)
+    run_t1
+    ;;
   core)
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_t0; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_t0; run_t1; run_core
     ;;
 esac
 

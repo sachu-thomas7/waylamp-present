@@ -4,7 +4,19 @@ fn main() {
         "cargo:rustc-env=BUILD_TIMESTAMP={}",
         chrono_or_manual_timestamp()
     );
+    embed_test_manifest();
     tauri_build::build()
+}
+
+// Test binaries don't get tauri-build's app manifest; without Common Controls v6 they fail to start.
+fn embed_test_manifest() {
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("msvc") {
+        return;
+    }
+    println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+    println!(
+        "cargo:rustc-link-arg-tests=/MANIFESTDEPENDENCY:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'"
+    );
 }
 
 fn chrono_or_manual_timestamp() -> String {

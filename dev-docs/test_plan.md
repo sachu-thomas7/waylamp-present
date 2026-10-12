@@ -62,7 +62,7 @@ test you add.
 | Feature | Behaviour under test | L1 | L2 | L3 | L4 |
 |---|---|---|---|---|---|
 | F0.1 bootstrap | two windows launch | — | — | — | ⬜ T4.2 smoke (J1) |
-| F0.2 IPC layer | typed commands, `AppError` discriminated, no `.unwrap()` | ✅ `commands::system` | ⬜ T1.1 | ⬜ T3.2 | ⬜ J1 |
+| F0.2 IPC layer | typed commands, `AppError` discriminated, no `.unwrap()` | ✅ `commands::system` | 🟡 T1.1 harness (`harness_smoke`: `get_build_info`, `get_config`, unknown cmd, `slide_get_current`/`slide_advance` + events) → more in T1.2/T1.3. Not yet reachable from the harness (T1.2 prerequisite): restore/display/timer handles and the 8 commands taking a concrete `tauri::AppHandle` (presentation_show/hide, deck_import/restore/clear, scene_push_image, display_list, display_assign_presentation) | ⬜ T3.2 | ⬜ J1 |
 | F0.3 event bus | broadcast, lag handling | ✅ `bus::tests` | ⬜ T1.2 | ⬜ T3.2 | ⬜ J2 |
 | F0.4 TOML config | load, invalid TOML error, hot reload | ✅ `config`, `config_loader` | ⬜ T1.3 | — | ⬜ (J9 optional) |
 | F1.1 presentation window | renders slide from events; listen-only | ✅ presentation `slideStore` | 🟡 `appEventWiring.integration` → ⬜ T2.3 | ⬜ T1.4 | ⬜ J2, J4 |
@@ -184,7 +184,7 @@ Tauri/OS-integration bumps.
 
 | Metric | Baseline 2026-10-11 | Target |
 |---|---|---|
-| Rust tests | 55 unit + 1 integration (+1 ignored) | grows with T1/T3 |
+| Rust tests | 55 unit + 1 integration + 6 harness smoke (+1 ignored) (2026-10-12, T1.1) | grows with T1/T3 |
 | Frontend test files | controller 4, presentation 2 | T2 adds component tests |
 | E2E journeys green | 0 / 9 | 9 / 9 (T4.3) |
 | Line coverage (frontends) | controller 45.5% lines / 45% branches; presentation 81.4% lines / 83.3% branches (v8, 2026-10-12; `npm run test:coverage`) | floor at T6.3 |
