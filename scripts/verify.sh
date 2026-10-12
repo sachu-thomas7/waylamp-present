@@ -647,6 +647,14 @@ run_t0() {
   file_contains "run_core runs cargo fmt --check" "scripts/verify.sh" "cargo fmt --check"
   check "cargo fmt --check" \
     bash -c 'cd src-tauri && cargo fmt --check'
+
+  subsection "T0.3 — test directory contract"
+  local d
+  for d in src-tauri/tests src-tauri/tests/fixtures controller/src/test presentation/src/test \
+           e2e e2e/specs e2e/pages e2e/fixtures; do
+    dir_exists "$d"
+  done
+  file_contains "skill documents the layout" ".claude/skills/test-authoring/SKILL.md" "Directory contract"
 }
 
 # ══════════════════════════════════════════════════════════════════

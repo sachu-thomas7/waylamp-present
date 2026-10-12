@@ -48,6 +48,17 @@ If a layer-4 test fails and a layer-1/2 test could have caught it, add the lower
    copy to `src-tauri/tests/fixtures/`); never hand-edit binaries.
 10. **No retries in the gate.** Fix the cause. Quarantine only with owner + expiry.
 
+## 2b. Directory contract
+
+```
+src-tauri/tests/                  Rust integration tests (one file per area) + fixtures/
+controller/src/**/*.test.ts(x)    co-located unit/component tests
+controller/src/test/              shared setup, mockIPC helpers, render helpers
+presentation/src/test/            same
+e2e/                              L4 harness (own package.json), specs/, pages/, fixtures/
+```
+`verify.sh t0` asserts these dirs exist; add new top-level test dirs there too.
+
 ## 3. Workflow
 
 1. **Plan** (anything beyond one small test): list the scenarios and the layer for each,

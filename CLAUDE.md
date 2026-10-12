@@ -146,6 +146,7 @@ isn't tracked in the repo.
 
 ## Current status (2026-09-19)
 - **T0.2 (2026-10)**: `cargo fmt --check` is now in `verify.sh core` (and `verify.sh t0`); tree was reformatted once. CI does not yet run it (needs human-approved workflow edit).
+- **T0.3 (2026-10)**: test directory contract documented in the test-authoring skill (§2b), `e2e/{specs,pages,fixtures}` created with READMEs, `verify.sh t0` asserts all dirs exist.
 
 - **Phase 0** (F0.1–F0.4: bootstrap, IPC layer, event bus, TOML config) — done.
 - **Phase 1 — all of F1.1–F1.5 done**: presentation window + slide renderer, slide state
