@@ -307,6 +307,12 @@ rust-analyzer state on a fresh checkout.
 - A `PreToolUse` hook (`.claude/settings.json` → `.claude/hooks/pre-push-verify.sh`) runs
   `verify.sh core` before any `git push` and blocks the push if it fails. A `PostToolUse`
   hook (`.claude/hooks/fmt-rust.sh`) auto-runs `cargo fmt` after editing any `.rs` file.
+- Testing: `dev-docs/test_framework_roadmap.md` (build order, items T0–T7) and
+  `dev-docs/test_plan.md` (coverage, journeys, upgrade protocol, manual checklist). The
+  `test-authoring` skill (`.claude/skills/test-authoring/`) is the how-to; the `test-engineer`
+  subagent implements one roadmap test item (never runs git); `test-reviewer` is a read-only
+  false-green reviewer. Real-app E2E (Playwright over WebView2 CDP) is local-only — keep it
+  out of CI `pull_request` runs (metered minutes).
 - The built-in `/run` skill can launch the app for manual verification; `/code-review` for
   an independent review pass on a diff.
 
