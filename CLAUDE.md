@@ -157,10 +157,10 @@ isn't tracked in the repo.
   clippy clean, typecheck clean in both frontends. `bash scripts/verify.sh f1` is green.
 - Phase 1 is functionally complete now; Phase 2 (NDI camera ingest) is next per the
   roadmap and hasn't been started — no GStreamer/NDI code exists anywhere yet.
-- **Zero frontend tests** — no vitest, no `*.test.tsx`, in either `controller/` or
-  `presentation/`. Rust side has solid coverage (49 `#[test]`s across bus, config,
-  config_loader, slide, slide_state_machine, deck_importer, display, commands::system);
-  frontend does not.
+- **Frontend tests are thin** — Vitest store + event-wiring tests only (controller 12,
+  presentation 4; baseline coverage in `dev-docs/test_plan.md` §12), no component render
+  tests yet. Rust side has solid coverage (49 `#[test]`s across bus, config,
+  config_loader, slide, slide_state_machine, deck_importer, display, commands::system).
 - `deck_importer.rs` now has fixture-based integration tests
   (`src-tauri/tests/deck_import_fixtures.rs`) against real generated `.pptx`/`.pdf` files in
   `src-tauri/tests/fixtures/` (same files as `dev-docs/test-assets/`, regenerate both via
@@ -198,6 +198,8 @@ isn't tracked in the repo.
   tsconfig's `include: ["src"]` pointed at a `src/` containing only an icon `assets/`
   folder, no TypeScript; confirmed unused by both `verify.sh` and CI, which always use
   `--prefix controller`/`--prefix presentation` explicitly).
+
+- **Coverage visibility (T0.4)**: `npm run test:coverage` in `controller/` and `presentation/` (Vitest v8, report-only, no thresholds, output in gitignored `coverage/`); baseline in `dev-docs/test_plan.md` §12. `verify.sh t0` checks the scripts exist.
 
 ## Verification — `scripts/verify.sh`
 

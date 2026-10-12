@@ -77,7 +77,7 @@ test you add.
 
 Current baseline (2026-10-11): Rust 55 unit tests + 1 fixture integration (+1 `#[ignore]`d PDF);
 frontend: controller 3 store tests + 1 wiring integration, presentation 1 store test + 1 wiring
-integration. No component/render tests, no E2E, no coverage numbers.
+integration. No component/render tests, no E2E; coverage baseline in §12.
 
 ## 5. Environments and test data
 
@@ -187,7 +187,8 @@ Tauri/OS-integration bumps.
 | Rust tests | 55 unit + 1 integration (+1 ignored) | grows with T1/T3 |
 | Frontend test files | controller 4, presentation 2 | T2 adds component tests |
 | E2E journeys green | 0 / 9 | 9 / 9 (T4.3) |
-| Line coverage (frontends) | not measured | baseline at T0.4, then floor |
+| Line coverage (frontends) | controller 45.5% lines / 45% branches; presentation 81.4% lines / 83.3% branches (v8, 2026-10-12; `npm run test:coverage`) | floor at T6.3 |
+| Line coverage (Rust) | not measured (`cargo-llvm-cov` not installed) | optional |
 | Time: `verify.sh core` | ~2–4 min warm | ≤ 6 min |
 | Time: `verify.sh e2e` | n/a | ≤ 8 min |
 | Flaky/quarantined tests | n/a | 0 at release |

@@ -655,6 +655,15 @@ run_t0() {
     dir_exists "$d"
   done
   file_contains "skill documents the layout" ".claude/skills/test-authoring/SKILL.md" "Directory contract"
+
+  subsection "T0.4 — coverage visibility"
+  local f
+  for f in controller presentation; do
+    file_contains "$f has test:coverage script" "$f/package.json" '"test:coverage"'
+    file_contains "$f has @vitest/coverage-v8" "$f/package.json" '"@vitest/coverage-v8"'
+    file_contains "$f vitest config uses v8 coverage" "$f/vitest.config.ts" 'provider: "v8"'
+  done
+  file_contains "coverage output is gitignored" ".gitignore" "coverage"
 }
 
 # ══════════════════════════════════════════════════════════════════
