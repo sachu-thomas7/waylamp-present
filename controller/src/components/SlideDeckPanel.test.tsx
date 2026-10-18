@@ -20,7 +20,7 @@ async function mountLoaded(
 ) {
   const deck = makeDeck(total, over);
   mount({ slide_get_current: () => deck[0], deck_get_all_slides: () => deck, ...extra });
-  await screen.findByTestId('slide-thumb-0');
+  await screen.findByRole('button', { name: 'Slide 1' });
   return deck;
 }
 
@@ -114,8 +114,8 @@ describe('SlideDeckPanel loaded state', () => {
   it('renders the count badge, one thumbnail per slide, notes and an unset timer', async () => {
     await mountLoaded(3, { 0: { notes: 'Say hello' } });
     expect(screen.getByText('1 / 3')).toBeInTheDocument();
-    expect(screen.getAllByTestId(/^slide-thumb-/)).toHaveLength(3);
-    expect(within(screen.getByTestId('slide-thumb-2')).getByText('Slide 3 title')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /^Slide [0-9]+$/ })).toHaveLength(3);
+    expect(within(screen.getByRole('button', { name: 'Slide 3' })).getByText('Slide 3 title')).toBeInTheDocument();
     expect(screen.getByText(/Notes — Say hello/)).toBeInTheDocument();
     expect(screen.getByText('--:--')).toBeInTheDocument();
   });
@@ -131,9 +131,9 @@ describe('SlideDeckPanel loaded state', () => {
   it('shows the layout_unsupported badge only on flagged slides', async () => {
     await mountLoaded(3, { 1: { layout_unsupported: true } });
     const badge = 'Unsupported layout — imported with blank body';
-    expect(within(screen.getByTestId('slide-thumb-1')).getByTitle(badge)).toBeInTheDocument();
-    expect(within(screen.getByTestId('slide-thumb-0')).queryByTitle(badge)).not.toBeInTheDocument();
-    expect(within(screen.getByTestId('slide-thumb-2')).queryByTitle(badge)).not.toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: 'Slide 2' })).getByRole('img', { name: badge })).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: 'Slide 1' })).queryByRole('img', { name: badge })).not.toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: 'Slide 3' })).queryByRole('img', { name: badge })).not.toBeInTheDocument();
   });
 
   it('shows no badge when no slide is flagged', async () => {
@@ -155,13 +155,13 @@ describe('SlideDeckPanel loaded state', () => {
       1: { title: 'Agenda', body: 'secret numbers' },
       2: { title: 'Budget', body: 'q3' },
     };
-    const thumbs = () => screen.queryAllByTestId(/^slide-thumb-/);
+    const thumbs = () => screen.queryAllByRole('button', { name: /^Slide [0-9]+$/ });
 
     it('matches titles case-insensitively', async () => {
       const user = userEvent.setup();
       await mountLoaded(3, titled);
       await user.type(screen.getByPlaceholderText('Filter slides…'), 'AGEN');
-      expect(thumbs().map((t) => t.dataset.testid)).toEqual(['slide-thumb-1']);
+      expect(thumbs().map((t) => t.getAttribute('aria-label'))).toEqual(['Slide 2']);
     });
 
     it('does not match body text', async () => {
@@ -226,8 +226,23 @@ describe('SlideDeckPanel navigation commands', () => {
   it('clicking a thumbnail jumps to that slide', async () => {
     const user = userEvent.setup();
     await mountLoaded(3, {}, { slide_jump_to: () => null });
-    await user.click(screen.getByTestId('slide-thumb-2'));
+    await user.click(screen.getByRole('button', { name: 'Slide 3' }));
     await expectCalled(ipc, 'slide_jump_to', [{ index: 2 }]);
+  });
+
+  it('marks only the current thumbnail with aria-current', async () => {
+    await mountLoaded(3);
+    expect(screen.getByRole('button', { name: 'Slide 1' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'Slide 2' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('Space on a focused thumbnail selects it and does not also advance', async () => {
+    const user = userEvent.setup();
+    await mountLoaded(3, {}, { slide_jump_to: () => null });
+    screen.getByRole('button', { name: 'Slide 3' }).focus();
+    await user.keyboard(' ');
+    await expectCalled(ipc, 'slide_jump_to', [{ index: 2 }]);
+    expect(callsOf('slide_advance')).toEqual([]);
   });
 
   it('Space and ArrowRight advance, ArrowLeft rewinds', async () => {

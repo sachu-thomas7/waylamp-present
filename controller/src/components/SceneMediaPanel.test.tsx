@@ -36,6 +36,12 @@ describe('SceneMediaPanel', () => {
     await waitFor(() => expect(onScreen()).toHaveTextContent('On screen now: Scene Media'));
   });
 
+  it('exposes the selected source via aria-pressed', async () => {
+    await mount({ scene_get_active_source: () => 'SceneMedia' });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Scene Media' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByRole('button', { name: 'Slide Deck' })).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('choosing Scene Media invokes scene_set_source and the label only follows the event', async () => {
     const user = userEvent.setup();
     await mount({ scene_set_source: () => null });

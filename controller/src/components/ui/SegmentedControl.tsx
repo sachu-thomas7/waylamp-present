@@ -12,6 +12,7 @@ interface SegmentedControlProps<T extends string> {
 export function SegmentedControl<T extends string>({ options, value, onChange }: SegmentedControlProps<T>) {
   return (
     <div
+      role="group"
       style={{
         display: 'inline-flex',
         background: 'var(--color-bg)',
@@ -27,6 +28,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange }:
           <button
             key={opt.value}
             type="button"
+            aria-pressed={selected}
             onClick={() => onChange(opt.value)}
             style={{
               padding: '6px 14px',

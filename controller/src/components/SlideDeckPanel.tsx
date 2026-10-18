@@ -157,12 +157,24 @@ export function SlideDeckPanel() {
       {/* Thumbnail strip */}
       <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
         {filteredIndices.map((i) => (
-          <div
+          <button
             key={i}
-            data-testid={`slide-thumb-${i}`}
-            onClick={() => slideJumpTo(i).catch(console.error)}
+            type="button"
+            aria-label={`Slide ${i + 1}`}
+            aria-current={i === currentIndex ? 'true' : undefined}
+            onClick={(e) => {
+              slideJumpTo(i).catch(console.error);
+              e.currentTarget.blur();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === ' ') e.stopPropagation();
+            }}
             style={{
               flexShrink: 0,
+              padding: 0,
+              border: 'none',
+              background: 'none',
+              font: 'inherit',
               borderRadius: 8,
               cursor: 'pointer',
               overflow: 'hidden',
@@ -176,6 +188,8 @@ export function SlideDeckPanel() {
                 <SlideCanvas slide={slides[i]} scale={THUMB_SCALE} />
                 {slides[i].layout_unsupported && (
                   <div
+                    role="img"
+                    aria-label="Unsupported layout — imported with blank body"
                     title="Unsupported layout — imported with blank body"
                     style={{ position: 'absolute', top: 5, right: 5, color: 'var(--color-warn)' }}
                   >
@@ -184,7 +198,7 @@ export function SlideDeckPanel() {
                 )}
               </>
             )}
-          </div>
+          </button>
         ))}
       </div>
 
