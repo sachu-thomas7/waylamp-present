@@ -33,7 +33,7 @@ anyhow             = "1"
 toml               = "0.8"
 notify             = "6"
 keyring            = "3"
-zip             = "2"
+zip             = "9"
 quick-xml       = { version = "0.42", features = ["serialize"] }
 pdfium-render   = { version = "0.8", features = ["sync"] }
 uuid            = { version = "1", features = ["v4"] }

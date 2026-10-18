@@ -19,6 +19,24 @@ fn is_reload(e: &AppEvent) -> bool {
     matches!(e, AppEvent::ConfigReloaded)
 }
 
+// Re-runs `touch` until a reload arrives: some OS watchers (FSEvents) start asynchronously and miss an early write.
+async fn touch_until_reload(
+    events: &mut common::EventCollector,
+    mut touch: impl FnMut(),
+) -> Vec<AppEvent> {
+    let mut seen = Vec::new();
+    let deadline = std::time::Instant::now() + WATCH_DEADLINE;
+    while std::time::Instant::now() < deadline && !seen.iter().any(is_reload) {
+        touch();
+        seen.extend(
+            events
+                .collect_until(Duration::from_millis(500), |e| e.iter().any(is_reload))
+                .await,
+        );
+    }
+    seen
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn get_config_returns_the_defaults_the_app_started_with() {
     let t = TestApp::new();
@@ -53,11 +71,11 @@ async fn editing_the_config_file_publishes_config_reloaded_event_only() {
 
     let mut edited = StreamDeckConfig::default();
     edited.app.log_level = "debug".into();
-    ConfigLoader::save(&path, &edited).expect("edit config");
 
-    let seen = events
-        .collect_until(WATCH_DEADLINE, |e| e.iter().any(is_reload))
-        .await;
+    let seen = touch_until_reload(&mut events, || {
+        ConfigLoader::save(&path, &edited).expect("edit config")
+    })
+    .await;
     assert!(seen.iter().any(is_reload), "no ConfigReloaded: {seen:?}");
 }
 
@@ -69,11 +87,10 @@ async fn creating_the_config_file_after_the_watcher_starts_publishes_config_relo
     let _watcher = ConfigLoader::spawn_watcher(path.clone(), t.bus.clone()).expect("watcher");
     let mut events = t.collect_events();
 
-    std::fs::write(&path, "version = 1\n").expect("create config");
-
-    let seen = events
-        .collect_until(WATCH_DEADLINE, |e| e.iter().any(is_reload))
-        .await;
+    let seen = touch_until_reload(&mut events, || {
+        std::fs::write(&path, "version = 1\n").expect("create config")
+    })
+    .await;
     assert!(seen.iter().any(is_reload), "no ConfigReloaded: {seen:?}");
 }
 
@@ -85,11 +102,10 @@ async fn a_corrupt_edit_still_publishes_config_reloaded_event_only() {
     let _watcher = ConfigLoader::spawn_watcher(path.clone(), t.bus.clone()).expect("watcher");
     let mut events = t.collect_events();
 
-    std::fs::write(&path, "not valid toml ][[[").expect("corrupt config");
-
-    let seen = events
-        .collect_until(WATCH_DEADLINE, |e| e.iter().any(is_reload))
-        .await;
+    let seen = touch_until_reload(&mut events, || {
+        std::fs::write(&path, "not valid toml ][[[").expect("corrupt config")
+    })
+    .await;
     assert!(seen.iter().any(is_reload), "no ConfigReloaded: {seen:?}");
 }
 
@@ -135,28 +151,34 @@ async fn changes_to_sibling_files_do_not_publish_config_reloaded() {
     let mut probe_events = common::EventCollector::subscribe(&probe_bus);
     let mut events = t.collect_events();
 
-    std::fs::write(&sibling, "x = 1\n").expect("write sibling");
-
-    let seen = probe_events
-        .collect_until(WATCH_DEADLINE, |e| e.iter().any(is_reload))
-        .await;
+    let seen = touch_until_reload(&mut probe_events, || {
+        std::fs::write(&sibling, "x = 1\n").expect("write sibling")
+    })
+    .await;
     assert!(seen.iter().any(is_reload), "probe never saw the write");
 
     // Both watchers share one directory, so ordering the real write behind the probe makes the
     // sibling write's events (if any) reach the real bus before this one.
-    std::fs::write(&watched, "version = 1\n").expect("write watched");
     // The OS reports one write as several events, so compare against a reference watcher that
     // sees exactly the watched file's events: any surplus on the real bus came from the sibling.
     let mut real_count = 0;
     let mut ref_count = 0;
     let deadline = std::time::Instant::now() + WATCH_DEADLINE;
+    let mut last_write: Option<std::time::Instant> = None;
     while std::time::Instant::now() < deadline {
+        // Keep writing only until the reference watcher is live, then let the counts settle.
+        if ref_hits.load(std::sync::atomic::Ordering::SeqCst) == 0
+            && last_write.is_none_or(|t| t.elapsed() > Duration::from_millis(500))
+        {
+            std::fs::write(&watched, "version = 1\n").expect("write watched");
+            last_write = Some(std::time::Instant::now());
+        }
         real_count += events.drain().len();
         ref_count = ref_hits.load(std::sync::atomic::Ordering::SeqCst);
         if ref_count > 0 && real_count == ref_count {
             break;
         }
-        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(20)).await;
     }
     assert!(ref_count > 0, "reference watcher never saw the write");
     assert_eq!(
