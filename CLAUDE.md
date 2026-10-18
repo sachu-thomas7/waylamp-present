@@ -200,6 +200,7 @@ isn't tracked in the repo.
   `--prefix controller`/`--prefix presentation` explicitly).
 
 - **T2.1 (2026-10)**: `src/test/mockTauri.ts` in both frontends (`installMockIPC` with call log, `emitAppEvent` via real `listen`/`emit`, `renderApp`), setup runs `clearMocks` after each test. Gate: `bash scripts/verify.sh t2.1` (`t2`).
+- **T2.2 (2026-10)**: controller component tests (`App`, `SlideDeckPanel`, `PresentButton`, `SceneMediaPanel`, `DisplayPanel` `*.test.tsx`) over `installMockIPC` + real stores (`test/componentHelpers.ts` resets them); `data-testid`s added: `slide-thumb-N`, `preview-current`, `preview-next`. Two product bugs pinned by 3 `it.fails` (Space/arrows in filter box change slides; failed display assign still shows Assigned); gate asserts exactly 3 and must be updated as they are fixed. Gate: `bash scripts/verify.sh t2.2` (`t2`).
 - **Coverage visibility (T0.4)**: `npm run test:coverage` in `controller/` and `presentation/` (Vitest v8, report-only, no thresholds, output in gitignored `coverage/`); baseline in `dev-docs/test_plan.md` §12. `verify.sh t0` checks the scripts exist.
 
 ## Verification — `scripts/verify.sh`

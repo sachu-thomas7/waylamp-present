@@ -157,6 +157,7 @@ export function SlideDeckPanel() {
         {filteredIndices.map((i) => (
           <div
             key={i}
+            data-testid={`slide-thumb-${i}`}
             onClick={() => slideJumpTo(i).catch(console.error)}
             style={{
               flexShrink: 0,
@@ -187,11 +188,11 @@ export function SlideDeckPanel() {
 
       {/* Current + Next preview */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start' }}>
-        <div style={{ minWidth: 0 }}>
+        <div data-testid="preview-current" style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Current</div>
           {current && <SlideCanvas slide={current} fluid />}
         </div>
-        <div style={{ minWidth: 0 }}>
+        <div data-testid="preview-next" style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Next</div>
           {slides[currentIndex + 1] && (
             <SlideCanvas slide={slides[currentIndex + 1]} fluid />

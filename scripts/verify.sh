@@ -797,8 +797,36 @@ run_t2_1() {
   done
 }
 
+run_t2_2() {
+  section "T2.2 — Controller component tests"
+
+  local f
+  for f in src/App.test.tsx src/components/SlideDeckPanel.test.tsx src/components/PresentButton.test.tsx \
+           src/components/SceneMediaPanel.test.tsx src/components/DisplayPanel.test.tsx; do
+    file_exists "controller/$f"
+    check "controller/$f uses user-event, not fireEvent" bash -c '! sed "s#//.*##" "controller/$1" | grep -qw fireEvent && grep -q "@testing-library/user-event" "controller/$1"' _ "$f"
+    check "controller/$f asserts no unhandled IPC" grep -q "ipc.unhandled" "controller/$f"
+  done
+  file_exists controller/src/test/componentHelpers.ts
+
+  # Pins for known product bugs (Space/arrows in filter box x2, failed display assign); drops to 0 as they are fixed — update then.
+  check "exactly 3 it.fails product-bug pins" bash -c     '[ "$(cd controller && sed "s#//.*##" src/components/*.test.tsx src/App.test.tsx | grep -c "it.fails(")" = 3 ]'
+
+  local out
+  out=$(mktemp)
+  check "controller vitest: 0 failed/skipped, component tests >= App 10, Deck 31, Present 7, Scene 10, Display 8, typecheck" \
+    bash -c 'cd controller && npx vitest run --reporter=json --outputFile="$1" >/dev/null 2>&1; r=$1; \
+      node ../scripts/check-vitest-json.cjs "$r" src/App.test.tsx 10 && \
+      node ../scripts/check-vitest-json.cjs "$r" src/components/SlideDeckPanel.test.tsx 31 && \
+      node ../scripts/check-vitest-json.cjs "$r" src/components/PresentButton.test.tsx 7 && \
+      node ../scripts/check-vitest-json.cjs "$r" src/components/SceneMediaPanel.test.tsx 10 && \
+      node ../scripts/check-vitest-json.cjs "$r" src/components/DisplayPanel.test.tsx 8 && npm run typecheck >/dev/null 2>&1' _ "$out"
+  rm -f "$out"
+}
+
 run_t2() {
   run_t2_1
+  run_t2_2
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -866,6 +894,9 @@ case "$FILTER" in
     ;;
   t2.1)
     run_t2_1
+    ;;
+  t2.2)
+    run_t2_2
     ;;
   t2)
     run_t2
