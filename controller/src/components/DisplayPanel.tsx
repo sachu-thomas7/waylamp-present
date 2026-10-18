@@ -29,7 +29,12 @@ export function DisplayPanel() {
   }, []);
 
   async function handleAssign(id: string) {
-    await displayAssignPresentation(id).catch(console.error);
+    try {
+      await displayAssignPresentation(id);
+    } catch (e) {
+      console.error(e);
+      return;
+    }
     setAssignedDisplayId(id);
     setLostWarning(false);
   }

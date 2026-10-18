@@ -54,6 +54,8 @@ export function SlideDeckPanel() {
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const t = e.target;
+      if (t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
       if (e.key === ' ' || e.key === 'ArrowRight') {
         e.preventDefault();
         slideAdvance().catch(console.error);

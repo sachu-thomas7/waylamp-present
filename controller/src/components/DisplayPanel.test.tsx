@@ -50,8 +50,7 @@ describe('DisplayPanel', () => {
     expect(screen.getAllByRole('button', { name: 'Assign' })).toHaveLength(1);
   });
 
-  // Known product bug: handleAssign marks the display Assigned even when the command fails; remove .fails once fixed.
-  it.fails('does not mark a display Assigned when the command fails', async () => {
+  it('does not mark a display Assigned when the command fails', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
     mount({

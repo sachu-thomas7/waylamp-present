@@ -809,8 +809,8 @@ run_t2_2() {
   done
   file_exists controller/src/test/componentHelpers.ts
 
-  # Pins for known product bugs (Space/arrows in filter box x2, failed display assign); drops to 0 as they are fixed — update then.
-  check "exactly 3 it.fails product-bug pins" bash -c     '[ "$(cd controller && sed "s#//.*##" src/components/*.test.tsx src/App.test.tsx | grep -c "it.fails(")" = 3 ]'
+  # All known product-bug pins are fixed; no it.fails may remain.
+  check "no it.fails product-bug pins" bash -c     '[ "$(cd controller && sed "s#//.*##" src/components/*.test.tsx src/App.test.tsx | grep -c "it.fails(")" = 0 ]'
 
   local out
   out=$(mktemp)

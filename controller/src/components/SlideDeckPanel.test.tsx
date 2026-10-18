@@ -240,8 +240,7 @@ describe('SlideDeckPanel navigation commands', () => {
     await expectCalled(ipc, 'slide_rewind', [{}]);
   });
 
-  // Known product bug: the global Space handler fires while typing in the filter box; remove .fails once fixed.
-  it.fails('typing a space in the filter box does not advance the slide', async () => {
+  it('typing a space in the filter box does not advance the slide', async () => {
     const user = userEvent.setup();
     await mountLoaded(3, {}, { slide_advance: () => null });
     const input = screen.getByPlaceholderText('Filter slides…');
@@ -252,7 +251,7 @@ describe('SlideDeckPanel navigation commands', () => {
   });
 
   // Same root cause: arrow keys in the filter box should move the caret, not change slides.
-  it.fails('arrow keys in the filter box do not change slides', async () => {
+  it('arrow keys in the filter box do not change slides', async () => {
     const user = userEvent.setup();
     await mountLoaded(3, {}, { slide_advance: () => null, slide_rewind: () => null });
     const input = screen.getByPlaceholderText('Filter slides…');
