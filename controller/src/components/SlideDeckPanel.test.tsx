@@ -58,7 +58,7 @@ describe('SlideDeckPanel empty state', () => {
     ]);
   });
 
-  it('a failed deck_import is logged and the empty state remains', async () => {
+  it('a failed deck_import is logged, shown to the operator, and the empty state remains', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const user = userEvent.setup();
     mount({
@@ -70,6 +70,8 @@ describe('SlideDeckPanel empty state', () => {
     await user.click(await screen.findByRole('button', { name: 'Import a Deck' }));
     await expectCalled(ipc, 'deck_import', [{ path: '/decks/bad.pptx' }]);
     await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(await screen.findByText(/unsupported/)).toBeInTheDocument();
+    expect(screen.queryByText(/Slide 0/)).not.toBeInTheDocument();
     expect(screen.getByText('No slides yet')).toBeInTheDocument();
   });
 

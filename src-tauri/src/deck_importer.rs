@@ -2,7 +2,7 @@ use crate::bus::EventBus;
 use crate::error::AppError;
 use crate::events::AppEvent;
 use crate::slide::{SlideDeck, SlideEntry, SlideTextBlock, SlideTextRun, TextAlignment};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 enum PhKind {
@@ -389,13 +389,36 @@ fn extract_pptx_background(
     Ok(dest.to_str().map(|s| s.to_string()))
 }
 
+const PDFIUM_MISSING: &str =
+    "PDF import is unavailable: the pdfium library was not found next to the app or on the system";
+
+// Pdfium::default() panics when the library is missing, so bind explicitly and return an error.
+fn load_pdfium(dir: &Path, allow_system: bool) -> Result<pdfium_render::prelude::Pdfium, AppError> {
+    use pdfium_render::prelude::*;
+
+    let bindings = Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(dir))
+        .or_else(|e| {
+            if allow_system {
+                Pdfium::bind_to_system_library()
+            } else {
+                Err(e)
+            }
+        })
+        .map_err(|_| AppError::Internal(PDFIUM_MISSING.into()))?;
+    Ok(Pdfium::new(bindings))
+}
+
 fn import_pdf(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<SlideDeck, AppError> {
     use pdfium_render::prelude::*;
 
     let media_dir = dest_dir.join("media");
     std::fs::create_dir_all(&media_dir).map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let pdfium = Pdfium::default();
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let pdfium = load_pdfium(&exe_dir, true)?;
     let document = pdfium
         .load_pdf_from_file(path, None)
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -492,6 +515,15 @@ pub fn is_code_slide(blocks: &[SlideTextBlock]) -> bool {
 mod tests {
     use super::*;
     use crate::slide::{SlideTextBlock, SlideTextRun, TextAlignment};
+
+    #[test]
+    fn load_pdfium_without_the_library_is_an_error_not_a_panic() {
+        let empty = tempfile::tempdir().expect("temp dir");
+
+        let res = load_pdfium(empty.path(), false);
+
+        assert!(matches!(res, Err(AppError::Internal(m)) if m == PDFIUM_MISSING));
+    }
 
     fn make_run(font_family: Option<&str>) -> SlideTextRun {
         SlideTextRun {

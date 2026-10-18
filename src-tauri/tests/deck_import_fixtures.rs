@@ -58,12 +58,25 @@ async fn pptx_fixture_extracts_titles_body_code_and_layout_flags() {
     );
 }
 
-// Ignored by default: pdfium-render's Pdfium::default() dynamically loads a native
-// pdfium shared library that this repo does not bundle or download anywhere — on a
-// machine without one already installed, this doesn't return an Err, it panics inside
-// pdfium-render itself (LoadLibraryError). PDF import is effectively unverified/crash-prone
-// until the native library is bundled (see CLAUDE.md). Run manually with
-// `cargo test -- --ignored` once pdfium is available locally.
+// Passes with or without a native pdfium library: a missing one must be an error, never a panic.
+#[tokio::test]
+async fn pdf_import_never_panics_when_pdfium_is_missing() {
+    let (bus, _rx) = EventBus::new();
+    let bus = Arc::new(bus);
+    let dest = tempfile::tempdir().unwrap();
+
+    let res = import_deck(&fixture("streamdeck-test-deck.pdf"), dest.path(), bus).await;
+
+    if let Err(e) = res {
+        assert!(
+            format!("{e:?}").contains("pdfium"),
+            "unexpected error: {e:?}"
+        );
+    }
+}
+
+// Ignored by default: needs a native pdfium library, which this repo does not bundle yet (see CLAUDE.md).
+// Run manually with `cargo test -- --ignored` once pdfium is available locally.
 #[tokio::test]
 #[ignore = "requires a native pdfium library on PATH/next to the binary — not bundled yet, see CLAUDE.md"]
 async fn pdf_fixture_produces_one_slide_per_page_with_background() {

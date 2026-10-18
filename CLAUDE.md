@@ -169,14 +169,11 @@ isn't tracked in the repo.
   `Event::Start`, but real PowerPoint always writes placeholders as self-closing tags
   (`Event::Empty`) — title/body extraction was silently broken for every real-world file.
   Fixed via a shared `classify_ph()` helper called from both event arms.
-- **PDF import panics at runtime without a native `pdfium` library present** —
-  `pdfium-render`'s `Pdfium::default()` doesn't return an `Err` when it can't find/load the
-  library, it panics (`LoadLibraryError`). Nothing in this repo bundles or downloads that
-  library. The PDF fixture test is `#[ignore]`d for this reason (run with
-  `cargo test -- --ignored` once pdfium is available). This needs an explicit decision —
-  likely bundling a prebuilt pdfium binary per platform (see bblanchon/pdfium-binaries) and
-  switching `import_pdf` from `Pdfium::default()` to `Pdfium::bind_to_library(...)` with an
-  app-relative path — before PDF import can be considered actually done, not just compiling.
+- **PDF import needs a native `pdfium` library, which is not bundled** — `import_pdf` binds it
+  explicitly (`load_pdfium`: next to the executable, then the system) and returns an
+  `AppError` if absent instead of panicking (`Pdfium::default()` panics); the controller shows
+  that error in the import banner. The real PDF fixture test stays `#[ignore]`d. Bundling
+  prebuilt binaries per platform (bblanchon/pdfium-binaries) is deferred to Phase 2 planning.
 - Git history was ~5 commits behind the actual working tree until 2026-09-18 — F1.1–F1.4
   and the scene/deck-import system existed only as uncommitted/untracked changes. Now
   clean and committed; keep commits current going forward — don't let multiple shipped

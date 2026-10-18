@@ -24,6 +24,16 @@ function formatTimer(secs: number | null): string {
   return `${mm}:${ss}`;
 }
 
+function errorMessage(e: unknown): string {
+  if (typeof e === 'object' && e !== null && 'message' in e) return String(e.message);
+  return String(e);
+}
+
+// slide 0 means the whole file failed, not one slide.
+function importErrorText({ slide, reason }: { slide: number; reason: string }): string {
+  return slide > 0 ? `Slide ${slide}: ${reason}` : reason;
+}
+
 export function SlideDeckPanel() {
   const {
     current, slides, atDeckStart, atDeckEnd, elapsedSecs,
@@ -87,7 +97,11 @@ export function SlideDeckPanel() {
   async function handleImport() {
     const path = await pickDeckFile();
     if (path !== null) {
-      await deckImport(path).catch(console.error);
+      setImportError(null);
+      await deckImport(path).catch((e) => {
+        console.error(e);
+        setImportError({ slide: 0, reason: errorMessage(e) });
+      });
     }
   }
 
@@ -119,7 +133,7 @@ export function SlideDeckPanel() {
           </div>
           <Button variant="primary" pill icon={<IconUpload />} onClick={handleImport}>Import a Deck</Button>
           {importError && (
-            <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>⚠ Slide {importError.slide}: {importError.reason}</span>
+            <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>⚠ {importErrorText(importError)}</span>
           )}
           {importProgress && (
             <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Importing… slide {importProgress.slide} / {importProgress.total}</span>
@@ -151,7 +165,7 @@ export function SlideDeckPanel() {
         <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Importing… slide {importProgress.slide} / {importProgress.total}</span>
       )}
       {importError && (
-        <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>⚠ Slide {importError.slide}: {importError.reason}</span>
+        <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>⚠ {importErrorText(importError)}</span>
       )}
 
       {/* Thumbnail strip */}

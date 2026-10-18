@@ -52,7 +52,7 @@ sources: roadmap T4.0 spike decision gate.
 | R8 | Tests pollute the user's real app-data deck | active-deck persistence | T4.1 data-dir seam; fixtures own temp dir |
 | R9 | Tests that cannot fail (false green) | industry pattern | skill "Prove it can fail"; T6.1 scanner; T6.2 mutation |
 | R10 | Dev tooling blocks work (hook runs on every Bash call) | 2026-10 session | T0.1 |
-| R11 | PDF import panics without pdfium | CLAUDE.md | ignored test; T3.3 after pdfium decision |
+| R11 | PDF import without pdfium must be an error, not a panic | CLAUDE.md | ✅ `load_pdfium` unit test + `pdf_import_never_panics_when_pdfium_is_missing`; real PDF test still ignored until pdfium is bundled |
 
 ## 4. Feature inventory and traceability
 
