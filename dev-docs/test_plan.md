@@ -46,7 +46,7 @@ sources: roadmap T4.0 spike decision gate.
 | R2 | IPC works in unit tests but not in real app | 5 manual-launch bugs, 2026-09 | L4 J1–J8 |
 | R3 | Parser upgrade silently changes text (quick-xml `&amp;`, self-closing tags) | quick-xml 0.42 uplift; earlier `Event::Empty` bug | T3.1 fixture matrix + golden snapshots |
 | R4 | React/Vite/TS major breaks rendering | Vite 8 / React 19 / TS 7 uplift (verified by hand only) | T2.2/T2.3 render tests; T4 smoke; T5.1 visual |
-| R5 | Event union drifts between Rust and TS | CLAUDE.md lesson | T2.4, T3.2 |
+| R5 | Event union drifts between Rust and TS | CLAUDE.md lesson | T1.4, T2.4 (done), T3.2 |
 | R6 | Presentation window gains invoke permission | invariant 5 | T1.4 capability assertion; T2.3 "never invokes" |
 | R7 | Operator trapped by fullscreen / window close destroys presentation | CLAUDE.md bugs #2, #4, #5 | L4 J4 (close → hidden, not destroyed); §9 manual |
 | R8 | Tests pollute the user's real app-data deck | active-deck persistence | T4.1 data-dir seam; fixtures own temp dir |
@@ -74,6 +74,7 @@ test you add.
 | Empty deck / Clear Deck (2026-10) | `SlidePayload::empty`, `deck_clear`, Present disabled | ✅ `current_payload_on_empty_deck…` | ✅ `deck_journeys` clear (+idempotent, empty-deck boundaries); ✅ T2.2 `App.test` (Clear Deck -> `deck_clear` -> empty state, Present disabled) | — | ⬜ J6 |
 | Persistence | `active_deck_id.txt`, restore on startup | — | ✅ `deck_journeys` restore/no-op/corrupt/clear-then-restart/`restore_on_startup` (saved index + timer survive restart; product bug fixed), re-import resets index/timer, `spawn_timer` ticks | — | ⬜ J7 |
 | Architecture invariants (CLAUDE.md) | no unwrap/expect in `commands/`, `mod app` gated, presentation capability listen-only (`core:event:default` only, dev `remote.urls`), controller capability, every window label in a capability, controller TS `AppEvent` union == Rust variants (presentation subset, same shapes), `{type,payload}` tagging, no secret-like config fields, `tauri/test` dev-only, no `withGlobalTauri`, presentation never imports invoke wrappers | — | ✅ T1.4 `tests/invariants.rs` (28 tests incl. scanner self-tests; every capability file + inline conf capabilities scanned for presentation grants, wildcard-aware; `.emit(` only in `app.rs` bridge (#2); unwrap/expect/panic!/todo! ban also covers `state.rs`; mutation-proven). **Not covered / deferred:** #1 process separation (no pipeline exists until Phase 2) and #4 coexistence (no static check possible). `state::mock_invoke_handler` is a non-gated test seam, accepted as harmless (not reachable from release IPC). | — | — |
+| Event-union drift (R5) | every Rust `AppEvent` variant is in each TS union or explicitly allow-listed | ✅ T1.4 `invariants.rs` (source-parsing) | ✅ T2.4 `src/lib/events.exhaustive.test.ts` in both frontends (controller 7, presentation 9 tests). The runtime half (Rust variants vs TS union names) overlaps T1.4 `invariants.rs`; new in T2.4: the type-level `Record<AppEvent['type'], true>` table (typecheck fails on union drift), the TS-side `NOT_MODELLED` allow-list with reasons and stale-entry detection (presentation, 11 controller-only variants), and a fail-loud `events.rs` parser (rejects discriminants, raw idents, unbalanced input; cross-checked against an independent reduction count) | — | — |
 | Window safety (Esc, hide-on-close) | Esc re-registered; OS close hides | — | — | — | ⬜ J4 (+ §9 for Esc) |
 
 Current baseline (2026-10-11): Rust 55 unit tests + 1 fixture integration (+1 `#[ignore]`d PDF);
@@ -186,7 +187,7 @@ Tauri/OS-integration bumps.
 | Metric | Baseline 2026-10-11 | Target |
 |---|---|---|
 | Rust tests | 55 unit + 1 integration + 7 harness smoke + 17 deck journeys + 34 T1.3 journeys (10 scene, 12 display, 5 timer/slide-query, 7 config) + 28 T1.4 invariants (the only `#[ignore]` is the pdfium PDF fixture test) (2026-10-12, T1.4) | grows with T1/T3 |
-| Frontend test files | controller 10 files (86 tests), presentation 5 files (40 tests) after T2.3 (2026-10-18) | grows with T2.4/T5.1 |
+| Frontend test files | controller 11 files (93 tests), presentation 6 files (49 tests) after T2.4 (2026-10-18) | grows with T5.1 |
 | E2E journeys green | 0 / 9 | 9 / 9 (T4.3) |
 | Line coverage (frontends) | controller 45.5% lines / 45% branches; presentation 81.4% lines / 83.3% branches (v8, 2026-10-12; `npm run test:coverage`) | floor at T6.3 |
 | Line coverage (Rust) | not measured (`cargo-llvm-cov` not installed) | optional |

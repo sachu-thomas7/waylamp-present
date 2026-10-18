@@ -844,10 +844,26 @@ run_t2_3() {
   rm -f "$out"
 }
 
+run_t2_4() {
+  section "T2.4 — Event-union exhaustiveness"
+
+  local f
+  for f in controller presentation; do
+    file_exists "$f/src/lib/events.exhaustive.test.ts"
+    file_contains "$f has typed TS_VARIANTS table" "$f/src/lib/events.exhaustive.test.ts" "const TS_VARIANTS: Record<AppEvent"
+    file_contains "$f reads events.rs" "$f/src/lib/events.exhaustive.test.ts" "src-tauri/src/events.rs?raw"
+    local out
+    out=$(mktemp)
+    check "$f vitest: 0 failed/skipped, exhaustiveness tests >=7 passed, typecheck"       bash -c 'cd "$1" && npx vitest run --reporter=json --outputFile="$2" >/dev/null 2>&1;         node ../scripts/check-vitest-json.cjs "$2" src/lib/events.exhaustive.test.ts 7 && npm run typecheck >/dev/null 2>&1' _ "$f" "$out"
+    rm -f "$out"
+  done
+}
+
 run_t2() {
   run_t2_1
   run_t2_2
   run_t2_3
+  run_t2_4
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -921,6 +937,9 @@ case "$FILTER" in
     ;;
   t2.3)
     run_t2_3
+    ;;
+  t2.4)
+    run_t2_4
     ;;
   t2)
     run_t2
