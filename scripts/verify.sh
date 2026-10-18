@@ -776,6 +776,32 @@ run_t1() {
 }
 
 # ══════════════════════════════════════════════════════════════════
+# T2 — Frontend render & wiring tests (L2, JS)
+# ══════════════════════════════════════════════════════════════════
+run_t2_1() {
+  section "T2.1 — Shared frontend test utilities"
+
+  local f
+  for f in controller presentation; do
+    file_exists "$f/src/test/mockTauri.ts"
+    file_exists "$f/src/test/mockTauri.test.tsx"
+    file_contains "$f helper exports installMockIPC" "$f/src/test/mockTauri.ts" "export function installMockIPC"
+    file_contains "$f helper exports emitAppEvent" "$f/src/test/mockTauri.ts" "export async function emitAppEvent"
+    file_contains "$f helper exports renderApp" "$f/src/test/mockTauri.ts" "export function renderApp"
+    local out
+    out=$(mktemp)
+    check "$f vitest: 0 failed, 0 skipped, helper tests >=8 passed, typecheck" \
+      bash -c 'cd "$1" && npx vitest run --reporter=json --outputFile="$2" >/dev/null 2>&1; \
+        node ../scripts/check-vitest-json.cjs "$2" src/test/mockTauri.test.tsx 8 && npm run typecheck >/dev/null 2>&1' _ "$f" "$out"
+    rm -f "$out"
+  done
+}
+
+run_t2() {
+  run_t2_1
+}
+
+# ══════════════════════════════════════════════════════════════════
 # DISPATCH
 # ══════════════════════════════════════════════════════════════════
 echo ""
@@ -838,6 +864,12 @@ case "$FILTER" in
   t1.4)
     run_t1_4
     ;;
+  t2.1)
+    run_t2_1
+    ;;
+  t2)
+    run_t2
+    ;;
   t1)
     run_t1
     ;;
@@ -845,7 +877,7 @@ case "$FILTER" in
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_t0; run_t1; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_t0; run_t1; run_t2; run_core
     ;;
 esac
 

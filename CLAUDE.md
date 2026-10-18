@@ -199,6 +199,7 @@ isn't tracked in the repo.
   folder, no TypeScript; confirmed unused by both `verify.sh` and CI, which always use
   `--prefix controller`/`--prefix presentation` explicitly).
 
+- **T2.1 (2026-10)**: `src/test/mockTauri.ts` in both frontends (`installMockIPC` with call log, `emitAppEvent` via real `listen`/`emit`, `renderApp`), setup runs `clearMocks` after each test. Gate: `bash scripts/verify.sh t2.1` (`t2`).
 - **Coverage visibility (T0.4)**: `npm run test:coverage` in `controller/` and `presentation/` (Vitest v8, report-only, no thresholds, output in gitignored `coverage/`); baseline in `dev-docs/test_plan.md` §12. `verify.sh t0` checks the scripts exist.
 
 ## Verification — `scripts/verify.sh`
