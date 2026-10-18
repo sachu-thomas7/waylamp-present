@@ -56,11 +56,20 @@ impl ConfigLoader {
         bus: Arc<EventBus>,
     ) -> Result<RecommendedWatcher, AppError> {
         let watch_path = path.clone();
+        // FSEvents reports real paths (/var -> /private/var), so also match the canonical form.
+        let canonical_path = path
+            .parent()
+            .and_then(|p| p.canonicalize().ok())
+            .zip(path.file_name())
+            .map(|(dir, name)| dir.join(name));
 
         let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
             if let Ok(event) = res {
                 if matches!(event.kind, EventKind::Modify(_) | EventKind::Create(_))
-                    && event.paths.iter().any(|p| p == &watch_path)
+                    && event
+                        .paths
+                        .iter()
+                        .any(|p| p == &watch_path || Some(p) == canonical_path.as_ref())
                 {
                     bus.publish(AppEvent::ConfigReloaded);
                 }

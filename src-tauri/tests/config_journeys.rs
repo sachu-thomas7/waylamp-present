@@ -76,7 +76,11 @@ async fn editing_the_config_file_publishes_config_reloaded_event_only() {
         ConfigLoader::save(&path, &edited).expect("edit config")
     })
     .await;
-    assert!(seen.iter().any(is_reload), "no ConfigReloaded: {seen:?}");
+    assert!(
+        seen.iter().any(is_reload),
+        "no ConfigReloaded: {seen:?} (path {path:?}, canonical {:?})",
+        path.canonicalize()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -91,7 +95,11 @@ async fn creating_the_config_file_after_the_watcher_starts_publishes_config_relo
         std::fs::write(&path, "version = 1\n").expect("create config")
     })
     .await;
-    assert!(seen.iter().any(is_reload), "no ConfigReloaded: {seen:?}");
+    assert!(
+        seen.iter().any(is_reload),
+        "no ConfigReloaded: {seen:?} (path {path:?}, canonical {:?})",
+        path.canonicalize()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -106,7 +114,11 @@ async fn a_corrupt_edit_still_publishes_config_reloaded_event_only() {
         std::fs::write(&path, "not valid toml ][[[").expect("corrupt config")
     })
     .await;
-    assert!(seen.iter().any(is_reload), "no ConfigReloaded: {seen:?}");
+    assert!(
+        seen.iter().any(is_reload),
+        "no ConfigReloaded: {seen:?} (path {path:?}, canonical {:?})",
+        path.canonicalize()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -133,13 +145,18 @@ async fn changes_to_sibling_files_do_not_publish_config_reloaded() {
     // Independent reference: a raw notify watcher with its own path filter (not the code under test).
     let ref_hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let ref_hits_cb = ref_hits.clone();
-    let ref_target = watched.clone();
+    let ref_targets = [
+        watched.clone(),
+        dir.canonicalize()
+            .expect("canonical dir")
+            .join("streamdeck.toml"),
+    ];
     let mut ref_watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         if let Ok(e) = res {
             if matches!(
                 e.kind,
                 notify::EventKind::Modify(_) | notify::EventKind::Create(_)
-            ) && e.paths.iter().any(|p| p == &ref_target)
+            ) && e.paths.iter().any(|p| ref_targets.contains(p))
             {
                 ref_hits_cb.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             }
