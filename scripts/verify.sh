@@ -824,9 +824,30 @@ run_t2_2() {
   rm -f "$out"
 }
 
+run_t2_3() {
+  section "T2.3 — Presentation app tests"
+
+  file_exists presentation/src/App.test.tsx
+  file_exists presentation/src/App.lifecycle.test.tsx
+  check "presentation/App.test.tsx asserts listen-only (ipc.calls empty) and no unhandled IPC" \
+    bash -c 'grep -q "expect(ipc.calls).toEqual(\[\])" presentation/src/App.test.tsx && grep -q "ipc.unhandled" presentation/src/App.test.tsx'
+  check "presentation/App.test.tsx covers every non-rendered AppEvent via a typed ignored-events table" \
+    grep -q "IgnoredType = Exclude<AppEvent" presentation/src/App.test.tsx
+  check "presentation/App.test.tsx has no CSS-class queries" bash -c '! grep -Eq "querySelector|getByClassName" presentation/src/App.test.tsx'
+
+  local out
+  out=$(mktemp)
+  check "presentation vitest: 0 failed/skipped, App.test >= 27, lifecycle >= 1, typecheck" \
+    bash -c 'cd presentation && npx vitest run --reporter=json --outputFile="$1" >/dev/null 2>&1; \
+      node ../scripts/check-vitest-json.cjs "$1" src/App.test.tsx 27 && \
+      node ../scripts/check-vitest-json.cjs "$1" src/App.lifecycle.test.tsx 1 && npm run typecheck >/dev/null 2>&1' _ "$out"
+  rm -f "$out"
+}
+
 run_t2() {
   run_t2_1
   run_t2_2
+  run_t2_3
 }
 
 # ══════════════════════════════════════════════════════════════════
@@ -897,6 +918,9 @@ case "$FILTER" in
     ;;
   t2.2)
     run_t2_2
+    ;;
+  t2.3)
+    run_t2_3
     ;;
   t2)
     run_t2

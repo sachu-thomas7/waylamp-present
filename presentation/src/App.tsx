@@ -12,20 +12,23 @@ export default function App() {
   const [sceneMedia, setSceneMedia] = useState<SceneMediaPayload | null>(null);
 
   useEffect(() => {
+    let dead = false;
+    let off: (() => void) | undefined;
     onAppEvent((event) => {
       if (event.type === 'SceneSourceChanged') {
         setSceneSource(event.payload.source);
       } else if (event.type === 'SceneMediaUpdate') {
         setSceneMedia(event.payload);
-      }
-    });
-    const unlistenPromise = onAppEvent((event) => {
-      if (event.type === 'SlideUpdate') {
+      } else if (event.type === 'SlideUpdate') {
         setSlide(event.payload);
       }
+    }).then((fn) => {
+      if (dead) fn();
+      else off = fn;
     });
     return () => {
-      unlistenPromise.then((fn) => fn());
+      dead = true;
+      off?.();
     };
   }, [setSlide]);
 

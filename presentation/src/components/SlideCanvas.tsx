@@ -32,6 +32,7 @@ export function SlideCanvas() {
 
   return (
     <div
+      data-testid="slide-canvas"
       ref={containerRef}
       style={{
         width: '100vw',
@@ -56,6 +57,7 @@ export function SlideCanvas() {
         {/* Background zone */}
         {slide?.background_path && (
           <img
+            data-testid="slide-background"
             src={slide.background_path}
             alt=""
             style={{
