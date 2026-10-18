@@ -113,12 +113,19 @@ describe('SlideDeckPanel empty state', () => {
 });
 
 describe('SlideDeckPanel loaded state', () => {
+  it('says there are no notes instead of showing a bare dash', async () => {
+    await mountLoaded(3);
+    expect(screen.getByText('No notes for this slide')).toBeInTheDocument();
+    expect(screen.queryByText(/Notes —/)).not.toBeInTheDocument();
+  });
+
   it('renders the count badge, one thumbnail per slide, notes and an unset timer', async () => {
     await mountLoaded(3, { 0: { notes: 'Say hello' } });
     expect(screen.getByText('1 / 3')).toBeInTheDocument();
     expect(screen.getAllByRole('button', { name: /^Slide [0-9]+$/ })).toHaveLength(3);
     expect(within(screen.getByRole('button', { name: 'Slide 3' })).getByText('Slide 3 title')).toBeInTheDocument();
     expect(screen.getByText(/Notes — Say hello/)).toBeInTheDocument();
+    expect(screen.queryByText(/No notes/)).not.toBeInTheDocument();
     expect(screen.getByText('--:--')).toBeInTheDocument();
   });
 
@@ -210,12 +217,19 @@ describe('SlideDeckPanel navigation commands', () => {
     await expectCalled(ipc, 'slide_rewind', [{}]);
   });
 
-  it('Jump to + Go invokes slide_jump_to with the numeric index', async () => {
+  it('Jump to takes a 1-based slide number matching the badge and sends the 0-based index', async () => {
     const user = userEvent.setup();
     await mountLoaded(5, {}, { slide_jump_to: () => null });
-    await user.type(screen.getByLabelText('Jump to slide index'), '3');
+    const input = screen.getByLabelText('Jump to slide number');
+    await user.type(input, '3');
     await user.click(screen.getByRole('button', { name: 'Go' }));
-    await expectCalled(ipc, 'slide_jump_to', [{ index: 3 }]);
+    await user.clear(input);
+    await user.type(input, '1');
+    await user.click(screen.getByRole('button', { name: 'Go' }));
+    await user.clear(input);
+    await user.type(input, '5');
+    await user.click(screen.getByRole('button', { name: 'Go' }));
+    await expectCalled(ipc, 'slide_jump_to', [{ index: 2 }, { index: 0 }, { index: 4 }]);
   });
 
   it('Go with an empty index does not invoke', async () => {
@@ -230,6 +244,17 @@ describe('SlideDeckPanel navigation commands', () => {
     await mountLoaded(3, {}, { slide_jump_to: () => null });
     await user.click(screen.getByRole('button', { name: 'Slide 3' }));
     await expectCalled(ipc, 'slide_jump_to', [{ index: 2 }]);
+  });
+
+  it('scrolls the current thumbnail into view when the slide changes', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const deck = await mountLoaded(5);
+    scroll.mockClear();
+    await emitAppEvent({ type: 'SlideUpdate', payload: deck[4] });
+    await waitFor(() => expect(scroll).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' }));
+    expect(screen.getByRole('button', { name: 'Slide 5' })).toHaveAttribute('aria-current', 'true');
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   });
 
   it('marks only the current thumbnail with aria-current', async () => {
@@ -278,22 +303,20 @@ describe('SlideDeckPanel navigation commands', () => {
     expect(callsOf('slide_rewind')).toEqual([]);
   });
 
-  it('out-of-range and negative jumps reach the backend, whose rejection is logged', async () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('Go is disabled for numbers outside 1..total and for non-integers, so nothing is invoked', async () => {
     const user = userEvent.setup();
-    await mountLoaded(3, {}, {
-      slide_jump_to: () => {
-        throw new Error('out of range');
-      },
-    });
-    const input = screen.getByLabelText('Jump to slide index');
-    await user.type(input, '99');
-    await user.click(screen.getByRole('button', { name: 'Go' }));
+    await mountLoaded(3, {}, { slide_jump_to: () => null });
+    const input = screen.getByLabelText('Jump to slide number');
+    const go = screen.getByRole('button', { name: 'Go' });
+    for (const bad of ['0', '4', '99', '-1', '1.5']) {
+      await user.clear(input);
+      await user.type(input, bad);
+      expect(go).toBeDisabled();
+    }
     await user.clear(input);
-    await user.type(input, '-1');
-    await user.click(screen.getByRole('button', { name: 'Go' }));
-    await expectCalled(ipc, 'slide_jump_to', [{ index: 99 }, { index: -1 }]);
-    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    await user.type(input, '3');
+    expect(go).toBeEnabled();
+    expect(callsOf('slide_jump_to')).toEqual([]);
     expect(screen.getByText('1 / 3')).toBeInTheDocument();
   });
 

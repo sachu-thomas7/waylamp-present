@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useControllerSlideStore } from '../store/slideStore';
 import { onAppEvent } from '../lib/events';
 import {
@@ -79,6 +79,15 @@ export function SlideDeckPanel() {
 
   const totalSlides = current?.total ?? 0;
   const currentIndex = current?.index ?? 0;
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = stripRef.current?.querySelector('[aria-current="true"]');
+    el?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [currentIndex, slides.length]);
+
+  const jumpNumber = /^[0-9]+$/.test(jumpIndex) ? Number(jumpIndex) : NaN;
+  const jumpTarget = jumpNumber >= 1 && jumpNumber <= totalSlides ? jumpNumber - 1 : null;
 
   useEffect(() => {
     const unlisten = onAppEvent((event) => {
@@ -169,7 +178,7 @@ export function SlideDeckPanel() {
       )}
 
       {/* Thumbnail strip */}
-      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
+      <div ref={stripRef} style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
         {filteredIndices.map((i) => (
           <button
             key={i}
@@ -231,7 +240,7 @@ export function SlideDeckPanel() {
       </div>
 
       <div style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>
-        Notes — {current?.notes || '—'}
+        {current?.notes ? `Notes — ${current.notes}` : 'No notes for this slide'}
       </div>
 
       {/* Timer + nav */}
@@ -259,23 +268,23 @@ export function SlideDeckPanel() {
           </Button>
         </div>
 
-        {/* Secondary: jump to an arbitrary slide by index — smaller than Prev/Next but still clearly legible */}
+        {/* Secondary: jump to an arbitrary slide by number (1-based, matching the "n / total" badge) — smaller than Prev/Next but still clearly legible */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Jump to</span>
           <input
             type="number"
-            aria-label="Jump to slide index"
+            aria-label="Jump to slide number"
             value={jumpIndex}
             onChange={(e) => setJumpIndex(e.target.value)}
-            placeholder="Idx"
-            min={0}
-            max={totalSlides - 1}
+            placeholder="#"
+            min={1}
+            max={totalSlides}
             style={{ width: 52, height: 30, textAlign: 'center', background: 'var(--color-bg)', border: '1px solid var(--color-text-muted)', borderRadius: 6, color: 'var(--color-text)', fontSize: 12.5 }}
           />
           <button
+            disabled={jumpTarget === null}
             onClick={() => {
-              const idx = parseInt(jumpIndex, 10);
-              if (!Number.isNaN(idx)) slideJumpTo(idx).catch(console.error);
+              if (jumpTarget !== null) slideJumpTo(jumpTarget).catch(console.error);
             }}
             style={{ height: 30, padding: '0 12px', borderRadius: 6, background: 'transparent', border: '1px solid var(--color-text-muted)', color: 'var(--color-text)', fontSize: 12, fontFamily: 'var(--font-body)', cursor: 'pointer' }}
           >

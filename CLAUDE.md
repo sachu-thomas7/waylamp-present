@@ -26,6 +26,9 @@ Tauri only has one `devUrl`/`frontendDist` in config (controller's). The present
 window's URL is set explicitly in `app.rs::run()`, branching on `cfg!(debug_assertions)`:
 `WebviewUrl::External("http://localhost:5174")` in dev, `WebviewUrl::App("presentation/index.html")`
 in release. This requires:
+- `beforeDevCommand`/`beforeBuildCommand` use the object form with `"cwd": ".."`: without a root
+  `package.json` (deliberately absent) the Tauri CLI otherwise runs them from `controller/` and
+  `node scripts/dev-both.cjs` isn't found.
 - `scripts/dev-both.cjs` runs both windows' Vite dev servers (`beforeDevCommand` in
   `tauri.conf.json`) — controller's alone isn't enough.
 - `scripts/merge-presentation-dist.cjs` copies `presentation/dist/` into
@@ -145,6 +148,7 @@ isn't tracked in the repo.
    never needs to build the Tauri runtime wiring.
 
 ## Current status (2026-09-19)
+- **2026-10-18**: jump-to-slide takes a 1-based number (matches the "n / total" badge; Go is disabled outside 1..total); the selected thumbnail scrolls into view; no-notes shows "No notes for this slide"; Tauri crates bumped to 2.12 to match the npm `@tauri-apps/api` 2.12 (the CLI warns on mismatch). Manually verified in `cargo tauri dev` via UI Automation (navigate/jump/present/stop).
 - **T0.2 (2026-10)**: `cargo fmt --check` is now in `verify.sh core` (and `verify.sh t0`); tree was reformatted once. CI does not yet run it (needs human-approved workflow edit).
 - **T0.3 (2026-10)**: test directory contract documented in the test-authoring skill (§2b), `e2e/{specs,pages,fixtures}` created with READMEs, `verify.sh t0` asserts all dirs exist.
 

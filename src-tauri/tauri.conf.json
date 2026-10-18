@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../controller/dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "node scripts/dev-both.cjs",
-    "beforeBuildCommand": "npm run build --prefix controller && npm run build --prefix presentation && node scripts/merge-presentation-dist.cjs"
+    "beforeDevCommand": { "script": "node scripts/dev-both.cjs", "cwd": ".." },
+    "beforeBuildCommand": { "script": "npm run build --prefix controller && npm run build --prefix presentation && node scripts/merge-presentation-dist.cjs", "cwd": ".." }
   },
   "app": {
     "windows": [
