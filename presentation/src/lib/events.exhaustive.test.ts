@@ -69,7 +69,7 @@ function enumBody(src: string): string {
 }
 
 // Top-level variant names; throws on anything that is not a bare identifier.
-export function parseRustVariants(src: string): string[] {
+function parseRustVariants(src: string): string[] {
   const body = enumBody(src);
   const names: string[] = [];
   let depth = 0;
@@ -108,7 +108,7 @@ export function parseRustVariants(src: string): string[] {
 }
 
 // Independent count: collapse nested bodies and attributes, then count comma-separated segments.
-export function countVariantsByReduction(src: string): number {
+function countVariantsByReduction(src: string): number {
   let b = enumBody(src).replace(/#\s*\[[^\]]*\]/g, '');
   for (let prev = ''; prev !== b; ) {
     prev = b;

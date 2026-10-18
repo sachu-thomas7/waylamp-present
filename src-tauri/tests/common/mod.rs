@@ -16,6 +16,12 @@ use tauri::webview::InvokeRequest;
 use tauri::{App, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tokio::sync::broadcast::{error::TryRecvError, Receiver};
 
+// Tauri only treats this as the app's own (local) origin on the matching platform.
+#[cfg(any(windows, target_os = "android"))]
+const LOCAL_ORIGIN: &str = "http://tauri.localhost";
+#[cfg(not(any(windows, target_os = "android")))]
+const LOCAL_ORIGIN: &str = "tauri://localhost";
+
 pub struct TestApp {
     pub app: App<MockRuntime>,
     pub window: WebviewWindow<MockRuntime>,
@@ -141,7 +147,7 @@ impl TestApp {
                 cmd: cmd.into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "http://tauri.localhost".parse().expect("valid url"),
+                url: LOCAL_ORIGIN.parse().expect("valid url"),
                 body: tauri::ipc::InvokeBody::Json(args),
                 headers: Default::default(),
                 invoke_key: tauri::test::INVOKE_KEY.to_string(),
