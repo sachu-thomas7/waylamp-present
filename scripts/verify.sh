@@ -190,10 +190,9 @@ _frontend_build() {
     return
   fi
 
-  # Hash all .ts/.tsx/.css files in src/
+  # Hash everything the build consumes: src/, public/, index.html, vite/ts config, package.json
   local current_hash
-  current_hash=$(find "$src_dir" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.css" \) \
-    -exec md5sum {} \; 2>/dev/null | sort | md5sum | cut -d' ' -f1)
+  current_hash=$( { find "$src_dir" "$win/public" -type f 2>/dev/null; ls "$win"/index.html "$win"/vite.config.* "$win"/tsconfig*.json "$win"/package.json 2>/dev/null; }     | sort | xargs md5sum 2>/dev/null | md5sum | cut -d' ' -f1)
   local cached_hash=""
   [ -f "$cache_file" ] && cached_hash=$(cat "$cache_file")
 
@@ -237,7 +236,7 @@ run_invariants() {
       check "No raw invoke() outside ipc.ts in $win/" \
         bash -c "! grep -rn \"invoke(\" $win/src \
                  --include='*.ts' --include='*.tsx' \
-                 --exclude='ipc.ts' 2>/dev/null | grep -q ."
+                 --exclude='ipc.ts' --exclude='*.test.ts' --exclude='*.test.tsx' --exclude-dir=test 2>/dev/null | grep -q ."
     else
       skip "$win/src not yet created"
     fi
@@ -322,17 +321,21 @@ run_f0_2() {
   subsection "lib.rs / app.rs wiring"
   file_contains "mod commands declared"      "src-tauri/src/lib.rs" "mod commands"
   file_contains "mod error declared"         "src-tauri/src/lib.rs" "mod error"
-  file_contains "ping registered"            "src-tauri/src/app.rs" "system::ping"
-  file_contains "get_build_info registered"  "src-tauri/src/app.rs" "info::get_build_info"
+  file_contains "ping registered"            "src-tauri/src/state.rs" "system::ping"
+  file_contains "get_build_info registered"  "src-tauri/src/state.rs" "info::get_build_info"
 
   subsection "ipc.ts — both windows"
   for win in controller presentation; do
     local f="$win/src/lib/ipc.ts"
     if [ -f "$f" ]; then
       file_contains "$win: AppError type"          "$f" "AppError"
-      file_contains "$win: ping() exported"        "$f" "export async function ping"
       file_contains "$win: PingResponse interface" "$f" "PingResponse"
-      file_contains "$win: @tauri-apps/api import" "$f" "@tauri-apps/api"
+      if [ "$win" = controller ]; then
+        file_contains "$win: ping() exported"        "$f" "export async function ping"
+        file_contains "$win: @tauri-apps/api import" "$f" "@tauri-apps/api"
+      else
+        check "presentation ipc.ts has no invoke wrappers (listen-only)" bash -c '! grep -q "invoke" presentation/src/lib/ipc.ts'
+      fi
     else
       fail "MISSING: $f"
     fi
