@@ -8,6 +8,7 @@
 # ║    bash verify.sh f0.2           → F0.2 feature checks only     ║
 # ║    bash verify.sh f0             → all Phase 0 checks           ║
 # ║    bash verify.sh invariants     → architecture invariants only  ║
+# ║    bash verify.sh release        → release bundling checks       ║
 # ║    bash verify.sh core           → build + test + lint only      ║
 # ║    bash verify.sh --no-frontend  → skip frontend build step      ║
 # ╚══════════════════════════════════════════════════════════════════╝
@@ -1066,6 +1067,52 @@ run_t2() {
 }
 
 # ══════════════════════════════════════════════════════════════════
+# RELEASE — step 1: PDFium bundling + bundle-contents assertion
+# (no real `cargo tauri build` here; it is too slow — run it manually, then scripts/check-bundle.sh)
+# ══════════════════════════════════════════════════════════════════
+run_release_pdfium() {
+  section "Release — PDFium bundling + bundle check"
+
+  file_exists "release/deps.json"
+  file_exists "release/bundle-budget.json"
+  file_exists "release/bundle.pdfium.conf.json"
+  file_exists "scripts/fetch-deps.sh"
+  file_exists "scripts/check-bundle.sh"
+  file_contains "deps.json pins windows-x64 sha256"   "release/deps.json" '"windows-x64"'
+  file_contains "deps.json pins linux-x64 sha256"     "release/deps.json" '"linux-x64"'
+  file_contains "deps.json only uses bblanchon releases" "release/deps.json" 'github.com/bblanchon/pdfium-binaries/releases/download/'
+  file_contains "fetch-deps verifies SHA-256"         "scripts/fetch-deps.sh" 'SHA-256 mismatch'
+  file_contains "staging dir is gitignored"           ".gitignore" 'src-tauri/resources/'
+  file_contains "bundle overlay maps pdfium resources" "release/bundle.pdfium.conf.json" 'resources/pdfium/\*'
+  # Missing resource globs fail tauri-build, so resources must live only in the overlay passed to `tauri build --config`.
+  file_not_contains "tauri.conf.json has no bundle.resources (empty staging dir must still build)" "src-tauri/tauri.conf.json" '"resources"'
+  file_contains "loader searches ../lib/<product>"    "src-tauri/src/deck_importer.rs" 'fn pdfium_candidate_dirs'
+  file_not_contains "PDF fixture test is no longer ignored" "src-tauri/tests/deck_import_fixtures.rs" '#\[ignore'
+  if git ls-files --error-unmatch src-tauri/resources >/dev/null 2>&1 && [ -n "$(git ls-files src-tauri/resources)" ]; then
+    fail "fetched binaries under src-tauri/resources must not be tracked"
+  else
+    pass "no fetched binaries tracked"
+  fi
+
+  check "pdfium loader unit tests + PDF fixture (skips if pdfium not fetched)" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --lib deck_importer 2>&1 | tail -3 && cargo test --test deck_import_fixtures 2>&1 | grep -q "test result: ok. 3 passed"'
+
+  # check-bundle.sh against synthetic trees: a good one passes, a leaky/pdfium-less one fails.
+  local tmp; tmp="$(mktemp -d)"
+  mkdir -p "$tmp/good" "$tmp/bad/tests"
+  head -c 1100000 /dev/zero > "$tmp/good/pdfium.dll"
+  echo x > "$tmp/good/PDFIUM-LICENSE.txt"; echo x > "$tmp/good/streamdeck.exe"
+  echo x > "$tmp/bad/streamdeck.exe"; echo x > "$tmp/bad/app.pdb"
+  check "check-bundle.sh accepts a complete tree" bash scripts/check-bundle.sh "$tmp/good" windows-x64
+  if bash scripts/check-bundle.sh "$tmp/bad" windows-x64 >/dev/null 2>&1; then
+    fail "check-bundle.sh must reject a tree without pdfium / with .pdb and tests/"
+  else
+    pass "check-bundle.sh rejects a leaky tree without pdfium"
+  fi
+  rm -rf "$tmp"
+}
+
+# ══════════════════════════════════════════════════════════════════
 # DISPATCH
 # ══════════════════════════════════════════════════════════════════
 echo ""
@@ -1161,11 +1208,14 @@ case "$FILTER" in
   t1)
     run_t1
     ;;
+  release|release.pdfium)
+    run_release_pdfium
+    ;;
   core)
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_t0; run_t1; run_t2; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_t0; run_t1; run_t2; run_release_pdfium; run_core
     ;;
 esac
 

@@ -1,0 +1,5 @@
+{
+  "note": "max total bytes of the checked bundle dir/installer; set after the first measured build, raise deliberately",
+  "windows-x64": { "max_bytes": 10000000 },
+  "linux-x64": { "max_bytes": 0 }
+}

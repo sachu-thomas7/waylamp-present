@@ -32,3 +32,6 @@ target/
 .claude/settings.local.json
 
 coverage
+
+# fetched third-party binaries (scripts/fetch-deps.sh)
+src-tauri/resources/

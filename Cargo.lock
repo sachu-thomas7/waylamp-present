@@ -1796,6 +1796,7 @@ dependencies = [
  "byteorder-lite",
  "moxcms",
  "num-traits",
+ "png 0.18.1",
  "zune-core",
  "zune-jpeg",
 ]
@@ -3606,6 +3607,7 @@ dependencies = [
  "base64 0.22.1",
  "gstreamer",
  "gstreamer-app",
+ "image",
  "keyring",
  "notify",
  "pdfium-render",

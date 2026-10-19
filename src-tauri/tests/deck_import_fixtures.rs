@@ -75,11 +75,15 @@ async fn pdf_import_never_panics_when_pdfium_is_missing() {
     }
 }
 
-// Ignored by default: needs a native pdfium library, which this repo does not bundle yet (see CLAUDE.md).
-// Run manually with `cargo test -- --ignored` once pdfium is available locally.
+// Runs when the real loader finds pdfium (`bash scripts/fetch-deps.sh`); skips with a message otherwise.
 #[tokio::test]
-#[ignore = "requires a native pdfium library on PATH/next to the binary — not bundled yet, see CLAUDE.md"]
 async fn pdf_fixture_produces_one_slide_per_page_with_background() {
+    if !streamdeck_lib::deck_importer::pdfium_available() {
+        eprintln!(
+            "SKIPPED: pdfium not found; run `bash scripts/fetch-deps.sh` to enable this test"
+        );
+        return;
+    }
     let (bus, _rx) = EventBus::new();
     let bus = Arc::new(bus);
     let dest = tempfile::tempdir().unwrap();

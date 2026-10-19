@@ -392,20 +392,57 @@ fn extract_pptx_background(
 const PDFIUM_MISSING: &str =
     "PDF import is unavailable: the pdfium library was not found next to the app or on the system";
 
+const PRODUCT_NAME: &str = "StreamDeck";
+
+// Ordered search dirs: Windows/dev next to the exe, Tauri resource layouts, Linux deb/AppImage `../lib/<product>`.
+fn pdfium_candidate_dirs(exe_dir: &Path, dev_stage: Option<&Path>) -> Vec<PathBuf> {
+    let mut dirs = vec![
+        exe_dir.to_path_buf(),
+        exe_dir.join("resources").join("pdfium"),
+        exe_dir.join("pdfium"),
+        exe_dir.join("..").join("lib").join(PRODUCT_NAME),
+    ];
+    // cargo test binaries live in target/<profile>/deps; tauri-build copies resources one level up.
+    if exe_dir.file_name().is_some_and(|n| n == "deps") {
+        dirs.push(exe_dir.join(".."));
+    }
+    dirs.extend(dev_stage.map(Path::to_path_buf));
+    dirs
+}
+
+fn default_pdfium_dirs() -> Vec<PathBuf> {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .unwrap_or_else(|| PathBuf::from("."));
+    // Debug builds also look at the fetch-deps staging dir so `cargo tauri dev` and tests find it.
+    let dev_stage = cfg!(debug_assertions)
+        .then(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/pdfium"));
+    pdfium_candidate_dirs(&exe_dir, dev_stage.as_deref())
+}
+
 // Pdfium::default() panics when the library is missing, so bind explicitly and return an error.
-fn load_pdfium(dir: &Path, allow_system: bool) -> Result<pdfium_render::prelude::Pdfium, AppError> {
+fn load_pdfium(
+    dirs: &[PathBuf],
+    allow_system: bool,
+) -> Result<pdfium_render::prelude::Pdfium, AppError> {
     use pdfium_render::prelude::*;
 
-    let bindings = Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(dir))
-        .or_else(|e| {
-            if allow_system {
-                Pdfium::bind_to_system_library()
-            } else {
-                Err(e)
-            }
-        })
-        .map_err(|_| AppError::Internal(PDFIUM_MISSING.into()))?;
+    let bound = dirs.iter().find_map(|dir| {
+        Pdfium::bind_to_library(Pdfium::pdfium_platform_library_name_at_path(dir)).ok()
+    });
+    let bindings = match bound {
+        Some(b) => b,
+        None if allow_system => Pdfium::bind_to_system_library()
+            .map_err(|_| AppError::Internal(PDFIUM_MISSING.into()))?,
+        None => return Err(AppError::Internal(PDFIUM_MISSING.into())),
+    };
     Ok(Pdfium::new(bindings))
+}
+
+/// True when the same loader used by PDF import can find a pdfium library.
+pub fn pdfium_available() -> bool {
+    load_pdfium(&default_pdfium_dirs(), true).is_ok()
 }
 
 fn import_pdf(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<SlideDeck, AppError> {
@@ -414,11 +451,7 @@ fn import_pdf(path: &Path, dest_dir: &Path, bus: &Arc<EventBus>) -> Result<Slide
     let media_dir = dest_dir.join("media");
     std::fs::create_dir_all(&media_dir).map_err(|e| AppError::Internal(e.to_string()))?;
 
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf))
-        .unwrap_or_else(|| PathBuf::from("."));
-    let pdfium = load_pdfium(&exe_dir, true)?;
+    let pdfium = load_pdfium(&default_pdfium_dirs(), true)?;
     let document = pdfium
         .load_pdf_from_file(path, None)
         .map_err(|e| AppError::Internal(e.to_string()))?;
@@ -520,9 +553,36 @@ mod tests {
     fn load_pdfium_without_the_library_is_an_error_not_a_panic() {
         let empty = tempfile::tempdir().expect("temp dir");
 
-        let res = load_pdfium(empty.path(), false);
+        let res = load_pdfium(&[empty.path().to_path_buf()], false);
 
         assert!(matches!(res, Err(AppError::Internal(m)) if m == PDFIUM_MISSING));
+    }
+
+    #[test]
+    fn pdfium_candidates_cover_bundled_layouts_in_order() {
+        let exe = Path::new("/opt/app/usr/bin");
+        let stage = Path::new("/repo/resources/pdfium");
+
+        let dirs = pdfium_candidate_dirs(exe, Some(stage));
+
+        assert_eq!(dirs[0], exe);
+        assert_eq!(dirs[1], exe.join("resources/pdfium"));
+        assert!(dirs.contains(&exe.join("../lib/StreamDeck")));
+        assert_eq!(dirs.last().map(PathBuf::as_path), Some(stage));
+        assert!(
+            !dirs.contains(&exe.join("..")),
+            "parent only for cargo deps dir"
+        );
+    }
+
+    #[test]
+    fn pdfium_candidates_add_parent_for_cargo_test_binaries() {
+        let exe = Path::new("/repo/target/debug/deps");
+
+        let dirs = pdfium_candidate_dirs(exe, None);
+
+        assert!(dirs.contains(&exe.join("..")));
+        assert_eq!(dirs.len(), 5);
     }
 
     fn make_run(font_family: Option<&str>) -> SlideTextRun {
