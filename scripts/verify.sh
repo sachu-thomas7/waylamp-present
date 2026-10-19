@@ -615,6 +615,45 @@ run_f2_1() {
   fi
 }
 
+run_f2_2() {
+  section "F2.2 — NDI Source Discovery & Ingest"
+
+  file_exists "src-tauri/src/ndi.rs"
+  file_exists "src-tauri/src/commands/ndi.rs"
+  file_exists "src-tauri/tests/ndi_journeys.rs"
+  file_contains "NdiDiscovery trait seam"          "src-tauri/src/ndi.rs" "pub trait NdiDiscovery"
+  file_contains "SimulatedDiscovery for tests"     "src-tauri/src/ndi.rs" "pub struct SimulatedDiscovery"
+  file_contains "pure stream-format selection"     "src-tauri/src/ndi.rs" "pub fn select_stream_format"
+  file_contains "pure source diff"                 "src-tauri/src/ndi.rs" "pub fn diff_sources"
+  file_contains "2s discovery poll"                "src-tauri/src/ndi.rs" "from_secs(2)"
+  file_contains "poll spawned via tauri runtime"   "src-tauri/src/ndi.rs" "tauri::async_runtime::spawn"
+  file_contains "ndi cargo feature"                "src-tauri/Cargo.toml" "^ndi "
+  file_contains "production discovery behind feature" "src-tauri/src/ndi.rs" 'cfg(feature = "ndi")'
+  file_contains "backend add_ndi_source"           "src-tauri/src/pipeline.rs" "fn add_ndi_source"
+  file_contains "gst ndisrc segment"               "src-tauri/src/ndi.rs" "ndisrc ndi-name"
+  file_contains "SourceLost event"                 "src-tauri/src/events.rs" "SourceLost"
+  file_contains "SourceListChanged event"          "src-tauri/src/events.rs" "SourceListChanged"
+  file_contains "ndi commands registered"          "src-tauri/src/state.rs" "ndi_add_source"
+  file_contains "ndi watch task wired in app.rs"   "src-tauri/src/app.rs" "ndi::spawn_watch_task"
+  file_contains "SourceLost in controller events.ts" "controller/src/lib/events.ts" "SourceLost"
+  file_contains "ndiAddSource ipc"                 "controller/src/lib/ipc.ts" "ndiAddSource"
+  file_contains "ndiStore"                         "controller/src/store/ndiStore.ts" "useNdiStore"
+  file_contains "Source Lost placeholder"          "controller/src/components/NdiSourcesPanel.tsx" "Source Lost"
+  file_contains "SourceLost NOT_MODELLED in presentation" "presentation/src/lib/events.exhaustive.test.ts" "SourceLost"
+
+  check "F2.2 unit + harness tests pass without NDI or GStreamer"     bash -c 'set -o pipefail; cd src-tauri && cargo test --lib ndi 2>&1 | tee /tmp/sd-f22-lib.log       && cargo test --lib pipeline 2>&1 | tee /tmp/sd-f22-pl.log       && cargo test --test ndi_journeys 2>&1 | tee /tmp/sd-f22-j.log       && cargo test --test invariants 2>&1 | tee /tmp/sd-f22-inv.log       && ! grep -q "FAILED" /tmp/sd-f22-lib.log /tmp/sd-f22-pl.log /tmp/sd-f22-j.log /tmp/sd-f22-inv.log       && grep -q "test result: ok. 6 passed" /tmp/sd-f22-j.log'
+
+  check "NdiSourcesPanel + store tests and controller typecheck"     bash -c 'cd controller && npx vitest run src/components/NdiSourcesPanel.test.tsx src/store/ndiStore.test.ts src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+  check "presentation exhaustive-event test + typecheck"     bash -c 'cd presentation && npx vitest run src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+
+  # The ndi feature (gst device provider) only compiles where the GStreamer SDK is present.
+  if pkg-config --exists gstreamer-1.0 2>/dev/null; then
+    check "clippy with --features ndi"       bash -c 'cd src-tauri && cargo clippy --features ndi -- -D warnings'
+  else
+    warn "GStreamer SDK not found — ndi feature compile check skipped (real NDI needs the NDI SDK + gst-plugin-ndi)"
+  fi
+}
+
 # ══════════════════════════════════════════════════════════════════
 # CORE — Build + Lint (requires frontend dist to exist)
 # ══════════════════════════════════════════════════════════════════
@@ -968,8 +1007,11 @@ case "$FILTER" in
   f2.1)
     run_invariants; run_f2_1
     ;;
+  f2.2)
+    run_invariants; run_f2_1; run_f2_2
+    ;;
   f2|phase2)
-    run_invariants; run_f2_1; run_core
+    run_invariants; run_f2_1; run_f2_2; run_core
     ;;
   t0)
     run_t0
@@ -1008,7 +1050,7 @@ case "$FILTER" in
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_t0; run_t1; run_t2; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_t0; run_t1; run_t2; run_core
     ;;
 esac
 

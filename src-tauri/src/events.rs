@@ -1,4 +1,5 @@
 use crate::display::DisplayInfo;
+use crate::ndi::{NdiSource, StreamFormat};
 use crate::pipeline::PipelineState;
 use crate::scene::SceneMediaPayload;
 use crate::scene::SceneSource;
@@ -66,5 +67,21 @@ pub enum AppEvent {
         element: String,
         processed: u64,
         dropped: u64,
+    },
+    SourceDiscovered {
+        source: NdiSource,
+    },
+    SourceLost {
+        name: String,
+    },
+    SourceListChanged {
+        sources: Vec<NdiSource>,
+    },
+    SourceAdded {
+        name: String,
+        format: StreamFormat,
+    },
+    SourceRemoved {
+        name: String,
     },
 }

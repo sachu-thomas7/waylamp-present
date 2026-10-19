@@ -121,6 +121,9 @@ macro_rules! handler {
             crate::commands::pipeline::pipeline_resume,
             crate::commands::pipeline::pipeline_stop,
             crate::commands::pipeline::pipeline_get_state,
+            crate::commands::ndi::ndi_list_sources,
+            crate::commands::ndi::ndi_add_source,
+            crate::commands::ndi::ndi_remove_source,
         ]
     };
 }
@@ -143,6 +146,17 @@ pub fn manage_pipeline<R: Runtime, M: Manager<R>>(
     bus: Arc<EventBus>,
 ) -> crate::pipeline::PipelineHandle {
     let handle = crate::pipeline::PipelineService::spawn(backend, bus);
+    manager.manage(Arc::clone(&handle));
+    handle
+}
+
+/// Manages the NDI discovery provider and the (initially empty) source state.
+pub fn manage_ndi<R: Runtime, M: Manager<R>>(
+    manager: &M,
+    provider: crate::ndi::NdiDiscoveryHandle,
+) -> crate::ndi::NdiStateHandle {
+    manager.manage(provider);
+    let handle = crate::ndi::new_ndi_handle();
     manager.manage(Arc::clone(&handle));
     handle
 }

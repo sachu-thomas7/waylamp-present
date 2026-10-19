@@ -12,6 +12,7 @@ use crate::events::AppEvent;
 
 use crate::state::TimerAbortHandle;
 pub struct DisplayWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
+pub struct NdiWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 
 pub fn run() {
     let (bus, rx) = EventBus::new();
@@ -104,11 +105,21 @@ pub fn run() {
 
             app.manage(watcher);
 
-            crate::state::manage_pipeline(
+            let pipeline = crate::state::manage_pipeline(
                 app,
                 crate::state::production_pipeline_backend(Arc::clone(&bus_arc)),
                 Arc::clone(&bus_arc),
             );
+
+            let ndi_provider = crate::ndi::production_discovery();
+            let ndi_state = crate::state::manage_ndi(app, Arc::clone(&ndi_provider));
+            let ndi_watch_abort = crate::ndi::spawn_watch_task(
+                ndi_provider,
+                pipeline,
+                Arc::clone(&bus_arc),
+                ndi_state,
+            );
+            app.manage(NdiWatchAbortHandle(ndi_watch_abort));
 
             Ok(())
         })
@@ -120,6 +131,9 @@ pub fn run() {
                     }
                     if let Some(abort) = window.app_handle().try_state::<DisplayWatchAbortHandle>()
                     {
+                        abort.0.abort();
+                    }
+                    if let Some(abort) = window.app_handle().try_state::<NdiWatchAbortHandle>() {
                         abort.0.abort();
                     }
                     if let Some(presentation) =

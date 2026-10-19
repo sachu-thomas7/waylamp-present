@@ -32,6 +32,11 @@ const NOT_MODELLED: Record<string, string> = {
   PipelineWarning: 'pipeline status is controller-only',
   PipelineLatency: 'pipeline status is controller-only',
   PipelineQos: 'pipeline status is controller-only',
+  SourceDiscovered: 'NDI source list is controller-only',
+  SourceLost: 'NDI source list is controller-only',
+  SourceListChanged: 'NDI source list is controller-only',
+  SourceAdded: 'NDI source list is controller-only',
+  SourceRemoved: 'NDI source list is controller-only',
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

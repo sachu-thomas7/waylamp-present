@@ -6,6 +6,7 @@ import { SlideDeckPanel } from './components/SlideDeckPanel';
 import { SceneMediaPanel } from './components/SceneMediaPanel';
 import { DisplayPanel } from './components/DisplayPanel';
 import { PipelinePanel } from './components/PipelinePanel';
+import { NdiSourcesPanel } from './components/NdiSourcesPanel';
 import { Popover } from './components/ui/Popover';
 import { IconButton } from './components/ui/IconButton';
 import { Button } from './components/ui/Button';
@@ -80,6 +81,9 @@ export default function App() {
             <DisplayPanel />
             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
               <PipelinePanel />
+            </div>
+            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
+              <NdiSourcesPanel />
             </div>
             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Deck</span>

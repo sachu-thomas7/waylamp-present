@@ -5,6 +5,7 @@ import { useControllerSlideStore } from '../store/slideStore';
 import { useDisplayStore } from '../store/displayStore';
 import { useSceneStore } from '../store/sceneStore';
 import { usePipelineStore } from '../store/pipelineStore';
+import { useNdiStore } from '../store/ndiStore';
 import type { IpcCall, IpcHandler } from './mockTauri';
 
 export function resetStores() {
@@ -15,6 +16,7 @@ export function resetStores() {
   useDisplayStore.setState({ displays: [], assignedDisplayId: null, lostWarning: false });
   useSceneStore.setState({ activeSource: 'SlideDeck', currentMedia: null });
   usePipelineStore.setState({ state: 'Null', lastError: null });
+  useNdiStore.setState({ discovered: [], added: [], unavailable: null, lastError: null });
 }
 
 export function makeSlide(index: number, total: number, over: Partial<SlidePayload> = {}): SlidePayload {
@@ -41,6 +43,7 @@ export function baseHandlers(over: Record<string, IpcHandler> = {}): Record<stri
     scene_get_active_source: () => 'SlideDeck',
     display_list: () => [],
     pipeline_get_state: () => 'Null',
+    ndi_list_sources: () => ({ discovered: [], added: [], unavailable: null }),
     ...over,
   };
 }

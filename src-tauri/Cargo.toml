@@ -43,6 +43,7 @@ gstreamer       = { version = "0.25", optional = true }
 default          = ["custom-protocol"]
 custom-protocol  = ["tauri/custom-protocol"]
 gstreamer        = ["dep:gstreamer"]
+ndi              = ["gstreamer"]
 
 [dev-dependencies]
 tempfile = "3"

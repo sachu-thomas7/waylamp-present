@@ -157,3 +157,35 @@ export async function pipelineStop(): Promise<void> {
 export async function pipelineGetState(): Promise<PipelineState> {
   return invoke<PipelineState>('pipeline_get_state');
 }
+
+export interface NdiSource {
+  name: string;
+  url: string | null;
+  advertises_new_format: boolean;
+}
+
+export type StreamFormat = 'NewFormat' | 'Standard';
+
+export interface AddedSource {
+  name: string;
+  format: StreamFormat;
+  lost: boolean;
+}
+
+export interface NdiSnapshot {
+  discovered: NdiSource[];
+  added: AddedSource[];
+  unavailable: string | null;
+}
+
+export async function ndiListSources(): Promise<NdiSnapshot> {
+  return invoke<NdiSnapshot>('ndi_list_sources');
+}
+
+export async function ndiAddSource(name: string): Promise<void> {
+  return invoke<void>('ndi_add_source', { name });
+}
+
+export async function ndiRemoveSource(name: string): Promise<void> {
+  return invoke<void>('ndi_remove_source', { name });
+}

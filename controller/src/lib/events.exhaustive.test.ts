@@ -28,6 +28,11 @@ const TS_VARIANTS: Record<AppEvent['type'], true> = {
   PipelineWarning: true,
   PipelineLatency: true,
   PipelineQos: true,
+  SourceDiscovered: true,
+  SourceLost: true,
+  SourceListChanged: true,
+  SourceAdded: true,
+  SourceRemoved: true,
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

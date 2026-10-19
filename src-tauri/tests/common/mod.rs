@@ -30,6 +30,10 @@ pub struct TestApp {
     pub data_dir: tempfile::TempDir,
     pub displays: Arc<FakeDisplays>,
     pub pipeline_backend: streamdeck_lib::pipeline::SimulatedBackend,
+    pub pipeline: streamdeck_lib::pipeline::PipelineHandle,
+    pub ndi_discovery: streamdeck_lib::ndi::SimulatedDiscovery,
+    pub ndi_provider: streamdeck_lib::ndi::NdiDiscoveryHandle,
+    pub ndi_state: streamdeck_lib::ndi::NdiStateHandle,
 }
 
 /// Scriptable monitor list standing in for the OS (mock `available_monitors` is unimplemented).
@@ -113,11 +117,15 @@ impl TestApp {
         streamdeck_lib::state::manage_display(&app, &config, displays.clone());
 
         let pipeline_backend = streamdeck_lib::pipeline::SimulatedBackend::default();
-        streamdeck_lib::state::manage_pipeline(
+        let pipeline = streamdeck_lib::state::manage_pipeline(
             &app,
             Box::new(pipeline_backend.clone()),
             Arc::clone(&bus),
         );
+
+        let ndi_discovery = streamdeck_lib::ndi::SimulatedDiscovery::default();
+        let ndi_provider: streamdeck_lib::ndi::NdiDiscoveryHandle = Arc::new(ndi_discovery.clone());
+        let ndi_state = streamdeck_lib::state::manage_ndi(&app, Arc::clone(&ndi_provider));
 
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()
@@ -131,7 +139,22 @@ impl TestApp {
             data_dir,
             displays,
             pipeline_backend,
+            pipeline,
+            ndi_discovery,
+            ndi_provider,
+            ndi_state,
         }
+    }
+
+    /// One NDI poll step, as the 2s watch task would run it.
+    pub async fn poll_ndi(&self) {
+        streamdeck_lib::ndi::reconcile_sources(
+            &self.ndi_provider,
+            &self.pipeline,
+            &self.bus,
+            &self.ndi_state,
+        )
+        .await;
     }
 
     /// The `streamdeck.toml` the app under test reads/writes (inside the temp data dir).

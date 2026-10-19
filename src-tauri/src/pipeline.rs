@@ -6,6 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 use crate::bus::EventBus;
 use crate::error::AppError;
 use crate::events::AppEvent;
+use crate::ndi::StreamFormat;
 
 pub const TEST_PIPELINE: &str = "videotestsrc is-live=true ! autovideosink";
 
@@ -23,6 +24,14 @@ pub trait PipelineBackend: Send + 'static {
     fn resume(&mut self) -> Result<(), AppError>;
     /// Must reach NULL and be idempotent.
     fn stop(&mut self) -> Result<(), AppError>;
+    /// Attaches one NDI source alongside the test pipeline; never disturbs what is running.
+    fn add_ndi_source(&mut self, name: &str, format: StreamFormat) -> Result<(), AppError>;
+    /// Idempotent: removing an unknown source is fine.
+    fn remove_ndi_source(&mut self, name: &str) -> Result<(), AppError>;
+    /// Final teardown at app exit: everything reaches NULL.
+    fn shutdown(&mut self) {
+        let _ = self.stop();
+    }
 }
 
 type Reply = oneshot::Sender<Result<(), AppError>>;
@@ -32,6 +41,8 @@ enum Command {
     Pause(Reply),
     Resume(Reply),
     Stop(Reply),
+    AddSource(String, StreamFormat, Reply),
+    RemoveSource(String, Reply),
     GetState(oneshot::Sender<PipelineState>),
     Shutdown(std::sync::mpsc::Sender<()>),
 }
@@ -83,6 +94,16 @@ impl PipelineService {
 
     pub async fn stop(&self) -> Result<(), AppError> {
         self.request(Command::Stop).await?
+    }
+
+    pub async fn add_ndi_source(&self, name: &str, format: StreamFormat) -> Result<(), AppError> {
+        let n = name.to_string();
+        self.request(|r| Command::AddSource(n, format, r)).await?
+    }
+
+    pub async fn remove_ndi_source(&self, name: &str) -> Result<(), AppError> {
+        let n = name.to_string();
+        self.request(|r| Command::RemoveSource(n, r)).await?
     }
 
     pub async fn state(&self) -> Result<PipelineState, AppError> {
@@ -150,18 +171,24 @@ fn run_actor(
                 }
                 let _ = reply.send(r);
             }
+            Command::AddSource(name, format, reply) => {
+                let _ = reply.send(backend.add_ndi_source(&name, format));
+            }
+            Command::RemoveSource(name, reply) => {
+                let _ = reply.send(backend.remove_ndi_source(&name));
+            }
             Command::GetState(reply) => {
                 let _ = reply.send(state);
             }
             Command::Shutdown(ack) => {
-                let _ = backend.stop();
+                backend.shutdown();
                 set(&mut state, PipelineState::Null);
                 let _ = ack.send(());
                 return;
             }
         }
     }
-    let _ = backend.stop();
+    backend.shutdown();
 }
 
 /// Used when GStreamer is not compiled in or failed to initialise.
@@ -180,6 +207,12 @@ impl PipelineBackend for UnavailableBackend {
     fn stop(&mut self) -> Result<(), AppError> {
         Ok(())
     }
+    fn add_ndi_source(&mut self, _: &str, _: StreamFormat) -> Result<(), AppError> {
+        Err(AppError::Internal(self.0.clone()))
+    }
+    fn remove_ndi_source(&mut self, _: &str) -> Result<(), AppError> {
+        Ok(())
+    }
 }
 
 /// In-memory backend for tests and the mock harness: records calls, can fail the next start.
@@ -187,6 +220,8 @@ impl PipelineBackend for UnavailableBackend {
 pub struct SimulatedBackend {
     pub log: Arc<Mutex<Vec<String>>>,
     pub fail_start: Arc<Mutex<Option<String>>>,
+    pub fail_add_source: Arc<Mutex<Option<String>>>,
+    pub sources: Arc<Mutex<Vec<String>>>,
 }
 
 impl SimulatedBackend {
@@ -198,6 +233,17 @@ impl SimulatedBackend {
 
     pub fn calls(&self) -> Vec<String> {
         self.log.lock().map(|l| l.clone()).unwrap_or_default()
+    }
+
+    pub fn fail_next_add_source(&self, reason: &str) {
+        if let Ok(mut f) = self.fail_add_source.lock() {
+            *f = Some(reason.to_string());
+        }
+    }
+
+    /// Names of the NDI sources currently attached.
+    pub fn attached_sources(&self) -> Vec<String> {
+        self.sources.lock().map(|s| s.clone()).unwrap_or_default()
     }
 
     pub fn fail_next_start(&self, reason: &str) {
@@ -225,6 +271,30 @@ impl PipelineBackend for SimulatedBackend {
     }
     fn stop(&mut self) -> Result<(), AppError> {
         self.record("stop");
+        Ok(())
+    }
+    fn add_ndi_source(&mut self, name: &str, format: StreamFormat) -> Result<(), AppError> {
+        self.record(&format!("add_source:{name}:{format:?}"));
+        if let Some(reason) = self.fail_add_source.lock().ok().and_then(|mut f| f.take()) {
+            return Err(AppError::Internal(reason));
+        }
+        let mut sources = self
+            .sources
+            .lock()
+            .map_err(|_| AppError::Internal("sources lock poisoned".into()))?;
+        if sources.iter().any(|s| s == name) {
+            return Err(AppError::InvalidInput(format!(
+                "source already attached: {name}"
+            )));
+        }
+        sources.push(name.to_string());
+        Ok(())
+    }
+    fn remove_ndi_source(&mut self, name: &str) -> Result<(), AppError> {
+        self.record(&format!("remove_source:{name}"));
+        if let Ok(mut sources) = self.sources.lock() {
+            sources.retain(|s| s != name);
+        }
         Ok(())
     }
 }
@@ -255,12 +325,41 @@ pub mod gst_backend {
     pub struct GstBackend {
         bus: Arc<EventBus>,
         running: Option<Running>,
+        sources: std::collections::HashMap<String, Running>,
     }
 
     impl GstBackend {
         pub fn new(bus: Arc<EventBus>) -> Result<Self, AppError> {
             gst::init().map_err(|e| AppError::Internal(format!("GStreamer init failed: {e}")))?;
-            Ok(Self { bus, running: None })
+            Ok(Self {
+                bus,
+                running: None,
+                sources: Default::default(),
+            })
+        }
+
+        /// Parses `description` and starts its bus watcher; the pipeline is still NULL.
+        fn build(&self, description: &str) -> Result<Running, AppError> {
+            let pipeline = gst::parse::launch(description)
+                .map_err(|e| AppError::InvalidInput(format!("invalid pipeline: {e}")))?
+                .downcast::<gst::Pipeline>()
+                .map_err(|_| AppError::InvalidInput("pipeline needs 2+ linked elements".into()))?;
+            let bus = pipeline
+                .bus()
+                .ok_or_else(|| AppError::Internal("pipeline has no bus".into()))?;
+            let stop_flag = Arc::new(AtomicBool::new(false));
+            let watcher = {
+                let (p, events, flag) = (pipeline.clone(), self.bus.clone(), stop_flag.clone());
+                std::thread::Builder::new()
+                    .name("gst-bus-watcher".into())
+                    .spawn(move || watch(p, bus, events, flag))
+                    .map_err(|e| AppError::Internal(format!("watcher thread: {e}")))?
+            };
+            Ok(Running {
+                pipeline,
+                stop_flag,
+                watcher: Some(watcher),
+            })
         }
 
         fn set_state(&self, state: gst::State) -> Result<(), AppError> {
@@ -324,27 +423,9 @@ pub mod gst_backend {
             if self.running.is_some() {
                 return Err(AppError::InvalidInput("pipeline already running".into()));
             }
-            let pipeline = gst::parse::launch(description)
-                .map_err(|e| AppError::InvalidInput(format!("invalid pipeline: {e}")))?
-                .downcast::<gst::Pipeline>()
-                .map_err(|_| AppError::InvalidInput("pipeline needs 2+ linked elements".into()))?;
-            let bus = pipeline
-                .bus()
-                .ok_or_else(|| AppError::Internal("pipeline has no bus".into()))?;
-            let stop_flag = Arc::new(AtomicBool::new(false));
-            let watcher = {
-                let (p, events, flag) = (pipeline.clone(), self.bus.clone(), stop_flag.clone());
-                std::thread::Builder::new()
-                    .name("gst-bus-watcher".into())
-                    .spawn(move || watch(p, bus, events, flag))
-                    .map_err(|e| AppError::Internal(format!("watcher thread: {e}")))?
-            };
-            let started = pipeline.set_state(gst::State::Playing);
-            self.running = Some(Running {
-                pipeline,
-                stop_flag,
-                watcher: Some(watcher),
-            });
+            let r = self.build(description)?;
+            let started = r.pipeline.set_state(gst::State::Playing);
+            self.running = Some(r);
             if let Err(e) = started {
                 let _ = self.stop();
                 return Err(AppError::Internal(format!("pipeline failed to start: {e}")));
@@ -361,24 +442,59 @@ pub mod gst_backend {
         }
 
         fn stop(&mut self) -> Result<(), AppError> {
-            let Some(mut r) = self.running.take() else {
-                return Ok(());
-            };
-            // Drain the watcher before NULL: leaving PLAYING flushes the bus and would drop errors.
-            r.stop_flag.store(true, Ordering::Release);
-            if let Some(h) = r.watcher.take() {
-                let _ = h.join();
+            match self.running.take() {
+                Some(r) => teardown(r),
+                None => Ok(()),
             }
-            r.pipeline
-                .set_state(gst::State::Null)
-                .map(|_| ())
-                .map_err(|e| AppError::Internal(format!("failed to reach NULL: {e}")))
         }
+
+        fn add_ndi_source(&mut self, name: &str, format: StreamFormat) -> Result<(), AppError> {
+            if self.sources.contains_key(name) {
+                return Err(AppError::InvalidInput(format!(
+                    "source already attached: {name}"
+                )));
+            }
+            // `format` does not change the element yet; New Format needs real-SDK validation.
+            let _ = format;
+            let r = self.build(&crate::ndi::ndi_source_description(name))?;
+            if let Err(e) = r.pipeline.set_state(gst::State::Playing) {
+                let _ = teardown(r);
+                return Err(AppError::Internal(format!("source failed to start: {e}")));
+            }
+            self.sources.insert(name.to_string(), r);
+            Ok(())
+        }
+
+        fn remove_ndi_source(&mut self, name: &str) -> Result<(), AppError> {
+            match self.sources.remove(name) {
+                Some(r) => teardown(r),
+                None => Ok(()),
+            }
+        }
+
+        fn shutdown(&mut self) {
+            for (_, r) in self.sources.drain() {
+                let _ = teardown(r);
+            }
+            let _ = self.stop();
+        }
+    }
+
+    fn teardown(mut r: Running) -> Result<(), AppError> {
+        // Drain the watcher before NULL: leaving PLAYING flushes the bus and would drop errors.
+        r.stop_flag.store(true, Ordering::Release);
+        if let Some(h) = r.watcher.take() {
+            let _ = h.join();
+        }
+        r.pipeline
+            .set_state(gst::State::Null)
+            .map(|_| ())
+            .map_err(|e| AppError::Internal(format!("failed to reach NULL: {e}")))
     }
 
     impl Drop for GstBackend {
         fn drop(&mut self) {
-            let _ = self.stop();
+            self.shutdown();
         }
     }
 }
