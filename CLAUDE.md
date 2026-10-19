@@ -292,6 +292,10 @@ rust-analyzer state on a fresh checkout.
   any copy or path storage — never trust the frontend to pre-validate.
 - Windows AV may flag the dev binary (`VHO:Trojan-PSW`) due to `keyring` + being unsigned —
   add the project/`target` dirs to AV exclusions locally; code-sign for real distribution.
+  Kaspersky/Norton also delete freshly built exes (looks like missing `target/debug/*.exe` or `os error 5/32`).
+- `target/` hit 96 GB (full MSVC debuginfo × ~20 test binaries × feature combos): root `Cargo.toml`
+  now sets `line-tables-only` for the workspace, no debuginfo for deps, no incremental for tests.
+  If it creeps up again, `cargo clean` (it's all rebuildable).
 - quick-xml distinguishes `Event::Start`/`Event::End` (has children) from `Event::Empty`
   (self-closing `<tag/>`) — real-world XML producers (PowerPoint included) favor
   self-closing tags for childless elements. A `match` that only handles one of these two
