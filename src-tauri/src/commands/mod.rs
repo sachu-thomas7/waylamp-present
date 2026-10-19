@@ -5,6 +5,7 @@ pub mod info;
 pub mod ndi;
 pub mod pipeline;
 pub mod presentation;
+pub mod preview;
 pub mod scene;
 pub mod slide;
 pub mod system;

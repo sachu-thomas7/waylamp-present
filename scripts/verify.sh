@@ -607,7 +607,7 @@ run_f2_1() {
   if pkg-config --exists gstreamer-1.0 2>/dev/null; then
     check "real GStreamer: 100x start/pause/resume/stop, error surfacing, shutdown" \
       bash -c 'set -o pipefail; cd src-tauri && STREAMDECK_PIPELINE_LOOPS=100 cargo test --features gstreamer --lib gst_tests -- --test-threads=1 2>&1 | tee /tmp/sd-f21-gst.log \
-        && ! grep -q "FAILED" /tmp/sd-f21-gst.log && grep -q "test result: ok. 4 passed" /tmp/sd-f21-gst.log'
+        && ! grep -q "FAILED" /tmp/sd-f21-gst.log && grep -q "test result: ok. 5 passed" /tmp/sd-f21-gst.log'
     check "clippy with --features gstreamer" \
       bash -c 'cd src-tauri && cargo clippy --features gstreamer -- -D warnings'
   else
@@ -651,6 +651,57 @@ run_f2_2() {
     check "clippy with --features ndi"       bash -c 'cd src-tauri && cargo clippy --features ndi -- -D warnings'
   else
     warn "GStreamer SDK not found — ndi feature compile check skipped (real NDI needs the NDI SDK + gst-plugin-ndi)"
+  fi
+}
+
+run_f2_3() {
+  section "F2.3 — Camera Preview Grid"
+
+  file_exists "src-tauri/src/preview.rs"
+  file_exists "src-tauri/src/commands/preview.rs"
+  file_exists "src-tauri/tests/preview_journeys.rs"
+  file_exists "controller/src/components/CameraPreview.tsx"
+  file_exists "controller/src/components/CameraPreviewGrid.tsx"
+  file_contains "pure per-source frame throttle"     "src-tauri/src/preview.rs" "pub struct FrameThrottle"
+  file_contains "8 fps preview cap"                  "src-tauri/src/preview.rs" "PREVIEW_FPS: u32 = 8"
+  file_contains "320x180 thumbnails"                 "src-tauri/src/preview.rs" "PREVIEW_WIDTH: u32 = 320"
+  file_contains "PNG encode off the actor thread"    "src-tauri/src/preview.rs" "spawn_blocking"
+  file_contains "simulated test-pattern feeds"       "src-tauri/src/preview.rs" "pub fn test_pattern"
+  file_contains "simulated backend produces frames"  "src-tauri/src/pipeline.rs" "pub fn with_preview"
+  file_contains "gst appsink frame sender"           "src-tauri/src/pipeline.rs" "AppSinkCallbacks"
+  file_contains "scale to 320x180 in the pipeline"   "src-tauri/src/ndi.rs" "width=320,height=180"
+  file_contains "SourceStats event"                  "src-tauri/src/events.rs" "SourceStats"
+  file_contains "preview commands registered"        "src-tauri/src/state.rs" "preview_set_layout"
+  file_contains "stats task wired in app.rs"         "src-tauri/src/app.rs" "preview::spawn_stats_task"
+  file_contains "frame bridge targets the controller" "src-tauri/src/app.rs" 'emit_to("controller", "preview-frame"'
+  file_contains "layout persisted in config"         "src-tauri/src/config.rs" "preview_grid"
+  file_contains "SourceStats in controller events.ts" "controller/src/lib/events.ts" "SourceStats"
+  file_contains "onPreviewFrame listener"            "controller/src/lib/events.ts" "onPreviewFrame"
+  file_contains "previewSetLayout ipc"               "controller/src/lib/ipc.ts" "previewSetLayout"
+  file_contains "previewStore"                       "controller/src/store/previewStore.ts" "usePreviewStore"
+  file_contains "Source Lost placeholder"            "controller/src/components/CameraPreview.tsx" "Source Lost"
+  file_contains "sleep/wake resubscribe"             "controller/src/components/CameraPreviewGrid.tsx" "visibilitychange"
+  file_contains "SourceStats NOT_MODELLED in presentation" "presentation/src/lib/events.exhaustive.test.ts" "SourceStats"
+
+  check "F2.3 unit + harness tests pass without NDI or GStreamer" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --lib preview 2>&1 | tee /tmp/sd-f23-lib.log \
+      && cargo test --lib pipeline 2>&1 | tee /tmp/sd-f23-pl.log \
+      && cargo test --test preview_journeys 2>&1 | tee /tmp/sd-f23-j.log \
+      && cargo test --test ndi_journeys 2>&1 | tee /tmp/sd-f23-ndi.log \
+      && cargo test --test invariants 2>&1 | tee /tmp/sd-f23-inv.log \
+      && ! grep -q "FAILED" /tmp/sd-f23-lib.log /tmp/sd-f23-pl.log /tmp/sd-f23-j.log /tmp/sd-f23-ndi.log /tmp/sd-f23-inv.log \
+      && grep -q "test result: ok. 6 passed" /tmp/sd-f23-j.log'
+
+  check "CameraPreviewGrid + store tests and controller typecheck" \
+    bash -c 'cd controller && npx vitest run src/components/CameraPreviewGrid.test.tsx src/store/previewStore.test.ts src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+  check "presentation exhaustive-event test + typecheck" \
+    bash -c 'cd presentation && npx vitest run src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+
+  if pkg-config --exists gstreamer-1.0 2>/dev/null; then
+    check "clippy with --features gstreamer (appsink frame sender compiles)" \
+      bash -c 'cd src-tauri && cargo clippy --features gstreamer --all-targets -- -D warnings'
+  else
+    warn "GStreamer SDK not found — appsink frame sender compile check skipped"
   fi
 }
 
@@ -1010,8 +1061,11 @@ case "$FILTER" in
   f2.2)
     run_invariants; run_f2_1; run_f2_2
     ;;
+  f2.3)
+    run_invariants; run_f2_1; run_f2_2; run_f2_3
+    ;;
   f2|phase2)
-    run_invariants; run_f2_1; run_f2_2; run_core
+    run_invariants; run_f2_1; run_f2_2; run_f2_3; run_core
     ;;
   t0)
     run_t0
@@ -1050,7 +1104,7 @@ case "$FILTER" in
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_t0; run_t1; run_t2; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_t0; run_t1; run_t2; run_core
     ;;
 esac
 

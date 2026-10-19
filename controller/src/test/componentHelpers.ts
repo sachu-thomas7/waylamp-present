@@ -6,6 +6,7 @@ import { useDisplayStore } from '../store/displayStore';
 import { useSceneStore } from '../store/sceneStore';
 import { usePipelineStore } from '../store/pipelineStore';
 import { useNdiStore } from '../store/ndiStore';
+import { usePreviewStore } from '../store/previewStore';
 import type { IpcCall, IpcHandler } from './mockTauri';
 
 export function resetStores() {
@@ -17,6 +18,7 @@ export function resetStores() {
   useSceneStore.setState({ activeSource: 'SlideDeck', currentMedia: null });
   usePipelineStore.setState({ state: 'Null', lastError: null });
   useNdiStore.setState({ discovered: [], added: [], unavailable: null, lastError: null });
+  usePreviewStore.setState({ frames: {}, stats: {}, layout: '2x2' });
 }
 
 export function makeSlide(index: number, total: number, over: Partial<SlidePayload> = {}): SlidePayload {
@@ -44,6 +46,8 @@ export function baseHandlers(over: Record<string, IpcHandler> = {}): Record<stri
     display_list: () => [],
     pipeline_get_state: () => 'Null',
     ndi_list_sources: () => ({ discovered: [], added: [], unavailable: null }),
+    preview_get_snapshot: () => ({ frames: [], stats: [] }),
+    preview_get_layout: () => '2x2',
     ...over,
   };
 }

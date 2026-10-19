@@ -38,11 +38,14 @@ quick-xml       = { version = "0.42", features = ["serialize"] }
 pdfium-render   = { version = "0.8", features = ["sync"] }
 uuid            = { version = "1", features = ["v4"] }
 gstreamer       = { version = "0.25", optional = true }
+gstreamer-app   = { version = "0.25", optional = true }
+png             = "0.17"
+base64          = "0.22"
 
 [features]
 default          = ["custom-protocol"]
 custom-protocol  = ["tauri/custom-protocol"]
-gstreamer        = ["dep:gstreamer"]
+gstreamer        = ["dep:gstreamer", "dep:gstreamer-app"]
 ndi              = ["gstreamer"]
 
 [dev-dependencies]

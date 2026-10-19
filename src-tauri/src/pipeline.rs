@@ -7,6 +7,7 @@ use crate::bus::EventBus;
 use crate::error::AppError;
 use crate::events::AppEvent;
 use crate::ndi::StreamFormat;
+use crate::preview::{PreviewHub, SimulatedFeeds};
 
 pub const TEST_PIPELINE: &str = "videotestsrc is-live=true ! autovideosink";
 
@@ -222,9 +223,24 @@ pub struct SimulatedBackend {
     pub fail_start: Arc<Mutex<Option<String>>>,
     pub fail_add_source: Arc<Mutex<Option<String>>>,
     pub sources: Arc<Mutex<Vec<String>>>,
+    feeds: Option<Arc<Mutex<SimulatedFeeds>>>,
 }
 
 impl SimulatedBackend {
+    /// Attached sources push synthetic 320x180 test-pattern frames into `hub` at `fps`.
+    pub fn with_preview(hub: PreviewHub, fps: u32) -> Self {
+        Self {
+            feeds: Some(Arc::new(Mutex::new(SimulatedFeeds::new(hub, fps)))),
+            ..Self::default()
+        }
+    }
+
+    fn with_feeds(&self, f: impl FnOnce(&mut SimulatedFeeds)) {
+        if let Some(Ok(mut feeds)) = self.feeds.as_ref().map(|m| m.lock()) {
+            f(&mut feeds);
+        }
+    }
+
     fn record(&self, entry: &str) {
         if let Ok(mut log) = self.log.lock() {
             log.push(entry.to_string());
@@ -288,13 +304,20 @@ impl PipelineBackend for SimulatedBackend {
             )));
         }
         sources.push(name.to_string());
+        drop(sources);
+        self.with_feeds(|f| f.start(name));
         Ok(())
+    }
+    fn shutdown(&mut self) {
+        self.with_feeds(|f| f.stop_all());
+        let _ = self.stop();
     }
     fn remove_ndi_source(&mut self, name: &str) -> Result<(), AppError> {
         self.record(&format!("remove_source:{name}"));
         if let Ok(mut sources) = self.sources.lock() {
             sources.retain(|s| s != name);
         }
+        self.with_feeds(|f| f.stop(name));
         Ok(())
     }
 }
@@ -308,6 +331,7 @@ pub mod gst_backend {
     use gstreamer::prelude::*;
 
     use super::*;
+    use crate::preview::RawFrame;
 
     const WATCHED: &[gst::MessageType] = &[
         gst::MessageType::Error,
@@ -324,15 +348,17 @@ pub mod gst_backend {
 
     pub struct GstBackend {
         bus: Arc<EventBus>,
+        preview: PreviewHub,
         running: Option<Running>,
         sources: std::collections::HashMap<String, Running>,
     }
 
     impl GstBackend {
-        pub fn new(bus: Arc<EventBus>) -> Result<Self, AppError> {
+        pub fn new(bus: Arc<EventBus>, preview: PreviewHub) -> Result<Self, AppError> {
             gst::init().map_err(|e| AppError::Internal(format!("GStreamer init failed: {e}")))?;
             Ok(Self {
                 bus,
+                preview,
                 running: None,
                 sources: Default::default(),
             })
@@ -360,6 +386,27 @@ pub mod gst_backend {
                 stop_flag,
                 watcher: Some(watcher),
             })
+        }
+
+        /// Runs `description` as source `name`, feeding its appsink into the preview hub.
+        pub(crate) fn attach_source(
+            &mut self,
+            name: &str,
+            description: &str,
+        ) -> Result<(), AppError> {
+            if self.sources.contains_key(name) {
+                return Err(AppError::InvalidInput(format!(
+                    "source already attached: {name}"
+                )));
+            }
+            let r = self.build(description)?;
+            attach_preview(&r.pipeline, name, self.preview.clone());
+            if let Err(e) = r.pipeline.set_state(gst::State::Playing) {
+                let _ = teardown(r);
+                return Err(AppError::Internal(format!("source failed to start: {e}")));
+            }
+            self.sources.insert(name.to_string(), r);
+            Ok(())
         }
 
         fn set_state(&self, state: gst::State) -> Result<(), AppError> {
@@ -449,27 +496,18 @@ pub mod gst_backend {
         }
 
         fn add_ndi_source(&mut self, name: &str, format: StreamFormat) -> Result<(), AppError> {
-            if self.sources.contains_key(name) {
-                return Err(AppError::InvalidInput(format!(
-                    "source already attached: {name}"
-                )));
-            }
             // `format` does not change the element yet; New Format needs real-SDK validation.
             let _ = format;
-            let r = self.build(&crate::ndi::ndi_source_description(name))?;
-            if let Err(e) = r.pipeline.set_state(gst::State::Playing) {
-                let _ = teardown(r);
-                return Err(AppError::Internal(format!("source failed to start: {e}")));
-            }
-            self.sources.insert(name.to_string(), r);
-            Ok(())
+            self.attach_source(name, &crate::ndi::ndi_source_description(name))
         }
 
         fn remove_ndi_source(&mut self, name: &str) -> Result<(), AppError> {
-            match self.sources.remove(name) {
+            let result = match self.sources.remove(name) {
                 Some(r) => teardown(r),
                 None => Ok(()),
-            }
+            };
+            self.preview.forget(name);
+            result
         }
 
         fn shutdown(&mut self) {
@@ -478,6 +516,57 @@ pub mod gst_backend {
             }
             let _ = self.stop();
         }
+    }
+
+    /// Best-effort and untested without a real NDI source: tracks the source resolution and feeds
+    /// 320x180 RGBA samples to the hub; latency is the buffer PTS vs the pipeline running time.
+    fn attach_preview(pipeline: &gst::Pipeline, name: &str, hub: PreviewHub) {
+        let native = Arc::new(Mutex::new((0u32, 0u32)));
+        if let Some(pad) = pipeline.by_name("scale").and_then(|e| e.static_pad("sink")) {
+            let native = native.clone();
+            pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_, info| {
+                if let Some(gst::PadProbeData::Event(ev)) = &info.data {
+                    if let gst::EventView::Caps(c) = ev.view() {
+                        let size = c.caps().structure(0).and_then(|s| {
+                            Some((s.get::<i32>("width").ok()?, s.get::<i32>("height").ok()?))
+                        });
+                        if let (Some((w, h)), Ok(mut n)) = (size, native.lock()) {
+                            *n = (w.max(0) as u32, h.max(0) as u32);
+                        }
+                    }
+                }
+                gst::PadProbeReturn::Ok
+            });
+        }
+        let Some(sink) = pipeline
+            .by_name("sink")
+            .and_then(|e| e.downcast::<gstreamer_app::AppSink>().ok())
+        else {
+            return;
+        };
+        let name = name.to_string();
+        sink.set_callbacks(
+            gstreamer_app::AppSinkCallbacks::builder()
+                .new_sample(move |s| {
+                    let sample = s.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                    let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
+                    let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
+                    let delay_ms = match (buffer.pts(), s.current_running_time()) {
+                        (Some(pts), Some(now)) => now.saturating_sub(pts).mseconds().min(5_000),
+                        _ => 0,
+                    };
+                    let (w, h) = native.lock().map(|n| *n).unwrap_or((0, 0));
+                    hub.push(RawFrame {
+                        source: name.clone(),
+                        native_width: w,
+                        native_height: h,
+                        rgba: map.as_slice().to_vec(),
+                        source_delay_ms: delay_ms as u32,
+                    });
+                    Ok(gst::FlowSuccess::Ok)
+                })
+                .build(),
+        );
     }
 
     fn teardown(mut r: Running) -> Result<(), AppError> {
@@ -647,7 +736,8 @@ mod gst_tests {
     fn service() -> (PipelineHandle, Arc<EventBus>) {
         let (bus, _rx) = EventBus::new();
         let bus = Arc::new(bus);
-        let backend = GstBackend::new(Arc::clone(&bus)).expect("gstreamer initialises");
+        let backend =
+            GstBackend::new(Arc::clone(&bus), PreviewHub::new()).expect("gstreamer initialises");
         (
             PipelineService::spawn(Box::new(backend), Arc::clone(&bus)),
             bus,
@@ -706,6 +796,37 @@ mod gst_tests {
         let r = svc.start("videotestsrc ! no_such_element_xyz").await;
         assert!(matches!(r, Err(AppError::InvalidInput(_))), "{r:?}");
         assert_eq!(svc.state().await.expect("state"), PipelineState::Null);
+    }
+
+    // Same appsink segment as an NDI source, with videotestsrc standing in for ndisrc.
+    #[tokio::test]
+    async fn real_appsink_delivers_320x180_frames_throttled_with_native_size() {
+        let (bus, _rx) = EventBus::new();
+        let hub = crate::preview::PreviewHub::new();
+        let mut backend =
+            GstBackend::new(Arc::new(bus), hub.clone()).expect("gstreamer initialises");
+        let mut rx = hub.subscribe();
+        backend
+            .attach_source(
+                "fake",
+                "videotestsrc is-live=true ! video/x-raw,width=640,height=360,framerate=30/1 ! videoconvert ! videoscale name=scale add-borders=true ! video/x-raw,format=RGBA,width=320,height=180 ! appsink name=sink max-buffers=2 drop=true sync=false",
+            )
+            .expect("attach");
+        let mut frames = Vec::new();
+        let _ = tokio::time::timeout(Duration::from_millis(2200), async {
+            while let Ok(f) = rx.recv().await {
+                frames.push(f);
+            }
+        })
+        .await;
+        let bus2 = EventBus::new().0;
+        hub.flush_stats(&bus2, Instant::now());
+        let snap = hub.snapshot();
+        backend.shutdown();
+        assert!((8..=19).contains(&frames.len()), "frames: {}", frames.len());
+        assert!(frames.iter().all(|f| (f.width, f.height) == (320, 180)));
+        assert_eq!(snap.stats[0].name, "fake");
+        assert_eq!((snap.stats[0].width, snap.stats[0].height), (640, 360));
     }
 
     #[tokio::test]

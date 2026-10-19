@@ -13,6 +13,7 @@ use crate::events::AppEvent;
 use crate::state::TimerAbortHandle;
 pub struct DisplayWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct NdiWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
+pub struct PreviewTaskAbortHandles(pub Vec<tauri::async_runtime::JoinHandle<()>>);
 
 pub fn run() {
     let (bus, rx) = EventBus::new();
@@ -105,9 +106,18 @@ pub fn run() {
 
             app.manage(watcher);
 
+            let preview = crate::state::manage_preview(app);
+            app.manage(PreviewTaskAbortHandles(vec![
+                crate::preview::spawn_stats_task(preview.clone(), Arc::clone(&bus_arc)),
+                tauri::async_runtime::spawn(run_preview_bridge(
+                    app.handle().clone(),
+                    preview.subscribe(),
+                )),
+            ]));
+
             let pipeline = crate::state::manage_pipeline(
                 app,
-                crate::state::production_pipeline_backend(Arc::clone(&bus_arc)),
+                crate::state::production_pipeline_backend(Arc::clone(&bus_arc), preview),
                 Arc::clone(&bus_arc),
             );
 
@@ -135,6 +145,10 @@ pub fn run() {
                     }
                     if let Some(abort) = window.app_handle().try_state::<NdiWatchAbortHandle>() {
                         abort.0.abort();
+                    }
+                    if let Some(tasks) = window.app_handle().try_state::<PreviewTaskAbortHandles>()
+                    {
+                        tasks.0.iter().for_each(|t| t.abort());
                     }
                     if let Some(presentation) =
                         window.app_handle().get_webview_window("presentation")
@@ -188,6 +202,22 @@ async fn run_event_bridge(
                     },
                 );
             }
+            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+        }
+    }
+}
+
+// High-rate thumbnails skip the AppEvent bus (it would flood every window and the 256-slot ring); controller only.
+async fn run_preview_bridge(
+    handle: tauri::AppHandle,
+    mut rx: tokio::sync::broadcast::Receiver<crate::preview::PreviewFrame>,
+) {
+    loop {
+        match rx.recv().await {
+            Ok(frame) => {
+                let _ = handle.emit_to("controller", "preview-frame", &frame);
+            }
+            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         }
     }

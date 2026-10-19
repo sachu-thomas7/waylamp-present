@@ -3,7 +3,7 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { SlidePayload } from './ipc';
 import type { SceneMediaPayload } from './ipc';
-import type { DisplayInfo, NdiSource, PipelineState, StreamFormat } from './ipc';
+import type { DisplayInfo, NdiSource, PipelineState, PreviewFrame, StreamFormat } from './ipc';
 
 export type AppEvent =
   | { type: 'BusLag'; payload: { receiver_id: string; dropped: number } }
@@ -34,8 +34,14 @@ export type AppEvent =
   | { type: 'SourceLost';       payload: { name: string } }
   | { type: 'SourceListChanged'; payload: { sources: NdiSource[] } }
   | { type: 'SourceAdded';      payload: { name: string; format: StreamFormat } }
-  | { type: 'SourceRemoved';    payload: { name: string } };
+  | { type: 'SourceRemoved';    payload: { name: string } }
+  | { type: 'SourceStats';      payload: { name: string; width: number; height: number; fps: number; latency_ms: number } };
 
 export function onAppEvent(handler: (event: AppEvent) => void): Promise<UnlistenFn> {
   return listen<AppEvent>('app-event', (e) => handler(e.payload));
+}
+
+// High-rate thumbnails use their own channel (not the AppEvent bus) so they never flood the other window or the bus.
+export function onPreviewFrame(handler: (frame: PreviewFrame) => void): Promise<UnlistenFn> {
+  return listen<PreviewFrame>('preview-frame', (e) => handler(e.payload));
 }

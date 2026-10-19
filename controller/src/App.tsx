@@ -7,6 +7,7 @@ import { SceneMediaPanel } from './components/SceneMediaPanel';
 import { DisplayPanel } from './components/DisplayPanel';
 import { PipelinePanel } from './components/PipelinePanel';
 import { NdiSourcesPanel } from './components/NdiSourcesPanel';
+import { CameraPreviewGrid } from './components/CameraPreviewGrid';
 import { Popover } from './components/ui/Popover';
 import { IconButton } from './components/ui/IconButton';
 import { Button } from './components/ui/Button';
@@ -116,6 +117,7 @@ export default function App() {
       {/* Main content */}
       <div style={{ flex: 1, display: 'flex', gap: 20, padding: '20px 24px', minHeight: 0, overflow: 'auto' }}>
         <div style={{ flex: '1 1 68%', display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+          <CameraPreviewGrid />
           <SlideDeckPanel />
         </div>
         <div style={{ flex: '1 1 32%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 16 }}>

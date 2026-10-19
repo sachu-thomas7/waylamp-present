@@ -8,6 +8,7 @@ pub mod error;
 pub mod events;
 pub mod ndi;
 pub mod pipeline;
+pub mod preview;
 pub mod scene;
 pub mod slide;
 pub mod slide_state_machine;

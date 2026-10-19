@@ -43,12 +43,18 @@ describe('mockTauri helpers (controller)', () => {
       slide_get_current: () => null,
       deck_get_all_slides: () => [],
       scene_get_active_source: () => 'SlideDeck',
+      ndi_list_sources: () => ({ discovered: [], added: [], unavailable: null }),
+      preview_get_snapshot: () => ({ frames: [], stats: [] }),
+      preview_get_layout: () => '2x2',
     });
     renderApp();
     await waitFor(() => expect(screen.getByText('No slides yet')).toBeInTheDocument());
     expect(calls.map((c) => c.cmd).sort()).toEqual([
       'deck_get_all_slides',
       'get_build_info',
+      'ndi_list_sources',
+      'preview_get_layout',
+      'preview_get_snapshot',
       'scene_get_active_source',
       'slide_get_current',
     ]);

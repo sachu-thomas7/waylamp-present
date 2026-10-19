@@ -33,6 +33,7 @@ const TS_VARIANTS: Record<AppEvent['type'], true> = {
   SourceListChanged: true,
   SourceAdded: true,
   SourceRemoved: true,
+  SourceStats: true,
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

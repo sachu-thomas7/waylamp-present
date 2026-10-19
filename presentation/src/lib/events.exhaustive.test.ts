@@ -37,6 +37,7 @@ const NOT_MODELLED: Record<string, string> = {
   SourceListChanged: 'NDI source list is controller-only',
   SourceAdded: 'NDI source list is controller-only',
   SourceRemoved: 'NDI source list is controller-only',
+  SourceStats: 'camera preview metadata is controller-only',
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

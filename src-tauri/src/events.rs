@@ -84,4 +84,11 @@ pub enum AppEvent {
     SourceRemoved {
         name: String,
     },
+    SourceStats {
+        name: String,
+        width: u32,
+        height: u32,
+        fps: f32,
+        latency_ms: u32,
+    },
 }

@@ -34,6 +34,7 @@ pub struct TestApp {
     pub ndi_discovery: streamdeck_lib::ndi::SimulatedDiscovery,
     pub ndi_provider: streamdeck_lib::ndi::NdiDiscoveryHandle,
     pub ndi_state: streamdeck_lib::ndi::NdiStateHandle,
+    pub preview: streamdeck_lib::preview::PreviewHub,
 }
 
 /// Scriptable monitor list standing in for the OS (mock `available_monitors` is unimplemented).
@@ -95,6 +96,16 @@ impl TestApp {
 
     /// Boots an app on an existing data dir, simulating a restart over persisted files.
     pub fn with_data_dir(data_dir: tempfile::TempDir, config: StreamDeckConfig) -> Self {
+        Self::build(data_dir, config, None)
+    }
+
+    /// Attached sources emit synthetic 320x180 frames at `source_fps` into the preview hub.
+    pub fn with_preview_feeds(source_fps: u32) -> Self {
+        let data_dir = tempfile::tempdir().expect("temp app-data dir");
+        Self::build(data_dir, StreamDeckConfig::default(), Some(source_fps))
+    }
+
+    fn build(data_dir: tempfile::TempDir, config: StreamDeckConfig, feed_fps: Option<u32>) -> Self {
         let (bus, _rx) = EventBus::new();
         let bus = Arc::new(bus);
 
@@ -116,7 +127,13 @@ impl TestApp {
         ]));
         streamdeck_lib::state::manage_display(&app, &config, displays.clone());
 
-        let pipeline_backend = streamdeck_lib::pipeline::SimulatedBackend::default();
+        let preview = streamdeck_lib::state::manage_preview(&app);
+        let pipeline_backend = match feed_fps {
+            Some(fps) => {
+                streamdeck_lib::pipeline::SimulatedBackend::with_preview(preview.clone(), fps)
+            }
+            None => streamdeck_lib::pipeline::SimulatedBackend::default(),
+        };
         let pipeline = streamdeck_lib::state::manage_pipeline(
             &app,
             Box::new(pipeline_backend.clone()),
@@ -143,6 +160,7 @@ impl TestApp {
             ndi_discovery,
             ndi_provider,
             ndi_state,
+            preview,
         }
     }
 

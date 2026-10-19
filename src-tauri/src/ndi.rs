@@ -50,7 +50,7 @@ pub fn select_stream_format(source: &NdiSource, runtime_supports_new_format: boo
 pub fn ndi_source_description(name: &str) -> String {
     let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
     format!(
-        "ndisrc ndi-name=\"{escaped}\" ! queue ! videoconvert ! appsink name=sink max-buffers=2 drop=true sync=false"
+        "ndisrc ndi-name=\"{escaped}\" ! queue ! videoconvert ! videoscale name=scale add-borders=true ! video/x-raw,format=RGBA,width=320,height=180 ! appsink name=sink max-buffers=2 drop=true sync=false"
     )
 }
 
@@ -443,7 +443,8 @@ mod tests {
     fn description_quotes_awkward_names() {
         let d = ndi_source_description(r#"CAM "1" (Mevo\Core)"#);
         assert!(d.starts_with(r#"ndisrc ndi-name="CAM \"1\" (Mevo\\Core)" ! queue ! "#));
-        assert!(d.contains("videoconvert ! appsink"));
+        assert!(d.contains("videoscale name=scale"));
+        assert!(d.contains("width=320,height=180 ! appsink name=sink"));
     }
 
     #[test]

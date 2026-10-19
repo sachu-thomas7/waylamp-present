@@ -9,6 +9,7 @@ pub struct StreamDeckConfig {
     pub version: u32,
     pub app: AppConfig,
     pub presentation: PresentationConfig,
+    pub ui: UiConfig,
 }
 
 impl Default for StreamDeckConfig {
@@ -17,6 +18,21 @@ impl Default for StreamDeckConfig {
             version: CONFIG_VERSION,
             app: AppConfig::default(),
             presentation: PresentationConfig::default(),
+            ui: UiConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct UiConfig {
+    pub preview_grid: String,
+}
+
+impl Default for UiConfig {
+    fn default() -> Self {
+        Self {
+            preview_grid: "2x2".into(),
         }
     }
 }

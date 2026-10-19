@@ -189,3 +189,39 @@ export async function ndiAddSource(name: string): Promise<void> {
 export async function ndiRemoveSource(name: string): Promise<void> {
   return invoke<void>('ndi_remove_source', { name });
 }
+
+// @sync-with: src-tauri/src/preview.rs PreviewFrame
+export interface PreviewFrame {
+  source: string;
+  width: number;
+  height: number;
+  png_base64: string;
+}
+
+// @sync-with: src-tauri/src/preview.rs SourceStatsSample
+export interface SourceStatsSample {
+  name: string;
+  width: number;
+  height: number;
+  fps: number;
+  latency_ms: number;
+}
+
+export interface PreviewSnapshot {
+  frames: PreviewFrame[];
+  stats: SourceStatsSample[];
+}
+
+export type PreviewLayout = '2x2' | '2x3' | '2x4';
+
+export async function previewGetSnapshot(): Promise<PreviewSnapshot> {
+  return invoke<PreviewSnapshot>('preview_get_snapshot');
+}
+
+export async function previewGetLayout(): Promise<PreviewLayout> {
+  return invoke<PreviewLayout>('preview_get_layout');
+}
+
+export async function previewSetLayout(layout: PreviewLayout): Promise<void> {
+  return invoke<void>('preview_set_layout', { layout });
+}

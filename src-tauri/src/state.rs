@@ -124,6 +124,9 @@ macro_rules! handler {
             crate::commands::ndi::ndi_list_sources,
             crate::commands::ndi::ndi_add_source,
             crate::commands::ndi::ndi_remove_source,
+            crate::commands::preview::preview_get_snapshot,
+            crate::commands::preview::preview_get_layout,
+            crate::commands::preview::preview_set_layout,
         ]
     };
 }
@@ -161,12 +164,20 @@ pub fn manage_ndi<R: Runtime, M: Manager<R>>(
     handle
 }
 
+/// Creates and manages the preview hub that backends push thumbnails into.
+pub fn manage_preview<R: Runtime, M: Manager<R>>(manager: &M) -> crate::preview::PreviewHub {
+    let hub = crate::preview::PreviewHub::new();
+    manager.manage(hub.clone());
+    hub
+}
+
 /// The real GStreamer backend when compiled in and initialisable, else one that reports why not.
 #[cfg(feature = "gstreamer")]
 pub fn production_pipeline_backend(
     bus: Arc<EventBus>,
+    preview: crate::preview::PreviewHub,
 ) -> Box<dyn crate::pipeline::PipelineBackend> {
-    match crate::pipeline::gst_backend::GstBackend::new(bus) {
+    match crate::pipeline::gst_backend::GstBackend::new(bus, preview) {
         Ok(b) => Box::new(b),
         Err(e) => {
             eprintln!("{e}");
@@ -178,6 +189,7 @@ pub fn production_pipeline_backend(
 #[cfg(not(feature = "gstreamer"))]
 pub fn production_pipeline_backend(
     _bus: Arc<EventBus>,
+    _preview: crate::preview::PreviewHub,
 ) -> Box<dyn crate::pipeline::PipelineBackend> {
     Box::new(crate::pipeline::UnavailableBackend(
         "GStreamer support not compiled in (build with --features gstreamer)".into(),
