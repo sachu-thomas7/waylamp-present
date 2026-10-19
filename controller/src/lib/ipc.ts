@@ -52,6 +52,8 @@ export interface DisplayInfo {
   is_primary: boolean;
 }
 
+export type PipelineState = 'Null' | 'Paused' | 'Playing';
+
 export async function pickDeckFile(): Promise<string | null> {
   const result = await open({
     multiple: false,
@@ -134,4 +136,24 @@ export async function displayList(): Promise<DisplayInfo[]> {
 
 export async function displayAssignPresentation(id: string): Promise<void> {
   return invoke<void>('display_assign_presentation', { id });
+}
+
+export async function pipelineStartTest(): Promise<void> {
+  return invoke<void>('pipeline_start_test');
+}
+
+export async function pipelinePause(): Promise<void> {
+  return invoke<void>('pipeline_pause');
+}
+
+export async function pipelineResume(): Promise<void> {
+  return invoke<void>('pipeline_resume');
+}
+
+export async function pipelineStop(): Promise<void> {
+  return invoke<void>('pipeline_stop');
+}
+
+export async function pipelineGetState(): Promise<PipelineState> {
+  return invoke<PipelineState>('pipeline_get_state');
 }

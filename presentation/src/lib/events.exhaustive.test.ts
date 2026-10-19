@@ -27,6 +27,11 @@ const NOT_MODELLED: Record<string, string> = {
   DisplaysChanged: 'display management is controller-only',
   DisplayAssigned: 'display management is controller-only',
   DisplayLost: 'display management is controller-only',
+  PipelineStateChanged: 'pipeline status is controller-only',
+  PipelineError: 'pipeline status is controller-only',
+  PipelineWarning: 'pipeline status is controller-only',
+  PipelineLatency: 'pipeline status is controller-only',
+  PipelineQos: 'pipeline status is controller-only',
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

@@ -29,6 +29,7 @@ pub struct TestApp {
     pub machine: StateMachineHandle,
     pub data_dir: tempfile::TempDir,
     pub displays: Arc<FakeDisplays>,
+    pub pipeline_backend: streamdeck_lib::pipeline::SimulatedBackend,
 }
 
 /// Scriptable monitor list standing in for the OS (mock `available_monitors` is unimplemented).
@@ -111,6 +112,13 @@ impl TestApp {
         ]));
         streamdeck_lib::state::manage_display(&app, &config, displays.clone());
 
+        let pipeline_backend = streamdeck_lib::pipeline::SimulatedBackend::default();
+        streamdeck_lib::state::manage_pipeline(
+            &app,
+            Box::new(pipeline_backend.clone()),
+            Arc::clone(&bus),
+        );
+
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()
             .expect("mock controller window");
@@ -122,6 +130,7 @@ impl TestApp {
             machine,
             data_dir,
             displays,
+            pipeline_backend,
         }
     }
 

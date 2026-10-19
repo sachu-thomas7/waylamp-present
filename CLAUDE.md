@@ -18,7 +18,7 @@ wholesale into context — reference the specific phase/feature section needed.
 | State sync | `tokio::sync::broadcast::<AppEvent>` — the only channel for cross-subsystem state. No direct function calls across subsystem boundaries. |
 | Config | TOML (`streamdeck.toml` in app config dir), watched via `notify` (publishes `ConfigReloaded` only; nothing re-reads it yet — `get_config` is startup-time), secrets in OS keychain via `keyring` — never in TOML |
 | Frontend state | Zustand (`slideStore.ts`, `sceneStore.ts`, one per window) |
-| Not yet started | GStreamer/NDI/WHIP media pipeline (Phase 2+) — no camera, compositor, or streaming code exists yet |
+| Media | F2.1 `PipelineService` (GStreamer, behind the non-default `gstreamer` cargo feature) exists; NDI/compositor/WHIP (F2.2+) not started |
 
 ## Multi-window dev/build wiring
 
@@ -85,6 +85,7 @@ src-tauri/src/
   error.rs                AppError — discriminated union returned by every command
   config.rs / config_loader.rs   StreamDeckConfig, TOML load + hot-reload watcher
   slide.rs / slide_state_machine.rs   Slide deck model + advance/rewind/jump/timer state machine
+  pipeline.rs              PipelineService actor (+ PipelineBackend trait, SimulatedBackend, feature-gated GstBackend)
   scene.rs                 Scene media source state (image/video push, active source)
   deck_importer.rs         .pptx/.pdf import → SlideDeck (spawn_blocking — CPU-bound)
   commands/                 One #[tauri::command] module per feature area — thin wrappers, no business logic
@@ -148,6 +149,7 @@ isn't tracked in the repo.
    never needs to build the Tauri runtime wiring.
 
 ## Current status (2026-09-19)
+- **F2.1 (2026-10)**: `pipeline.rs` — `PipelineService` is a channels actor on one `spawn_blocking` thread over a `PipelineBackend` trait (`SimulatedBackend` for tests/harness, `UnavailableBackend` when GStreamer is absent, `gst_backend::GstBackend` under `--features gstreamer`). Bus watcher thread forwards Error/Warning/Latency/Qos as `PipelineError|Warning|Latency|Qos`; lifecycle is `PipelineStateChanged`; `RunEvent::Exit` in `app.rs` calls `shutdown_blocking` (NULL). Commands `pipeline_start_test|pause|resume|stop|get_state` (no frontend-supplied pipeline strings); controller `PipelinePanel` (Settings popover) + `pipelineStore`; presentation lists the events in `NOT_MODELLED`. **GStreamer is optional so CI/default builds need no SDK**: real-GStreamer tests/clippy run only via `bash scripts/verify.sh f2.1` when `GSTREAMER_1_0_ROOT_MSVC_X86_64`/pkg-config finds it (needs `PKG_CONFIG_PATH=$ROOT/lib/pkgconfig`, `$ROOT/bin` on PATH); a bus watcher must drain *before* setting NULL (NULL flushes the bus and drops errors). Run the app with the pipeline via `cargo tauri dev --features gstreamer`. Gate: `bash scripts/verify.sh f2.1`. **Manual `cargo tauri dev --features gstreamer` launch required** (app.rs exit hook, real autovideosink window, Start/Pause/Resume/Stop in Settings).
 - **2026-10-18**: jump-to-slide takes a 1-based number (matches the "n / total" badge; Go is disabled outside 1..total); the selected thumbnail scrolls into view; no-notes shows "No notes for this slide"; Tauri crates bumped to 2.12 to match the npm `@tauri-apps/api` 2.12 (the CLI warns on mismatch). Manually verified in `cargo tauri dev` via UI Automation (navigate/jump/present/stop).
 - **T0.2 (2026-10)**: `cargo fmt --check` is now in `verify.sh core` (and `verify.sh t0`); tree was reformatted once. CI does not yet run it (needs human-approved workflow edit).
 - **T0.3 (2026-10)**: test directory contract documented in the test-authoring skill (§2b), `e2e/{specs,pages,fixtures}` created with READMEs, `verify.sh t0` asserts all dirs exist.

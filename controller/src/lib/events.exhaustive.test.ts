@@ -23,6 +23,11 @@ const TS_VARIANTS: Record<AppEvent['type'], true> = {
   DisplaysChanged: true,
   DisplayAssigned: true,
   DisplayLost: true,
+  PipelineStateChanged: true,
+  PipelineError: true,
+  PipelineWarning: true,
+  PipelineLatency: true,
+  PipelineQos: true,
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

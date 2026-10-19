@@ -104,6 +104,12 @@ pub fn run() {
 
             app.manage(watcher);
 
+            crate::state::manage_pipeline(
+                app,
+                crate::state::production_pipeline_backend(Arc::clone(&bus_arc)),
+                Arc::clone(&bus_arc),
+            );
+
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -139,8 +145,15 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                if let Some(pipeline) = app.try_state::<crate::pipeline::PipelineHandle>() {
+                    pipeline.shutdown_blocking(std::time::Duration::from_secs(3));
+                }
+            }
+        });
 }
 
 async fn run_event_bridge(

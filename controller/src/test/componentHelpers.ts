@@ -4,6 +4,7 @@ import type { DisplayInfo, SlidePayload } from '../lib/ipc';
 import { useControllerSlideStore } from '../store/slideStore';
 import { useDisplayStore } from '../store/displayStore';
 import { useSceneStore } from '../store/sceneStore';
+import { usePipelineStore } from '../store/pipelineStore';
 import type { IpcCall, IpcHandler } from './mockTauri';
 
 export function resetStores() {
@@ -13,6 +14,7 @@ export function resetStores() {
   });
   useDisplayStore.setState({ displays: [], assignedDisplayId: null, lostWarning: false });
   useSceneStore.setState({ activeSource: 'SlideDeck', currentMedia: null });
+  usePipelineStore.setState({ state: 'Null', lastError: null });
 }
 
 export function makeSlide(index: number, total: number, over: Partial<SlidePayload> = {}): SlidePayload {
@@ -38,6 +40,7 @@ export function baseHandlers(over: Record<string, IpcHandler> = {}): Record<stri
     deck_get_all_slides: () => [],
     scene_get_active_source: () => 'SlideDeck',
     display_list: () => [],
+    pipeline_get_state: () => 'Null',
     ...over,
   };
 }

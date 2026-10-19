@@ -567,6 +567,54 @@ run_f1_5() {
     && ! grep -q "FAILED" /tmp/sd-f15-test.log'
 }
 
+run_f2_1() {
+  section "F2.1 — GStreamer Pipeline Service"
+
+  file_exists "src-tauri/src/pipeline.rs"
+  file_exists "src-tauri/src/commands/pipeline.rs"
+  file_exists "src-tauri/tests/pipeline_journeys.rs"
+  file_contains "PipelineService actor handle"   "src-tauri/src/pipeline.rs" "pub struct PipelineService"
+  file_contains "PipelineBackend seam"           "src-tauri/src/pipeline.rs" "pub trait PipelineBackend"
+  file_contains "actor runs in spawn_blocking"   "src-tauri/src/pipeline.rs" "spawn_blocking"
+  file_contains "GStreamer backend behind a cargo feature" "src-tauri/src/pipeline.rs" 'cfg(feature = "gstreamer")'
+  file_contains "gstreamer optional dependency"  "src-tauri/Cargo.toml" 'gstreamer.*optional = true'
+  file_contains "bus watcher forwards Qos"       "src-tauri/src/pipeline.rs" "MessageView::Qos"
+  file_contains "PipelineError event"            "src-tauri/src/events.rs" "PipelineError"
+  file_contains "PipelineStateChanged event"     "src-tauri/src/events.rs" "PipelineStateChanged"
+  file_contains "pipeline commands registered"   "src-tauri/src/state.rs" "pipeline_start_test"
+  file_contains "shutdown to NULL on app exit"   "src-tauri/src/app.rs" "shutdown_blocking"
+  file_contains "PipelineError in controller events.ts" "controller/src/lib/events.ts" "PipelineError"
+  file_contains "pipelineStartTest ipc"          "controller/src/lib/ipc.ts" "pipelineStartTest"
+  file_contains "pipelineStore"                  "controller/src/store/pipelineStore.ts" "usePipelineStore"
+  file_contains "PipelinePanel component"        "controller/src/components/PipelinePanel.tsx" "PipelinePanel"
+
+  check "F2.1 unit + harness tests pass without GStreamer" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --lib pipeline 2>&1 | tee /tmp/sd-f21-lib.log \
+      && cargo test --test pipeline_journeys 2>&1 | tee /tmp/sd-f21-j.log \
+      && ! grep -q "FAILED" /tmp/sd-f21-lib.log /tmp/sd-f21-j.log \
+      && grep -q "test result: ok. 3 passed" /tmp/sd-f21-j.log'
+
+  check "PipelinePanel + store tests and controller typecheck" \
+    bash -c 'cd controller && npx vitest run src/components/PipelinePanel.test.tsx src/store/pipelineStore.test.ts src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+  check "presentation exhaustive-event test + typecheck" \
+    bash -c 'cd presentation && npx vitest run src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+
+  # Real GStreamer tests need the SDK; CI machines without it skip them.
+  if [ -n "${GSTREAMER_1_0_ROOT_MSVC_X86_64:-}" ]; then
+    export PKG_CONFIG_PATH="${GSTREAMER_1_0_ROOT_MSVC_X86_64}/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    export PATH="${GSTREAMER_1_0_ROOT_MSVC_X86_64}/bin:$PATH"
+  fi
+  if pkg-config --exists gstreamer-1.0 2>/dev/null; then
+    check "real GStreamer: 100x start/pause/resume/stop, error surfacing, shutdown" \
+      bash -c 'set -o pipefail; cd src-tauri && STREAMDECK_PIPELINE_LOOPS=100 cargo test --features gstreamer --lib gst_tests -- --test-threads=1 2>&1 | tee /tmp/sd-f21-gst.log \
+        && ! grep -q "FAILED" /tmp/sd-f21-gst.log && grep -q "test result: ok. 4 passed" /tmp/sd-f21-gst.log'
+    check "clippy with --features gstreamer" \
+      bash -c 'cd src-tauri && cargo clippy --features gstreamer -- -D warnings'
+  else
+    warn "GStreamer SDK not found (pkg-config gstreamer-1.0) — real-pipeline tests skipped"
+  fi
+}
+
 # ══════════════════════════════════════════════════════════════════
 # CORE — Build + Lint (requires frontend dist to exist)
 # ══════════════════════════════════════════════════════════════════
@@ -917,6 +965,12 @@ case "$FILTER" in
   f1|phase1)
     run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_core
     ;;
+  f2.1)
+    run_invariants; run_f2_1
+    ;;
+  f2|phase2)
+    run_invariants; run_f2_1; run_core
+    ;;
   t0)
     run_t0
     ;;
@@ -954,7 +1008,7 @@ case "$FILTER" in
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_t0; run_t1; run_t2; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_t0; run_t1; run_t2; run_core
     ;;
 esac
 

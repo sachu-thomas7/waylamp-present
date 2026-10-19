@@ -116,6 +116,11 @@ macro_rules! handler {
             crate::commands::presentation::presentation_hide,
             crate::commands::display::display_list,
             crate::commands::display::display_assign_presentation,
+            crate::commands::pipeline::pipeline_start_test,
+            crate::commands::pipeline::pipeline_pause,
+            crate::commands::pipeline::pipeline_resume,
+            crate::commands::pipeline::pipeline_stop,
+            crate::commands::pipeline::pipeline_get_state,
         ]
     };
 }
@@ -129,4 +134,38 @@ pub fn invoke_handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + '
 pub fn mock_invoke_handler<R: Runtime>(
 ) -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
     handler!()
+}
+
+/// Spawns the pipeline actor with `backend` and manages its handle.
+pub fn manage_pipeline<R: Runtime, M: Manager<R>>(
+    manager: &M,
+    backend: Box<dyn crate::pipeline::PipelineBackend>,
+    bus: Arc<EventBus>,
+) -> crate::pipeline::PipelineHandle {
+    let handle = crate::pipeline::PipelineService::spawn(backend, bus);
+    manager.manage(Arc::clone(&handle));
+    handle
+}
+
+/// The real GStreamer backend when compiled in and initialisable, else one that reports why not.
+#[cfg(feature = "gstreamer")]
+pub fn production_pipeline_backend(
+    bus: Arc<EventBus>,
+) -> Box<dyn crate::pipeline::PipelineBackend> {
+    match crate::pipeline::gst_backend::GstBackend::new(bus) {
+        Ok(b) => Box::new(b),
+        Err(e) => {
+            eprintln!("{e}");
+            Box::new(crate::pipeline::UnavailableBackend(e.to_string()))
+        }
+    }
+}
+
+#[cfg(not(feature = "gstreamer"))]
+pub fn production_pipeline_backend(
+    _bus: Arc<EventBus>,
+) -> Box<dyn crate::pipeline::PipelineBackend> {
+    Box::new(crate::pipeline::UnavailableBackend(
+        "GStreamer support not compiled in (build with --features gstreamer)".into(),
+    ))
 }
