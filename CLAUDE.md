@@ -235,7 +235,7 @@ fallthrough is easy to forget and was itself out of date (missing `run_f1_4`) un
 
 ## CI (`.github/workflows/ci.yml`)
 
-Two jobs: `rust` (test + clippy, matrix over ubuntu/macos/windows) and `typecheck`
+Two jobs: `rust` (test + clippy, matrix over ubuntu/windows; macOS dropped until an Apple account exists) and `typecheck`
 (both frontends). The rust job now builds both frontend `dist/` directories before
 running cargo, for the reason above — this was previously missing and would have failed
 `cargo test`/`clippy` on any clean checkout since `dist/` is gitignored.
