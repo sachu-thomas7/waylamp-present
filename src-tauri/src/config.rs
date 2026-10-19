@@ -10,6 +10,7 @@ pub struct StreamDeckConfig {
     pub app: AppConfig,
     pub presentation: PresentationConfig,
     pub ui: UiConfig,
+    pub whip: WhipConfig,
 }
 
 impl Default for StreamDeckConfig {
@@ -19,6 +20,7 @@ impl Default for StreamDeckConfig {
             app: AppConfig::default(),
             presentation: PresentationConfig::default(),
             ui: UiConfig::default(),
+            whip: WhipConfig::default(),
         }
     }
 }
@@ -33,6 +35,25 @@ impl Default for UiConfig {
     fn default() -> Self {
         Self {
             preview_grid: "2x2".into(),
+        }
+    }
+}
+
+/// Off by default: enabling binds a LAN-reachable port, so it is an explicit operator choice.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WhipConfig {
+    pub enabled: bool,
+    pub bind_address: String,
+    pub port: u16,
+}
+
+impl Default for WhipConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bind_address: "0.0.0.0".into(),
+            port: 8088,
         }
     }
 }
@@ -78,6 +99,28 @@ mod tests {
             original.presentation.display_id,
             restored.presentation.display_id
         );
+    }
+
+    #[test]
+    fn whip_defaults_to_disabled_and_old_configs_still_load() {
+        let restored: StreamDeckConfig = toml::from_str(
+            "version = 1
+",
+        )
+        .unwrap();
+        assert!(!restored.whip.enabled);
+        assert_eq!(
+            (restored.whip.bind_address.as_str(), restored.whip.port),
+            ("0.0.0.0", 8088)
+        );
+        let partial: StreamDeckConfig = toml::from_str(
+            "[whip]
+enabled = true
+",
+        )
+        .unwrap();
+        assert!(partial.whip.enabled);
+        assert_eq!(partial.whip.port, 8088);
     }
 
     #[test]

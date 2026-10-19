@@ -1,7 +1,7 @@
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { baseHandlers, expectCalled, resetStores } from '../test/componentHelpers';
+import { baseHandlers, expectCalled, resetStores, whipInfo } from '../test/componentHelpers';
 import { emitAppEvent, emitPreviewFrame, installMockIPC, type IpcHandler } from '../test/mockTauri';
 import { usePreviewStore } from '../store/previewStore';
 import { CameraPreviewGrid } from './CameraPreviewGrid';
@@ -144,5 +144,23 @@ describe('CameraPreviewGrid', () => {
     });
     await emitPreviewFrame(frame('Cam A'));
     expect(usePreviewStore.getState().frames).toEqual({});
+  });
+});
+
+describe('CameraPreviewGrid phone sources', () => {
+  it('a live WHIP session shows as a tile like an NDI source, and Source Lost follows its state', async () => {
+    const info = whipInfo({ running: true, enabled: true });
+    info.slots[0].session = { slot: 'camera1', state: 'Connected', codec: 'H264Baseline' };
+    let live = info;
+    mount([], { whip_get_info: () => live });
+    expect(await screen.findByTestId('camera-preview-camera1')).toBeInTheDocument();
+    await emitPreviewFrame(frame('camera1', 'QUJD'));
+    expect(await screen.findByTestId('preview-image-camera1')).toBeInTheDocument();
+
+    const lost = whipInfo({ running: true, enabled: true });
+    lost.slots[0].session = { slot: 'camera1', state: 'Lost', codec: 'H264Baseline' };
+    live = lost;
+    await emitAppEvent({ type: 'WhipSessionChanged', payload: { slot: 'camera1', state: 'Lost' } });
+    expect(await screen.findByTestId('preview-lost-camera1')).toBeInTheDocument();
   });
 });

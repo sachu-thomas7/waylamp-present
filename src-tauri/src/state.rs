@@ -127,6 +127,10 @@ macro_rules! handler {
             crate::commands::preview::preview_get_snapshot,
             crate::commands::preview::preview_get_layout,
             crate::commands::preview::preview_set_layout,
+            crate::commands::whip::whip_get_info,
+            crate::commands::whip::whip_set_enabled,
+            crate::commands::whip::whip_set_token,
+            crate::commands::whip::whip_get_qr,
         ]
     };
 }
@@ -169,6 +173,27 @@ pub fn manage_preview<R: Runtime, M: Manager<R>>(manager: &M) -> crate::preview:
     let hub = crate::preview::PreviewHub::new();
     manager.manage(hub.clone());
     hub
+}
+
+/// Builds and manages the WHIP controller (session service + endpoint lifecycle).
+pub fn manage_whip<R: Runtime, M: Manager<R>>(
+    manager: &M,
+    backend: Arc<dyn crate::whip::WhipBackend>,
+    bus: Arc<EventBus>,
+    config_path: PathBuf,
+    ips: Arc<dyn crate::whip::LocalIpProvider>,
+    tokens: Arc<dyn crate::whip::TokenStore>,
+) -> Arc<crate::whip::WhipController> {
+    let service = crate::whip::WhipService::new(backend, Arc::clone(&bus));
+    let controller = Arc::new(crate::whip::WhipController::new(
+        service,
+        bus,
+        config_path,
+        ips,
+        tokens,
+    ));
+    manager.manage(Arc::clone(&controller));
+    controller
 }
 
 /// The real GStreamer backend when compiled in and initialisable, else one that reports why not.

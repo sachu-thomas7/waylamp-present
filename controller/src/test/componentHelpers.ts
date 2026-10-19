@@ -1,6 +1,7 @@
 import { waitFor } from '@testing-library/react';
 import { expect } from 'vitest';
-import type { DisplayInfo, SlidePayload } from '../lib/ipc';
+import type { DisplayInfo, SlidePayload, WhipInfo } from '../lib/ipc';
+import { useWhipStore } from '../store/whipStore';
 import { useControllerSlideStore } from '../store/slideStore';
 import { useDisplayStore } from '../store/displayStore';
 import { useSceneStore } from '../store/sceneStore';
@@ -19,6 +20,16 @@ export function resetStores() {
   usePipelineStore.setState({ state: 'Null', lastError: null });
   useNdiStore.setState({ discovered: [], added: [], unavailable: null, lastError: null });
   usePreviewStore.setState({ frames: {}, stats: {}, layout: '2x2' });
+  useWhipStore.setState({ info: null, qr: {}, lastError: null });
+}
+
+export function whipInfo(over: Partial<WhipInfo> = {}): WhipInfo {
+  const port = over.port ?? 8088;
+  return {
+    enabled: false, running: false, port, host: '192.168.1.20', token_set: false, unavailable: null, last_error: null,
+    slots: [1, 2, 3, 4].map((n) => ({ slot: `camera${n}`, url: `http://192.168.1.20:${port}/whip/camera${n}`, session: null })),
+    ...over,
+  };
 }
 
 export function makeSlide(index: number, total: number, over: Partial<SlidePayload> = {}): SlidePayload {
@@ -48,6 +59,7 @@ export function baseHandlers(over: Record<string, IpcHandler> = {}): Record<stri
     ndi_list_sources: () => ({ discovered: [], added: [], unavailable: null }),
     preview_get_snapshot: () => ({ frames: [], stats: [] }),
     preview_get_layout: () => '2x2',
+    whip_get_info: () => whipInfo(),
     ...over,
   };
 }

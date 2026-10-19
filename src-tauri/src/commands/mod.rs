@@ -9,3 +9,4 @@ pub mod preview;
 pub mod scene;
 pub mod slide;
 pub mod system;
+pub mod whip;

@@ -705,6 +705,64 @@ run_f2_3() {
   fi
 }
 
+run_f2_4() {
+  section "F2.4 — Phone Camera Ingest (WHIP Server)"
+
+  file_exists "src-tauri/src/whip.rs"
+  file_exists "src-tauri/src/whip_server.rs"
+  file_exists "src-tauri/src/commands/whip.rs"
+  file_exists "src-tauri/tests/whip_journeys.rs"
+  file_exists "src-tauri/tests/whip_gst_e2e.rs"
+  file_exists "controller/src/components/WhipPanel.tsx"
+  file_exists "controller/src/components/QrCode.tsx"
+  file_exists "controller/src/store/whipStore.ts"
+  file_contains "axum 0.8 dependency"                 "src-tauri/Cargo.toml" 'axum = { version = "0.8"'
+  file_contains "optional whip cargo feature"         "src-tauri/Cargo.toml" 'whip  *= '
+  file_contains "native keyring stores enabled"       "src-tauri/Cargo.toml" 'windows-native'
+  file_contains "POST /whip/{slot} route"             "src-tauri/src/whip_server.rs" '"/whip/{slot}"'
+  file_contains "DELETE + PATCH resource route"       "src-tauri/src/whip_server.rs" '"/whip/{slot}/{session}"'
+  file_contains "pure codec selection"                "src-tauri/src/whip.rs" "pub fn select_codec"
+  file_contains "pure ICE link state machine"         "src-tauri/src/whip.rs" "pub struct LinkMachine"
+  file_contains "10s ICE grace period"                "src-tauri/src/whip.rs" "GRACE_PERIOD: Duration = Duration::from_secs(10)"
+  file_contains "injected local-IP provider"          "src-tauri/src/whip.rs" "pub trait LocalIpProvider"
+  file_contains "token lives in the OS keychain"      "src-tauri/src/whip.rs" "pub struct KeyringTokenStore"
+  file_contains "whip backend seam"                   "src-tauri/src/whip.rs" "pub trait WhipBackend"
+  file_contains "real whipserversrc backend gated"    "src-tauri/src/whip.rs" 'cfg(feature = "whip")'
+  file_contains "[whip] config section"               "src-tauri/src/config.rs" "pub struct WhipConfig"
+  file_contains "whip disabled by default"            "src-tauri/src/config.rs" "enabled: false"
+  file_contains "whip events"                         "src-tauri/src/events.rs" "WhipSessionChanged"
+  file_contains "whip commands registered"            "src-tauri/src/state.rs" "whip_set_enabled"
+  file_contains "whip tick task wired in app.rs"      "src-tauri/src/app.rs" "whip::spawn_tick_task"
+  file_contains "whipGetInfo ipc"                     "controller/src/lib/ipc.ts" "whipGetInfo"
+  file_contains "WhipSessionChanged in controller events.ts" "controller/src/lib/events.ts" "WhipSessionChanged"
+  file_contains "WhipPanel mounted in Settings"       "controller/src/App.tsx" "<WhipPanel />"
+  file_contains "WhipSessionChanged NOT_MODELLED in presentation" "presentation/src/lib/events.exhaustive.test.ts" "WhipSessionChanged"
+  if grep -qiE "token|secret|password" src-tauri/src/config.rs; then
+    fail "config.rs must not contain secret-like fields (token lives in the keychain)"
+  else
+    pass "no secret-like fields in config.rs"
+  fi
+
+  check "F2.4 unit tests (pure logic + real HTTP against the axum server)"     bash -c 'set -o pipefail; cd src-tauri && cargo test --lib whip 2>&1 | tee /tmp/sd-f24-lib.log       && cargo test --lib config 2>&1 | tee /tmp/sd-f24-cfg.log       && ! grep -q "FAILED" /tmp/sd-f24-lib.log /tmp/sd-f24-cfg.log       && grep -q "test result: ok. 3[0-9] passed" /tmp/sd-f24-lib.log'
+
+  check "F2.4 journeys over real IPC + HTTP, preview reuse, invariants"     bash -c 'set -o pipefail; cd src-tauri && cargo test --test whip_journeys 2>&1 | tee /tmp/sd-f24-j.log       && cargo test --test preview_journeys 2>&1 | tee /tmp/sd-f24-pj.log       && cargo test --test ndi_journeys 2>&1 | tee /tmp/sd-f24-nj.log       && cargo test --test invariants 2>&1 | tee /tmp/sd-f24-inv.log       && ! grep -q "FAILED" /tmp/sd-f24-j.log /tmp/sd-f24-pj.log /tmp/sd-f24-nj.log /tmp/sd-f24-inv.log       && grep -q "test result: ok. 8 passed" /tmp/sd-f24-j.log'
+
+  check "WhipPanel + store + grid tests and controller typecheck"     bash -c 'cd controller && npx vitest run src/components/WhipPanel.test.tsx src/store/whipStore.test.ts src/components/CameraPreviewGrid.test.tsx src/components/NdiSourcesPanel.test.tsx src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+  check "presentation exhaustive-event test + typecheck"     bash -c 'cd presentation && npx vitest run src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+
+  # The real whipserversrc path compiles wherever GStreamer is present; it is only exercised end to end if the plugin is installed.
+  if pkg-config --exists gstreamer-1.0 2>/dev/null; then
+    check "clippy with --features whip"       bash -c 'cd src-tauri && cargo clippy --features whip --all-targets -- -D warnings'
+    if gst-inspect-1.0 whipserversrc >/dev/null 2>&1 && gst-inspect-1.0 whipclientsink >/dev/null 2>&1 && gst-inspect-1.0 openh264enc >/dev/null 2>&1; then
+      check "real WebRTC loopback: whipclientsink -> endpoint -> whipserversrc -> preview"         bash -c 'cd src-tauri && cargo test --features whip --test whip_gst_e2e -- --ignored 2>&1 | grep -q "test result: ok. 1 passed"'
+    else
+      warn "gst-plugin-webrtc/openh264 not found — real WHIP loopback test skipped"
+    fi
+  else
+    warn "GStreamer SDK not found — whipserversrc backend compile check and loopback test skipped"
+  fi
+}
+
 # ══════════════════════════════════════════════════════════════════
 # CORE — Build + Lint (requires frontend dist to exist)
 # ══════════════════════════════════════════════════════════════════
@@ -1064,8 +1122,11 @@ case "$FILTER" in
   f2.3)
     run_invariants; run_f2_1; run_f2_2; run_f2_3
     ;;
+  f2.4)
+    run_invariants; run_f2_1; run_f2_2; run_f2_3; run_f2_4
+    ;;
   f2|phase2)
-    run_invariants; run_f2_1; run_f2_2; run_f2_3; run_core
+    run_invariants; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_core
     ;;
   t0)
     run_t0
@@ -1104,7 +1165,7 @@ case "$FILTER" in
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_t0; run_t1; run_t2; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_t0; run_t1; run_t2; run_core
     ;;
 esac
 

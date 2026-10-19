@@ -520,7 +520,7 @@ pub mod gst_backend {
 
     /// Best-effort and untested without a real NDI source: tracks the source resolution and feeds
     /// 320x180 RGBA samples to the hub; latency is the buffer PTS vs the pipeline running time.
-    fn attach_preview(pipeline: &gst::Pipeline, name: &str, hub: PreviewHub) {
+    pub(crate) fn attach_preview(pipeline: &gst::Pipeline, name: &str, hub: PreviewHub) {
         let native = Arc::new(Mutex::new((0u32, 0u32)));
         if let Some(pad) = pipeline.by_name("scale").and_then(|e| e.static_pad("sink")) {
             let native = native.clone();

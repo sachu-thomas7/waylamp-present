@@ -4,6 +4,7 @@ use crate::pipeline::PipelineState;
 use crate::scene::SceneMediaPayload;
 use crate::scene::SceneSource;
 use crate::slide::SlidePayload;
+use crate::whip::WhipLinkState;
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "payload")]
@@ -90,5 +91,13 @@ pub enum AppEvent {
         height: u32,
         fps: f32,
         latency_ms: u32,
+    },
+    WhipServerChanged {
+        running: bool,
+        port: u16,
+    },
+    WhipSessionChanged {
+        slot: String,
+        state: WhipLinkState,
     },
 }

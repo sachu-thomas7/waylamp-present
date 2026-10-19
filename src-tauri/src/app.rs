@@ -13,6 +13,7 @@ use crate::events::AppEvent;
 use crate::state::TimerAbortHandle;
 pub struct DisplayWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct NdiWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
+pub struct WhipTickAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct PreviewTaskAbortHandles(pub Vec<tauri::async_runtime::JoinHandle<()>>);
 
 pub fn run() {
@@ -78,8 +79,8 @@ pub fn run() {
 
             tauri::async_runtime::spawn(run_event_bridge(app.handle().clone(), rx));
 
-            let watcher =
-                ConfigLoader::spawn_watcher(config_path, Arc::clone(&bus_arc)).map_err(|e| {
+            let watcher = ConfigLoader::spawn_watcher(config_path.clone(), Arc::clone(&bus_arc))
+                .map_err(|e| {
                     Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
                 })?;
 
@@ -117,7 +118,7 @@ pub fn run() {
 
             let pipeline = crate::state::manage_pipeline(
                 app,
-                crate::state::production_pipeline_backend(Arc::clone(&bus_arc), preview),
+                crate::state::production_pipeline_backend(Arc::clone(&bus_arc), preview.clone()),
                 Arc::clone(&bus_arc),
             );
 
@@ -130,6 +131,25 @@ pub fn run() {
                 ndi_state,
             );
             app.manage(NdiWatchAbortHandle(ndi_watch_abort));
+
+            let whip = crate::state::manage_whip(
+                app,
+                crate::whip::production_backend(preview),
+                Arc::clone(&bus_arc),
+                config_path,
+                Arc::new(crate::whip::SystemLocalIp),
+                Arc::new(crate::whip::KeyringTokenStore),
+            );
+            app.manage(WhipTickAbortHandle(crate::whip::spawn_tick_task(
+                Arc::clone(whip.service()),
+            )));
+            if config.whip.enabled {
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = whip.start().await {
+                        eprintln!("WHIP endpoint failed to start: {e}");
+                    }
+                });
+            }
 
             Ok(())
         })
@@ -144,6 +164,9 @@ pub fn run() {
                         abort.0.abort();
                     }
                     if let Some(abort) = window.app_handle().try_state::<NdiWatchAbortHandle>() {
+                        abort.0.abort();
+                    }
+                    if let Some(abort) = window.app_handle().try_state::<WhipTickAbortHandle>() {
                         abort.0.abort();
                     }
                     if let Some(tasks) = window.app_handle().try_state::<PreviewTaskAbortHandles>()
@@ -177,6 +200,9 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                if let Some(whip) = app.try_state::<Arc<crate::whip::WhipController>>() {
+                    whip.service().shutdown_all();
+                }
                 if let Some(pipeline) = app.try_state::<crate::pipeline::PipelineHandle>() {
                     pipeline.shutdown_blocking(std::time::Duration::from_secs(3));
                 }

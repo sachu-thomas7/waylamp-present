@@ -35,6 +35,9 @@ pub struct TestApp {
     pub ndi_provider: streamdeck_lib::ndi::NdiDiscoveryHandle,
     pub ndi_state: streamdeck_lib::ndi::NdiStateHandle,
     pub preview: streamdeck_lib::preview::PreviewHub,
+    pub whip: Arc<streamdeck_lib::whip::WhipController>,
+    pub whip_backend: streamdeck_lib::whip::SimulatedWhipBackend,
+    pub whip_tokens: Arc<streamdeck_lib::whip::MemoryTokenStore>,
 }
 
 /// Scriptable monitor list standing in for the OS (mock `available_monitors` is unimplemented).
@@ -144,6 +147,24 @@ impl TestApp {
         let ndi_provider: streamdeck_lib::ndi::NdiDiscoveryHandle = Arc::new(ndi_discovery.clone());
         let ndi_state = streamdeck_lib::state::manage_ndi(&app, Arc::clone(&ndi_provider));
 
+        let whip_backend = match feed_fps {
+            Some(fps) => {
+                streamdeck_lib::whip::SimulatedWhipBackend::with_preview(preview.clone(), fps)
+            }
+            None => streamdeck_lib::whip::SimulatedWhipBackend::default(),
+        };
+        let whip_tokens = Arc::new(streamdeck_lib::whip::MemoryTokenStore::default());
+        let whip = streamdeck_lib::state::manage_whip(
+            &app,
+            Arc::new(whip_backend.clone()),
+            Arc::clone(&bus),
+            data_dir.path().join("config").join("streamdeck.toml"),
+            Arc::new(streamdeck_lib::whip::FixedLocalIp(vec!["192.168.1.20"
+                .parse()
+                .expect("ip")])),
+            whip_tokens.clone(),
+        );
+
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()
             .expect("mock controller window");
@@ -161,6 +182,9 @@ impl TestApp {
             ndi_provider,
             ndi_state,
             preview,
+            whip,
+            whip_backend,
+            whip_tokens,
         }
     }
 
@@ -173,6 +197,22 @@ impl TestApp {
             &self.ndi_state,
         )
         .await;
+    }
+
+    /// The token currently held in the in-memory keychain.
+    pub fn whip_token(&self) -> Option<String> {
+        use streamdeck_lib::whip::TokenStore;
+        self.whip_tokens.get().expect("token store")
+    }
+
+    /// Points the WHIP endpoint at loopback with an OS-assigned port, as a test must never bind 0.0.0.0:8088.
+    pub fn use_loopback_whip(&self) {
+        let path = self.config_path();
+        let mut config =
+            streamdeck_lib::config_loader::ConfigLoader::load_or_default(&path).expect("config");
+        config.whip.bind_address = "127.0.0.1".into();
+        config.whip.port = 0;
+        streamdeck_lib::config_loader::ConfigLoader::save(&path, &config).expect("save config");
     }
 
     /// The `streamdeck.toml` the app under test reads/writes (inside the temp data dir).

@@ -13,6 +13,8 @@ pub mod scene;
 pub mod slide;
 pub mod slide_state_machine;
 pub mod state;
+pub mod whip;
+pub mod whip_server;
 
 #[cfg(not(test))]
 mod app;

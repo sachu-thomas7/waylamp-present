@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useNdiStore } from '../store/ndiStore';
+import { useWhipStore, whipSlotsInUse } from '../store/whipStore';
 import { onAppEvent } from '../lib/events';
 import { ndiAddSource, ndiListSources, ndiRemoveSource } from '../lib/ipc';
 import { Badge } from './ui/Badge';
@@ -48,6 +49,8 @@ export function NdiSourcesPanel() {
     }
   }
 
+  const phoneSlots = whipSlotsInUse(useWhipStore((s) => s.info));
+  const ndiAdded = added.filter((a) => !phoneSlots.has(a.name));
   const available = discovered.filter((d) => !added.some((a) => a.name === d.name));
 
   return (
@@ -55,7 +58,7 @@ export function NdiSourcesPanel() {
       <span style={heading}>NDI Sources</span>
       {unavailable && <p style={{ ...note, color: 'var(--color-warn)' }}>{unavailable}</p>}
       {lastError && <p style={{ ...note, color: 'var(--color-warn)' }}>{lastError}</p>}
-      {added.map((a) => (
+      {ndiAdded.map((a) => (
         <div key={a.name} style={row} data-testid={`ndi-added-${a.name}`}>
           <span style={{ fontSize: 12.5 }}>{a.name}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -70,7 +73,7 @@ export function NdiSourcesPanel() {
           <Button variant="secondary" onClick={() => run(() => ndiAddSource(d.name))} aria-label={`Add ${d.name}`}>Add</Button>
         </div>
       ))}
-      {!unavailable && added.length === 0 && available.length === 0 && (
+      {!unavailable && ndiAdded.length === 0 && available.length === 0 && (
         <p style={{ ...note, color: 'var(--color-text-muted)' }}>No NDI sources found on the network</p>
       )}
     </div>

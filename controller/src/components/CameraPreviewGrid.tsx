@@ -3,6 +3,7 @@ import { useNdiStore } from '../store/ndiStore';
 import { usePreviewStore } from '../store/previewStore';
 import { onAppEvent, onPreviewFrame } from '../lib/events';
 import { ndiListSources, previewGetLayout, previewGetSnapshot, previewSetLayout, type PreviewLayout } from '../lib/ipc';
+import { refreshWhip } from '../store/whipStore';
 import { CameraPreview } from './CameraPreview';
 import { Card } from './ui/Card';
 import { SegmentedControl } from './ui/SegmentedControl';
@@ -27,6 +28,7 @@ export function CameraPreviewGrid() {
     const preview = usePreviewStore.getState();
     ndiListSources().then(ndi.setSnapshot).catch(console.error);
     previewGetSnapshot().then(preview.setSnapshot).catch(console.error);
+    refreshWhip().catch(console.error);
 
     const unlistenEvents = onAppEvent((event) => {
       switch (event.type) {
@@ -48,6 +50,10 @@ export function CameraPreviewGrid() {
         case 'SourceRemoved':
           ndi.markRemoved(event.payload.name);
           preview.forget(event.payload.name);
+          refreshWhip().catch(console.error);
+          break;
+        case 'WhipSessionChanged':
+          refreshWhip().catch(console.error);
           break;
       }
     });
@@ -89,7 +95,7 @@ export function CameraPreviewGrid() {
       }
     >
       {added.length === 0 ? (
-        <p style={note}>No cameras added — add NDI sources from Settings</p>
+        <p style={note}>No cameras added — add NDI sources or enable phone cameras in Settings</p>
       ) : (
         <div data-testid="camera-grid" style={{ display: 'grid', gridTemplateColumns: `repeat(${current.columns}, 1fr)`, gap: 10 }}>
           {shown.map((a) => (

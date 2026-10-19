@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { baseHandlers, expectCalled, resetStores } from '../test/componentHelpers';
+import { baseHandlers, expectCalled, resetStores, whipInfo } from '../test/componentHelpers';
 import { emitAppEvent, installMockIPC, type IpcHandler } from '../test/mockTauri';
 import { NdiSourcesPanel } from './NdiSourcesPanel';
 
@@ -79,5 +79,20 @@ describe('NdiSourcesPanel', () => {
     });
     await user.click(await screen.findByRole('button', { name: 'Add Cam A' }));
     expect(await screen.findByText(/no ndisrc/)).toBeInTheDocument();
+  });
+});
+
+describe('NdiSourcesPanel phone sources', () => {
+  it('does not list WHIP phone slots; they are managed in the phone cameras panel', async () => {
+    const info = whipInfo({ running: true, enabled: true });
+    info.slots[0].session = { slot: 'camera1', state: 'Connected', codec: 'H264Baseline' };
+    mount({
+      ndi_list_sources: () => ({ discovered: [], added: [{ name: 'camera1', format: 'Standard', lost: false }, { name: 'Cam A', format: 'Standard', lost: false }], unavailable: null }),
+      whip_get_info: () => info,
+    });
+    const { refreshWhip } = await import('../store/whipStore');
+    await refreshWhip();
+    expect(await screen.findByRole('button', { name: 'Remove Cam A' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Remove camera1' })).not.toBeInTheDocument();
   });
 });

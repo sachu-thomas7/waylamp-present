@@ -225,3 +225,47 @@ export async function previewGetLayout(): Promise<PreviewLayout> {
 export async function previewSetLayout(layout: PreviewLayout): Promise<void> {
   return invoke<void>('preview_set_layout', { layout });
 }
+
+export type WhipLinkState = 'Connected' | 'Disconnected' | 'Lost';
+export type WhipCodec = 'H264Baseline' | 'Vp8';
+
+// @sync-with: src-tauri/src/whip.rs SessionInfo
+export interface WhipSession {
+  slot: string;
+  state: WhipLinkState;
+  codec: WhipCodec;
+}
+
+// @sync-with: src-tauri/src/whip.rs WhipInfo
+export interface WhipInfo {
+  enabled: boolean;
+  running: boolean;
+  port: number;
+  host: string | null;
+  token_set: boolean;
+  unavailable: string | null;
+  last_error: string | null;
+  slots: Array<{ slot: string; url: string | null; session: WhipSession | null }>;
+}
+
+// @sync-with: src-tauri/src/whip.rs QrMatrix
+export interface QrMatrix {
+  size: number;
+  modules: boolean[];
+}
+
+export async function whipGetInfo(): Promise<WhipInfo> {
+  return invoke<WhipInfo>('whip_get_info');
+}
+
+export async function whipSetEnabled(enabled: boolean): Promise<void> {
+  return invoke<void>('whip_set_enabled', { enabled });
+}
+
+export async function whipSetToken(token: string | null): Promise<void> {
+  return invoke<void>('whip_set_token', { token });
+}
+
+export async function whipGetQr(slot: string): Promise<QrMatrix> {
+  return invoke<QrMatrix>('whip_get_qr', { slot });
+}

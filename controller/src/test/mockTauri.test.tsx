@@ -46,6 +46,7 @@ describe('mockTauri helpers (controller)', () => {
       ndi_list_sources: () => ({ discovered: [], added: [], unavailable: null }),
       preview_get_snapshot: () => ({ frames: [], stats: [] }),
       preview_get_layout: () => '2x2',
+      whip_get_info: () => ({ enabled: false, running: false, port: 8088, host: null, token_set: false, unavailable: null, last_error: null, slots: [] }),
     });
     renderApp();
     await waitFor(() => expect(screen.getByText('No slides yet')).toBeInTheDocument());
@@ -57,6 +58,7 @@ describe('mockTauri helpers (controller)', () => {
       'preview_get_snapshot',
       'scene_get_active_source',
       'slide_get_current',
+      'whip_get_info',
     ]);
     expect(unhandled).toEqual([]);
     const before = calls.length;
