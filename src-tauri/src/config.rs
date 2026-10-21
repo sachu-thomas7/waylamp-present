@@ -1,5 +1,8 @@
 use serde::Deserialize;
 use serde::Serialize;
+use std::collections::BTreeMap;
+
+use crate::compositor::SceneConfig;
 
 pub const CONFIG_VERSION: u32 = 1;
 
@@ -11,6 +14,7 @@ pub struct StreamDeckConfig {
     pub presentation: PresentationConfig,
     pub ui: UiConfig,
     pub whip: WhipConfig,
+    pub scene: BTreeMap<String, SceneConfig>,
 }
 
 impl Default for StreamDeckConfig {
@@ -21,6 +25,7 @@ impl Default for StreamDeckConfig {
             presentation: PresentationConfig::default(),
             ui: UiConfig::default(),
             whip: WhipConfig::default(),
+            scene: BTreeMap::new(),
         }
     }
 }

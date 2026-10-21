@@ -36,6 +36,8 @@ const TS_VARIANTS: Record<AppEvent['type'], true> = {
   SourceStats: true,
   WhipServerChanged: true,
   WhipSessionChanged: true,
+  CompositorStateChanged: true,
+  CompositorLayoutChanged: true,
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

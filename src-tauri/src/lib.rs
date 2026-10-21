@@ -1,5 +1,6 @@
 pub mod bus;
 pub mod commands;
+pub mod compositor;
 pub mod config;
 pub mod config_loader;
 pub mod deck_importer;

@@ -764,6 +764,69 @@ run_f2_4() {
   fi
 }
 
+run_f3_1() {
+  section "F3.1 — GStreamer Compositor Pipeline"
+
+  file_exists "src-tauri/src/compositor.rs"
+  file_exists "src-tauri/src/commands/compositor.rs"
+  file_exists "src-tauri/tests/compositor_journeys.rs"
+  file_exists "controller/src/components/CompositorPanel.tsx"
+  file_exists "controller/src/store/compositorStore.ts"
+  file_contains "pure compositor element selection"  "src-tauri/src/compositor.rs" "pub fn select_compositor"
+  file_contains "d3d12compositor on Windows"         "src-tauri/src/compositor.rs" '"d3d12compositor"'
+  file_contains "glvideomixer on macOS/Linux"        "src-tauri/src/compositor.rs" '"glvideomixer"'
+  file_contains "CPU compositor fallback"            "src-tauri/src/compositor.rs" 'element: "compositor"'
+  file_contains "geometry to sink-pad properties"    "src-tauri/src/compositor.rs" "pub fn pad_properties"
+  file_contains "layout validation"                  "src-tauri/src/compositor.rs" "pub fn validate_layout"
+  file_contains "1920x1080@30 output caps"           "src-tauri/src/compositor.rs" "video/x-raw,width=1920,height=1080,framerate=30/1"
+  file_contains "GStreamer compositor behind a cargo feature" "src-tauri/src/compositor.rs" 'cfg(feature = "gstreamer")'
+  file_contains "pad block before unlink"            "src-tauri/src/compositor.rs" "BLOCK_DOWNSTREAM"
+  file_contains "backend compositor seam"            "src-tauri/src/pipeline.rs" "fn compositor_set_layout"
+  file_contains "[scene.X.sources] config"           "src-tauri/src/config.rs" "pub scene: BTreeMap"
+  file_contains "CompositorStateChanged event"       "src-tauri/src/events.rs" "CompositorStateChanged"
+  file_contains "CompositorLayoutChanged event"      "src-tauri/src/events.rs" "CompositorLayoutChanged"
+  file_contains "compositor commands registered"     "src-tauri/src/state.rs" "compositor_set_layout"
+  file_contains "CompositorStateChanged in controller events.ts" "controller/src/lib/events.ts" "CompositorStateChanged"
+  file_contains "compositorStart ipc"                "controller/src/lib/ipc.ts" "compositorStart"
+  file_contains "CompositorPanel mounted in Settings" "controller/src/App.tsx" "<CompositorPanel />"
+  file_contains "CompositorStateChanged NOT_MODELLED in presentation" "presentation/src/lib/events.exhaustive.test.ts" "CompositorStateChanged"
+
+  check "F3.1 pure + actor unit tests pass without GStreamer" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --lib compositor 2>&1 | tee /tmp/sd-f31-lib.log \
+      && cargo test --lib config 2>&1 | tee /tmp/sd-f31-cfg.log \
+      && ! grep -q "FAILED" /tmp/sd-f31-lib.log /tmp/sd-f31-cfg.log \
+      && grep -qE "test result: ok. (1[5-9]|[2-9][0-9]) passed" /tmp/sd-f31-lib.log'
+
+  check "F3.1 journeys over real IPC + invariants" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --test compositor_journeys 2>&1 | tee /tmp/sd-f31-j.log \
+      && cargo test --test pipeline_journeys 2>&1 | tee /tmp/sd-f31-pj.log \
+      && cargo test --test invariants 2>&1 | tee /tmp/sd-f31-inv.log \
+      && ! grep -q "FAILED" /tmp/sd-f31-j.log /tmp/sd-f31-pj.log /tmp/sd-f31-inv.log \
+      && grep -q "test result: ok. 4 passed" /tmp/sd-f31-j.log'
+
+  check "CompositorPanel + store tests and controller typecheck" \
+    bash -c 'cd controller && npx vitest run src/components/CompositorPanel.test.tsx src/store/compositorStore.test.ts src/lib/events.exhaustive.test.ts src/App.test.tsx >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+  check "presentation exhaustive-event test + typecheck" \
+    bash -c 'cd presentation && npx vitest run src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+
+  if [ -n "${GSTREAMER_1_0_ROOT_MSVC_X86_64:-}" ]; then
+    export PKG_CONFIG_PATH="${GSTREAMER_1_0_ROOT_MSVC_X86_64}/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    export PATH="${GSTREAMER_1_0_ROOT_MSVC_X86_64}/bin:$PATH"
+  fi
+  if pkg-config --exists gstreamer-1.0 2>/dev/null; then
+    check "real GStreamer: 1080p30 with 3 sources, runtime add/remove, CPU fallback, GPU variant" \
+      bash -c 'set -o pipefail; cd src-tauri && cargo test --features gstreamer --lib gst_compositor_tests -- --test-threads=1 --nocapture 2>&1 | tee /tmp/sd-f31-gst.log \
+        && ! grep -q "FAILED" /tmp/sd-f31-gst.log && grep -q "test result: ok. 7 passed" /tmp/sd-f31-gst.log'
+    if grep -q "SKIPPED: no GPU compositor" /tmp/sd-f31-gst.log 2>/dev/null; then
+      warn "no GPU compositor element installed — only the CPU compositor path was exercised"
+    fi
+    check "clippy with --features gstreamer (compositor compiles, all targets)" \
+      bash -c 'cd src-tauri && cargo clippy --features gstreamer --all-targets -- -D warnings'
+  else
+    warn "GStreamer SDK not found (pkg-config gstreamer-1.0) — real compositor tests skipped"
+  fi
+}
+
 # ══════════════════════════════════════════════════════════════════
 # CORE — Build + Lint (requires frontend dist to exist)
 # ══════════════════════════════════════════════════════════════════
@@ -1175,6 +1238,12 @@ case "$FILTER" in
   f2|phase2)
     run_invariants; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_core
     ;;
+  f3.1)
+    run_invariants; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_f3_1
+    ;;
+  f3|phase3)
+    run_invariants; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_f3_1; run_core
+    ;;
   t0)
     run_t0
     ;;
@@ -1215,7 +1284,7 @@ case "$FILTER" in
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_t0; run_t1; run_t2; run_release_pdfium; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_f3_1; run_t0; run_t1; run_t2; run_release_pdfium; run_core
     ;;
 esac
 

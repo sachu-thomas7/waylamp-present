@@ -1,4 +1,4 @@
-param([string]$Click = '', [int]$Depth = 12)
+param([string]$Click = '', [int]$Index = 0)
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $ae = [System.Windows.Automation.AutomationElement]
 $root = $ae::RootElement
@@ -9,7 +9,7 @@ $win = $root.FindAll('Children', $cond) | Where-Object { $_.Current.Name -like '
 if (-not $win) { Write-Output 'NO WINDOW'; exit 1 }
 if ($Click) {
   $el = $win.FindAll('Descendants', [System.Windows.Automation.Condition]::TrueCondition) |
-    Where-Object { $_.Current.Name -like "*$Click*" } | Select-Object -First 1
+    Where-Object { $_.Current.Name -like "*$Click*" } | Select-Object -Skip $Index -First 1
   if (-not $el) { Write-Output "NOT FOUND: $Click"; exit 1 }
   $el.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
   Write-Output "CLICKED: $Click"

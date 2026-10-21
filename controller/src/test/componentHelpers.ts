@@ -8,6 +8,7 @@ import { useSceneStore } from '../store/sceneStore';
 import { usePipelineStore } from '../store/pipelineStore';
 import { useNdiStore } from '../store/ndiStore';
 import { usePreviewStore } from '../store/previewStore';
+import { IDLE_COMPOSITOR, useCompositorStore } from '../store/compositorStore';
 import type { IpcCall, IpcHandler } from './mockTauri';
 
 export function resetStores() {
@@ -21,6 +22,7 @@ export function resetStores() {
   useNdiStore.setState({ discovered: [], added: [], unavailable: null, lastError: null });
   usePreviewStore.setState({ frames: {}, stats: {}, layout: '2x2' });
   useWhipStore.setState({ info: null, qr: {}, lastError: null });
+  useCompositorStore.setState({ status: IDLE_COMPOSITOR, scenes: [], lastError: null });
 }
 
 export function whipInfo(over: Partial<WhipInfo> = {}): WhipInfo {
@@ -60,6 +62,8 @@ export function baseHandlers(over: Record<string, IpcHandler> = {}): Record<stri
     preview_get_snapshot: () => ({ frames: [], stats: [] }),
     preview_get_layout: () => '2x2',
     whip_get_info: () => whipInfo(),
+    compositor_get_state: () => IDLE_COMPOSITOR,
+    compositor_list_scenes: () => [],
     ...over,
   };
 }

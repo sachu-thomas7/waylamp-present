@@ -3,7 +3,7 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { SlidePayload } from './ipc';
 import type { SceneMediaPayload } from './ipc';
-import type { DisplayInfo, NdiSource, PipelineState, PreviewFrame, StreamFormat, WhipLinkState } from './ipc';
+import type { DisplayInfo, NdiSource, PipelineState, PreviewFrame, SourceGeometry, StreamFormat, WhipLinkState } from './ipc';
 
 export type AppEvent =
   | { type: 'BusLag'; payload: { receiver_id: string; dropped: number } }
@@ -37,7 +37,9 @@ export type AppEvent =
   | { type: 'SourceRemoved';    payload: { name: string } }
   | { type: 'SourceStats';      payload: { name: string; width: number; height: number; fps: number; latency_ms: number } }
   | { type: 'WhipServerChanged';  payload: { running: boolean; port: number } }
-  | { type: 'WhipSessionChanged'; payload: { slot: string; state: WhipLinkState } };
+  | { type: 'WhipSessionChanged'; payload: { slot: string; state: WhipLinkState } }
+  | { type: 'CompositorStateChanged'; payload: { running: boolean; element: string; hardware: boolean } }
+  | { type: 'CompositorLayoutChanged'; payload: { sources: SourceGeometry[] } };
 
 export function onAppEvent(handler: (event: AppEvent) => void): Promise<UnlistenFn> {
   return listen<AppEvent>('app-event', (e) => handler(e.payload));

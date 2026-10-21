@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::bus::EventBus;
+use crate::compositor::{self, CompositorInfo, CompositorStatus, SourceGeometry};
 use crate::error::AppError;
 use crate::events::AppEvent;
 use crate::ndi::StreamFormat;
@@ -29,8 +30,15 @@ pub trait PipelineBackend: Send + 'static {
     fn add_ndi_source(&mut self, name: &str, format: StreamFormat) -> Result<(), AppError>;
     /// Idempotent: removing an unknown source is fine.
     fn remove_ndi_source(&mut self, name: &str) -> Result<(), AppError>;
+    /// Starts the compositor pipeline with `layout`; independent of the test pipeline.
+    fn compositor_start(&mut self, layout: &[SourceGeometry]) -> Result<CompositorInfo, AppError>;
+    /// Adds, moves and removes sources of the running compositor without restarting it.
+    fn compositor_set_layout(&mut self, layout: &[SourceGeometry]) -> Result<(), AppError>;
+    /// Must reach NULL and be idempotent.
+    fn compositor_stop(&mut self) -> Result<(), AppError>;
     /// Final teardown at app exit: everything reaches NULL.
     fn shutdown(&mut self) {
+        let _ = self.compositor_stop();
         let _ = self.stop();
     }
 }
@@ -45,6 +53,10 @@ enum Command {
     AddSource(String, StreamFormat, Reply),
     RemoveSource(String, Reply),
     GetState(oneshot::Sender<PipelineState>),
+    CompositorStart(Vec<SourceGeometry>, Reply),
+    CompositorSetLayout(Vec<SourceGeometry>, Reply),
+    CompositorStop(Reply),
+    CompositorStatus(oneshot::Sender<CompositorStatus>),
     Shutdown(std::sync::mpsc::Sender<()>),
 }
 
@@ -111,6 +123,24 @@ impl PipelineService {
         self.request(Command::GetState).await
     }
 
+    pub async fn compositor_start(&self, layout: Vec<SourceGeometry>) -> Result<(), AppError> {
+        self.request(|r| Command::CompositorStart(layout, r))
+            .await?
+    }
+
+    pub async fn compositor_set_layout(&self, layout: Vec<SourceGeometry>) -> Result<(), AppError> {
+        self.request(|r| Command::CompositorSetLayout(layout, r))
+            .await?
+    }
+
+    pub async fn compositor_stop(&self) -> Result<(), AppError> {
+        self.request(Command::CompositorStop).await?
+    }
+
+    pub async fn compositor_status(&self) -> Result<CompositorStatus, AppError> {
+        self.request(Command::CompositorStatus).await
+    }
+
     /// Drives the pipeline to NULL and ends the actor; for app exit. Returns false on timeout.
     pub fn shutdown_blocking(&self, timeout: Duration) -> bool {
         let (ack, done) = std::sync::mpsc::channel();
@@ -130,8 +160,70 @@ fn run_actor(
             bus.publish(AppEvent::PipelineStateChanged { state: next });
         }
     };
+    let mut comp = CompositorStatus::default();
+    let comp_stopped = |comp: &mut CompositorStatus| {
+        if comp.running {
+            *comp = CompositorStatus::default();
+            bus.publish(AppEvent::CompositorStateChanged {
+                running: false,
+                element: String::new(),
+                hardware: false,
+            });
+        }
+    };
     while let Some(cmd) = rx.blocking_recv() {
         match cmd {
+            Command::CompositorStart(layout, reply) => {
+                let r = if comp.running {
+                    Err(AppError::InvalidInput("compositor already running".into()))
+                } else if layout.is_empty() {
+                    Err(AppError::InvalidInput(
+                        "compositor needs at least one source".into(),
+                    ))
+                } else {
+                    compositor::validate_layout(&layout)
+                        .and_then(|_| backend.compositor_start(&layout))
+                };
+                let r = r.map(|info| {
+                    comp = CompositorStatus {
+                        running: true,
+                        element: Some(info.element.clone()),
+                        hardware: info.hardware,
+                        sources: layout.clone(),
+                        ..CompositorStatus::default()
+                    };
+                    bus.publish(AppEvent::CompositorStateChanged {
+                        running: true,
+                        element: info.element,
+                        hardware: info.hardware,
+                    });
+                    bus.publish(AppEvent::CompositorLayoutChanged { sources: layout });
+                });
+                let _ = reply.send(r);
+            }
+            Command::CompositorSetLayout(layout, reply) => {
+                let r = if !comp.running {
+                    Err(AppError::InvalidInput("compositor is not running".into()))
+                } else {
+                    compositor::validate_layout(&layout)
+                        .and_then(|_| backend.compositor_set_layout(&layout))
+                };
+                let r = r.map(|_| {
+                    comp.sources = layout.clone();
+                    bus.publish(AppEvent::CompositorLayoutChanged { sources: layout });
+                });
+                let _ = reply.send(r);
+            }
+            Command::CompositorStop(reply) => {
+                let r = backend.compositor_stop();
+                if r.is_ok() {
+                    comp_stopped(&mut comp);
+                }
+                let _ = reply.send(r);
+            }
+            Command::CompositorStatus(reply) => {
+                let _ = reply.send(comp.clone());
+            }
             Command::Start(desc, reply) => {
                 let r = if state != PipelineState::Null {
                     Err(invalid("start", state))
@@ -183,6 +275,7 @@ fn run_actor(
             }
             Command::Shutdown(ack) => {
                 backend.shutdown();
+                comp_stopped(&mut comp);
                 set(&mut state, PipelineState::Null);
                 let _ = ack.send(());
                 return;
@@ -214,6 +307,15 @@ impl PipelineBackend for UnavailableBackend {
     fn remove_ndi_source(&mut self, _: &str) -> Result<(), AppError> {
         Ok(())
     }
+    fn compositor_start(&mut self, _: &[SourceGeometry]) -> Result<CompositorInfo, AppError> {
+        Err(AppError::Internal(self.0.clone()))
+    }
+    fn compositor_set_layout(&mut self, _: &[SourceGeometry]) -> Result<(), AppError> {
+        Err(AppError::Internal(self.0.clone()))
+    }
+    fn compositor_stop(&mut self) -> Result<(), AppError> {
+        Ok(())
+    }
 }
 
 /// In-memory backend for tests and the mock harness: records calls, can fail the next start.
@@ -223,6 +325,8 @@ pub struct SimulatedBackend {
     pub fail_start: Arc<Mutex<Option<String>>>,
     pub fail_add_source: Arc<Mutex<Option<String>>>,
     pub sources: Arc<Mutex<Vec<String>>>,
+    pub compositor_sources: Arc<Mutex<Vec<String>>>,
+    pub fail_compositor_start: Arc<Mutex<Option<String>>>,
     feeds: Option<Arc<Mutex<SimulatedFeeds>>>,
 }
 
@@ -238,6 +342,12 @@ impl SimulatedBackend {
     fn with_feeds(&self, f: impl FnOnce(&mut SimulatedFeeds)) {
         if let Some(Ok(mut feeds)) = self.feeds.as_ref().map(|m| m.lock()) {
             f(&mut feeds);
+        }
+    }
+
+    fn set_compositor_sources(&self, layout: &[SourceGeometry]) {
+        if let Ok(mut s) = self.compositor_sources.lock() {
+            *s = layout.iter().map(|g| g.name.clone()).collect();
         }
     }
 
@@ -260,6 +370,20 @@ impl SimulatedBackend {
     /// Names of the NDI sources currently attached.
     pub fn attached_sources(&self) -> Vec<String> {
         self.sources.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+
+    pub fn fail_next_compositor_start(&self, reason: &str) {
+        if let Ok(mut f) = self.fail_compositor_start.lock() {
+            *f = Some(reason.to_string());
+        }
+    }
+
+    /// Names of the sources currently on the simulated compositor.
+    pub fn compositor_attached(&self) -> Vec<String> {
+        self.compositor_sources
+            .lock()
+            .map(|s| s.clone())
+            .unwrap_or_default()
     }
 
     pub fn fail_next_start(&self, reason: &str) {
@@ -308,8 +432,35 @@ impl PipelineBackend for SimulatedBackend {
         self.with_feeds(|f| f.start(name));
         Ok(())
     }
+    fn compositor_start(&mut self, layout: &[SourceGeometry]) -> Result<CompositorInfo, AppError> {
+        self.record(&format!("compositor_start:{}", layout.len()));
+        if let Some(reason) = self
+            .fail_compositor_start
+            .lock()
+            .ok()
+            .and_then(|mut f| f.take())
+        {
+            return Err(AppError::Internal(reason));
+        }
+        self.set_compositor_sources(layout);
+        Ok(CompositorInfo {
+            element: "compositor".into(),
+            hardware: false,
+        })
+    }
+    fn compositor_set_layout(&mut self, layout: &[SourceGeometry]) -> Result<(), AppError> {
+        self.record(&format!("compositor_layout:{}", layout.len()));
+        self.set_compositor_sources(layout);
+        Ok(())
+    }
+    fn compositor_stop(&mut self) -> Result<(), AppError> {
+        self.record("compositor_stop");
+        self.set_compositor_sources(&[]);
+        Ok(())
+    }
     fn shutdown(&mut self) {
         self.with_feeds(|f| f.stop_all());
+        let _ = self.compositor_stop();
         let _ = self.stop();
     }
     fn remove_ndi_source(&mut self, name: &str) -> Result<(), AppError> {
@@ -331,6 +482,8 @@ pub mod gst_backend {
     use gstreamer::prelude::*;
 
     use super::*;
+    use crate::compositor::gst_compositor::GstCompositor;
+    use crate::compositor::OutputSink;
     use crate::preview::RawFrame;
 
     const WATCHED: &[gst::MessageType] = &[
@@ -340,17 +493,49 @@ pub mod gst_backend {
         gst::MessageType::Qos,
     ];
 
-    struct Running {
-        pipeline: gst::Pipeline,
+    pub(crate) struct Running {
+        pub(crate) pipeline: gst::Pipeline,
         stop_flag: Arc<AtomicBool>,
         watcher: Option<JoinHandle<()>>,
     }
+
+    /// Parses `description` and starts its bus watcher; the pipeline is still NULL.
+    pub(crate) fn build_running(
+        description: &str,
+        events: Arc<EventBus>,
+    ) -> Result<Running, AppError> {
+        let pipeline = gst::parse::launch(description)
+            .map_err(|e| AppError::InvalidInput(format!("invalid pipeline: {e}")))?
+            .downcast::<gst::Pipeline>()
+            .map_err(|_| AppError::InvalidInput("pipeline needs 2+ linked elements".into()))?;
+        let bus = pipeline
+            .bus()
+            .ok_or_else(|| AppError::Internal("pipeline has no bus".into()))?;
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let (p, flag) = (pipeline.clone(), stop_flag.clone());
+            std::thread::Builder::new()
+                .name("gst-bus-watcher".into())
+                .spawn(move || watch(p, bus, events, flag))
+                .map_err(|e| AppError::Internal(format!("watcher thread: {e}")))?
+        };
+        Ok(Running {
+            pipeline,
+            stop_flag,
+            watcher: Some(watcher),
+        })
+    }
+
+    type Availability = Box<dyn Fn(&str) -> bool + Send>;
 
     pub struct GstBackend {
         bus: Arc<EventBus>,
         preview: PreviewHub,
         running: Option<Running>,
         sources: std::collections::HashMap<String, Running>,
+        compositor: Option<GstCompositor>,
+        compositor_sink: OutputSink,
+        available: Availability,
     }
 
     impl GstBackend {
@@ -361,31 +546,32 @@ pub mod gst_backend {
                 preview,
                 running: None,
                 sources: Default::default(),
+                compositor: None,
+                compositor_sink: OutputSink::Display,
+                available: Box::new(crate::compositor::gst_compositor::factory_available),
             })
         }
 
-        /// Parses `description` and starts its bus watcher; the pipeline is still NULL.
+        pub fn with_compositor_sink(mut self, sink: OutputSink) -> Self {
+            self.compositor_sink = sink;
+            self
+        }
+
+        /// Overrides which element factories count as installed; for testing the CPU fallback.
+        pub fn with_element_filter(
+            mut self,
+            available: impl Fn(&str) -> bool + Send + 'static,
+        ) -> Self {
+            self.available = Box::new(available);
+            self
+        }
+
+        pub fn compositor(&self) -> Option<&GstCompositor> {
+            self.compositor.as_ref()
+        }
+
         fn build(&self, description: &str) -> Result<Running, AppError> {
-            let pipeline = gst::parse::launch(description)
-                .map_err(|e| AppError::InvalidInput(format!("invalid pipeline: {e}")))?
-                .downcast::<gst::Pipeline>()
-                .map_err(|_| AppError::InvalidInput("pipeline needs 2+ linked elements".into()))?;
-            let bus = pipeline
-                .bus()
-                .ok_or_else(|| AppError::Internal("pipeline has no bus".into()))?;
-            let stop_flag = Arc::new(AtomicBool::new(false));
-            let watcher = {
-                let (p, events, flag) = (pipeline.clone(), self.bus.clone(), stop_flag.clone());
-                std::thread::Builder::new()
-                    .name("gst-bus-watcher".into())
-                    .spawn(move || watch(p, bus, events, flag))
-                    .map_err(|e| AppError::Internal(format!("watcher thread: {e}")))?
-            };
-            Ok(Running {
-                pipeline,
-                stop_flag,
-                watcher: Some(watcher),
-            })
+            build_running(description, self.bus.clone())
         }
 
         /// Runs `description` as source `name`, feeding its appsink into the preview hub.
@@ -510,10 +696,43 @@ pub mod gst_backend {
             result
         }
 
+        fn compositor_start(
+            &mut self,
+            layout: &[SourceGeometry],
+        ) -> Result<CompositorInfo, AppError> {
+            if self.compositor.is_some() {
+                return Err(AppError::InvalidInput("compositor already running".into()));
+            }
+            let c = GstCompositor::start(
+                self.bus.clone(),
+                layout,
+                self.compositor_sink,
+                self.available.as_ref(),
+            )?;
+            let info = c.info.clone();
+            self.compositor = Some(c);
+            Ok(info)
+        }
+
+        fn compositor_set_layout(&mut self, layout: &[SourceGeometry]) -> Result<(), AppError> {
+            self.compositor
+                .as_mut()
+                .ok_or_else(|| AppError::InvalidInput("compositor is not running".into()))?
+                .set_layout(layout)
+        }
+
+        fn compositor_stop(&mut self) -> Result<(), AppError> {
+            match self.compositor.take() {
+                Some(c) => c.stop(),
+                None => Ok(()),
+            }
+        }
+
         fn shutdown(&mut self) {
             for (_, r) in self.sources.drain() {
                 let _ = teardown(r);
             }
+            let _ = self.compositor_stop();
             let _ = self.stop();
         }
     }
@@ -569,7 +788,7 @@ pub mod gst_backend {
         );
     }
 
-    fn teardown(mut r: Running) -> Result<(), AppError> {
+    pub(crate) fn teardown(mut r: Running) -> Result<(), AppError> {
         // Drain the watcher before NULL: leaving PLAYING flushes the bus and would drop errors.
         r.stop_flag.store(true, Ordering::Release);
         if let Some(h) = r.watcher.take() {
@@ -712,6 +931,144 @@ mod tests {
             PipelineService::spawn(Box::new(UnavailableBackend("no gst".into())), Arc::new(bus));
         assert!(matches!(svc.start("a ! b").await, Err(AppError::Internal(m)) if m == "no gst"));
         svc.stop().await.expect("stop is always fine");
+    }
+
+    fn layout(names: &[&str]) -> Vec<SourceGeometry> {
+        names
+            .iter()
+            .map(|n| SourceGeometry {
+                name: (*n).into(),
+                w: 640,
+                h: 360,
+                ..SourceGeometry::default()
+            })
+            .collect()
+    }
+
+    fn compositor_events(rx: &mut tokio::sync::broadcast::Receiver<AppEvent>) -> Vec<AppEvent> {
+        let mut out = Vec::new();
+        while let Ok(e) = rx.try_recv() {
+            if matches!(
+                e,
+                AppEvent::CompositorStateChanged { .. } | AppEvent::CompositorLayoutChanged { .. }
+            ) {
+                out.push(e);
+            }
+        }
+        out
+    }
+
+    #[tokio::test]
+    async fn compositor_lifecycle_publishes_state_and_layout_and_tracks_status() {
+        let (svc, backend, bus) = service();
+        let mut rx = bus.subscribe();
+        svc.compositor_start(layout(&["a", "b"]))
+            .await
+            .expect("start");
+        svc.compositor_set_layout(layout(&["b", "c", "d"]))
+            .await
+            .expect("layout");
+        let status = svc.compositor_status().await.expect("status");
+        assert!(status.running);
+        assert_eq!(status.element.as_deref(), Some("compositor"));
+        assert_eq!(status.sources, layout(&["b", "c", "d"]));
+        assert_eq!(backend.compositor_attached(), ["b", "c", "d"]);
+        svc.compositor_stop().await.expect("stop");
+        assert_eq!(
+            svc.compositor_status().await.expect("status"),
+            CompositorStatus::default()
+        );
+        let seen = compositor_events(&mut rx);
+        assert!(matches!(
+            &seen[..],
+            [
+                AppEvent::CompositorStateChanged { running: true, element, hardware: false },
+                AppEvent::CompositorLayoutChanged { sources: first },
+                AppEvent::CompositorLayoutChanged { sources: second },
+                AppEvent::CompositorStateChanged { running: false, .. },
+            ] if element == "compositor" && first.len() == 2 && second.len() == 3
+        ));
+    }
+
+    #[tokio::test]
+    async fn compositor_rejects_bad_input_without_touching_the_backend() {
+        let (svc, backend, _bus) = service();
+        let invalid =
+            |r: Result<(), AppError>| assert!(matches!(r, Err(AppError::InvalidInput(_))));
+        invalid(svc.compositor_set_layout(layout(&["a"])).await);
+        invalid(svc.compositor_start(vec![]).await);
+        invalid(svc.compositor_start(layout(&["a", "a"])).await);
+        assert!(backend.calls().is_empty());
+        svc.compositor_start(layout(&["a"])).await.expect("start");
+        invalid(svc.compositor_start(layout(&["a"])).await);
+        invalid(svc.compositor_set_layout(layout(&["x", "x"])).await);
+        assert_eq!(backend.calls(), ["compositor_start:1"]);
+        assert_eq!(backend.compositor_attached(), ["a"]);
+    }
+
+    #[tokio::test]
+    async fn failed_compositor_start_stays_stopped_and_can_retry() {
+        let (svc, backend, bus) = service();
+        let mut rx = bus.subscribe();
+        backend.fail_next_compositor_start("no gpu");
+        assert!(matches!(
+            svc.compositor_start(layout(&["a"])).await,
+            Err(AppError::Internal(m)) if m == "no gpu"
+        ));
+        assert!(!svc.compositor_status().await.expect("status").running);
+        assert!(compositor_events(&mut rx).is_empty());
+        svc.compositor_start(layout(&["a"])).await.expect("retry");
+    }
+
+    #[tokio::test]
+    async fn compositor_is_independent_of_the_test_pipeline_and_stops_on_shutdown() {
+        let (svc, backend, bus) = service();
+        svc.start("a ! b").await.expect("test pipeline");
+        svc.compositor_start(layout(&["a"])).await.expect("start");
+        svc.stop().await.expect("stop test pipeline");
+        assert!(svc.compositor_status().await.expect("status").running);
+        let mut rx = bus.subscribe();
+        let s = Arc::clone(&svc);
+        assert!(
+            tokio::task::spawn_blocking(move || s.shutdown_blocking(Duration::from_secs(2)))
+                .await
+                .expect("join")
+        );
+        assert!(backend.compositor_attached().is_empty());
+        assert!(matches!(
+            &compositor_events(&mut rx)[..],
+            [AppEvent::CompositorStateChanged { running: false, .. }]
+        ));
+    }
+
+    #[tokio::test]
+    async fn unavailable_backend_refuses_the_compositor_with_its_reason() {
+        let (bus, _rx) = EventBus::new();
+        let svc =
+            PipelineService::spawn(Box::new(UnavailableBackend("no gst".into())), Arc::new(bus));
+        assert!(matches!(
+            svc.compositor_start(layout(&["a"])).await,
+            Err(AppError::Internal(m)) if m == "no gst"
+        ));
+        svc.compositor_stop().await.expect("stop is always fine");
+        assert!(!svc.compositor_status().await.expect("status").running);
+    }
+
+    #[test]
+    fn compositor_events_serialise_with_type_and_payload() {
+        let v = serde_json::to_value(AppEvent::CompositorStateChanged {
+            running: true,
+            element: "d3d12compositor".into(),
+            hardware: true,
+        })
+        .expect("ser");
+        assert_eq!(v["type"], "CompositorStateChanged");
+        assert_eq!(v["payload"]["element"], "d3d12compositor");
+        let v = serde_json::to_value(AppEvent::CompositorLayoutChanged {
+            sources: layout(&["a"]),
+        })
+        .expect("ser");
+        assert_eq!(v["payload"]["sources"][0]["kind"], "test");
     }
 
     #[test]

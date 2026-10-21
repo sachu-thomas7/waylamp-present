@@ -269,3 +269,47 @@ export async function whipSetToken(token: string | null): Promise<void> {
 export async function whipGetQr(slot: string): Promise<QrMatrix> {
   return invoke<QrMatrix>('whip_get_qr', { slot });
 }
+
+export type CompositorSourceKind = 'test' | 'ndi';
+
+// @sync-with: src-tauri/src/compositor.rs SourceGeometry
+export interface SourceGeometry {
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  z: number;
+  kind: CompositorSourceKind;
+}
+
+// @sync-with: src-tauri/src/compositor.rs CompositorStatus
+export interface CompositorStatus {
+  running: boolean;
+  element: string | null;
+  hardware: boolean;
+  width: number;
+  height: number;
+  fps: number;
+  sources: SourceGeometry[];
+}
+
+export async function compositorListScenes(): Promise<string[]> {
+  return invoke<string[]>('compositor_list_scenes');
+}
+
+export async function compositorStart(sceneId: string | null): Promise<void> {
+  return invoke<void>('compositor_start', { sceneId });
+}
+
+export async function compositorStop(): Promise<void> {
+  return invoke<void>('compositor_stop');
+}
+
+export async function compositorSetLayout(sources: SourceGeometry[]): Promise<void> {
+  return invoke<void>('compositor_set_layout', { sources });
+}
+
+export async function compositorGetState(): Promise<CompositorStatus> {
+  return invoke<CompositorStatus>('compositor_get_state');
+}

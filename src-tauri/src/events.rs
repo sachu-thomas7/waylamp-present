@@ -1,3 +1,4 @@
+use crate::compositor::SourceGeometry;
 use crate::display::DisplayInfo;
 use crate::ndi::{NdiSource, StreamFormat};
 use crate::pipeline::PipelineState;
@@ -99,5 +100,13 @@ pub enum AppEvent {
     WhipSessionChanged {
         slot: String,
         state: WhipLinkState,
+    },
+    CompositorStateChanged {
+        running: bool,
+        element: String,
+        hardware: bool,
+    },
+    CompositorLayoutChanged {
+        sources: Vec<SourceGeometry>,
     },
 }

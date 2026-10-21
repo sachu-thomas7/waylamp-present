@@ -40,6 +40,8 @@ const NOT_MODELLED: Record<string, string> = {
   SourceStats: 'camera preview metadata is controller-only',
   WhipServerChanged: 'phone ingest endpoint status is controller-only',
   WhipSessionChanged: 'phone ingest session status is controller-only',
+  CompositorStateChanged: 'compositor status is controller-only',
+  CompositorLayoutChanged: 'compositor layout is controller-only',
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;
