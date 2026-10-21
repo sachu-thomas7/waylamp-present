@@ -42,7 +42,7 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@1.96.0
         with:
-          components: clippy
+          components: clippy, rustfmt
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -77,6 +77,9 @@ jobs:
           npm ci --prefix presentation
           npm run build --prefix controller
           npm run build --prefix presentation
+
+      - name: cargo fmt
+        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
 
       - name: cargo test
         run: cargo test --no-fail-fast --manifest-path src-tauri/Cargo.toml
