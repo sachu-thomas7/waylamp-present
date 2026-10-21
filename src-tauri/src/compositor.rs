@@ -225,7 +225,7 @@ pub fn select_compositor(platform: Platform, available: impl Fn(&str) -> bool) -
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputSink {
     Display,
-    /// Paced like a real sink but renders nothing; for tests and headless runs.
+    /// Paced like a real sink but renders nothing (zero processing deadline, else its 20 ms is added to the compositor wait); for tests and headless runs.
     Discard,
 }
 
@@ -234,7 +234,7 @@ pub fn spine_description(choice: &CompositorChoice, sink: OutputSink) -> String 
     let post: String = choice.post.iter().map(|p| format!("{p} ! ")).collect();
     let tail = match sink {
         OutputSink::Display => "videoconvert ! autovideosink",
-        OutputSink::Discard => "fakesink name=out_sink sync=true",
+        OutputSink::Discard => "fakesink name=out_sink sync=true processing-deadline=0",
     };
     format!(
         "{} name=mix ! {post}capsfilter name=out_caps caps=\"{OUTPUT_CAPS}\" ! {tail}",
@@ -575,7 +575,7 @@ mod tests {
         let d = spine_description(&CPU, OutputSink::Discard);
         assert_eq!(
             d,
-            "compositor name=mix ! capsfilter name=out_caps caps=\"video/x-raw,width=1920,height=1080,framerate=30/1\" ! fakesink name=out_sink sync=true"
+            "compositor name=mix ! capsfilter name=out_caps caps=\"video/x-raw,width=1920,height=1080,framerate=30/1\" ! fakesink name=out_sink sync=true processing-deadline=0"
         );
     }
 
@@ -988,94 +988,151 @@ mod gst_compositor_tests {
         b.shutdown();
     }
 
-    /// Per-buffer age (pipeline running time minus buffer pts) seen at a pad, in ms.
-    fn age_probe(pipeline: &gst::Pipeline, pad: &gst::Pad) -> Arc<Mutex<Vec<f64>>> {
-        let ages: Arc<Mutex<Vec<f64>>> = Default::default();
-        let (sink, p) = (ages.clone(), pipeline.clone());
-        pad.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
-            if let (Some(gst::PadProbeData::Buffer(buf)), Some(now)) =
-                (&info.data, p.current_running_time())
-            {
-                if let (Some(pts), Ok(mut v)) = (buf.pts(), sink.lock()) {
-                    v.push(now.nseconds().saturating_sub(pts.nseconds()) as f64 / 1e6);
-                }
-            }
-            gst::PadProbeReturn::Ok
-        });
-        ages
-    }
+    const FRAME_NS: u64 = 33_333_334;
 
-    fn median(v: &[f64]) -> f64 {
+    fn percentile(v: &[f64], p: f64) -> f64 {
         let mut v = v.to_vec();
         v.sort_by(|a, b| a.total_cmp(b));
-        v.get(v.len() / 2).copied().unwrap_or(f64::NAN)
+        v.get(((v.len() as f64 - 1.0) * p) as usize)
+            .copied()
+            .unwrap_or(f64::NAN)
+    }
+
+    /// Wall-clock ms from a frame reaching a compositor input to the composite frame carrying it; the frame is the one whose pts falls inside the output slot.
+    fn input_to_output_ms(inputs: &Stamps, outputs: &Stamps) -> Vec<f64> {
+        let ins = inputs.lock().expect("inputs").clone();
+        let outs = outputs.lock().expect("outputs").clone();
+        let mut ms = Vec::new();
+        for (at_out, out_pts) in outs.iter().skip(30) {
+            let in_slot = ins
+                .iter()
+                .find(|(_, pts)| *pts >= *out_pts && *pts - *out_pts < FRAME_NS);
+            if let Some((at_in, _)) = in_slot {
+                ms.push(at_out.saturating_duration_since(*at_in).as_secs_f64() * 1e3);
+            }
+        }
+        ms
     }
 
     // Measurement, not a gate: cargo test --release --lib --features gstreamer latency_input -- --ignored --nocapture
     #[test]
     #[ignore = "measurement, not a gate"]
     fn latency_input_frame_to_composite_frame_with_three_sources() {
-        for (label, filter) in [("default", None), ("cpu", Some(cpu_only as Filter))] {
-            let (mut b, _bus) = backend(filter);
-            let info = b.compositor_start(&demo_layout()).expect("start");
-            let c = b.compositor().expect("running");
-            let input = c
-                .pipeline()
-                .by_name("source-0")
-                .and_then(|e| e.static_pad("src"))
-                .expect("source-0 pad");
-            let at_input = age_probe(c.pipeline(), &input);
-            let at_output = age_probe(c.pipeline(), &out_pad(c));
-            sleep(6000);
-            let mut q = gst::query::Latency::new();
-            let reported = c.pipeline().query(&mut q).then(|| q.result());
-            let skip = |v: &Arc<Mutex<Vec<f64>>>| v.lock().expect("ages")[30..].to_vec();
-            let (i, o) = (skip(&at_input), skip(&at_output));
-            let max = o.iter().copied().fold(0.0, f64::max);
-            println!(
-                "[{label}] element={} age_at_compositor_input_median={:.1}ms age_at_output_median={:.1}ms composite_added_median={:.1}ms output_age_max={max:.1}ms reported_pipeline_latency={reported:?}",
-                info.element,
-                median(&i),
-                median(&o),
-                median(&o) - median(&i),
-            );
-            b.shutdown();
+        for (label, filter, n) in [
+            ("default", None, 3),
+            ("cpu", Some(cpu_only as Filter), 3),
+            ("cpu-1-source", Some(cpu_only as Filter), 1),
+        ] {
+            for run in 0..4 {
+                let (mut b, _bus) = backend(filter);
+                let info = b.compositor_start(&layout(n)).expect("start");
+                let c = b.compositor().expect("running");
+                let inputs: Vec<Stamps> = (0..n)
+                    .map(|i| {
+                        let pad = c
+                            .pipeline()
+                            .by_name(&format!("source-{i}"))
+                            .and_then(|e| e.static_pad("src"))
+                            .expect("source pad");
+                        stamp_pad(&pad)
+                    })
+                    .collect();
+                let at_output = stamp_pad(&out_pad(c));
+                sleep(6000);
+                let mut q = gst::query::Latency::new();
+                let reported = c.pipeline().query(&mut q).then(|| q.result());
+                let per_source: Vec<Vec<f64>> = inputs
+                    .iter()
+                    .map(|i| input_to_output_ms(i, &at_output))
+                    .collect();
+                let p50s: Vec<String> = per_source
+                    .iter()
+                    .map(|m| format!("{:.1}", percentile(m, 0.5)))
+                    .collect();
+                // The composite frame is only as fresh as its oldest input.
+                let worst: Vec<f64> = (0..per_source[0].len())
+                    .map(|k| {
+                        per_source
+                            .iter()
+                            .filter_map(|m| m.get(k))
+                            .fold(0.0, |a, b| f64::max(a, *b))
+                    })
+                    .collect();
+                println!(
+                    "[{label} run {run}] element={} per_input_p50={p50s:?} oldest_input_p50={:.1}ms p95={:.1}ms max={:.1}ms reported_pipeline_latency={reported:?}",
+                    info.element,
+                    percentile(&worst, 0.5),
+                    percentile(&worst, 0.95),
+                    percentile(&worst, 1.0),
+                );
+                b.shutdown();
+            }
         }
+    }
+
+    /// Process CPU (percent of one core) over each of `windows` consecutive 4 s windows.
+    fn process_cpu_samples(windows: usize) -> Vec<f64> {
+        use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        let pid = get_current_pid().expect("pid");
+        let mut sys = System::new();
+        let kind = ProcessRefreshKind::nothing().with_cpu();
+        let mut cpu_time = || {
+            sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), true, kind);
+            sys.process(pid)
+                .map(|p| p.accumulated_cpu_time())
+                .unwrap_or(0)
+        };
+        (0..windows)
+            .map(|_| {
+                let (before, t) = (cpu_time(), Instant::now());
+                sleep(4000);
+                (cpu_time() - before) as f64 / t.elapsed().as_millis() as f64 * 100.0
+            })
+            .collect()
+    }
+
+    fn summary(s: &[f64], cores: usize) -> String {
+        let (lo, mid, hi) = (percentile(s, 0.0), percentile(s, 0.5), percentile(s, 1.0));
+        format!(
+            "median={mid:.1}% of one core ({:.1}% of {cores} cores) min={lo:.1}% max={hi:.1}%",
+            mid / cores as f64
+        )
     }
 
     // Measurement, not a gate: `cargo test --release --lib --features gstreamer cpu_budget -- --ignored --nocapture`.
     #[test]
     #[ignore = "measurement, not a gate"]
     fn cpu_budget_with_four_1080p_sources() {
-        use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        // Same four NV12 sources into fakesinks: the generation/queue cost without any compositing.
+        let src = |p: &str| {
+            format!("videotestsrc is-live=true pattern={p} ! video/x-raw,width=1920,height=1080,framerate=30/1,format=NV12 ! queue max-size-buffers=3 leaky=downstream ! fakesink sync=true")
+        };
+        let desc = ["smpte", "ball", "pinwheel", "checkers-8"]
+            .map(src)
+            .join(" ");
+        gst::init().expect("gst init");
+        let baseline = gst::parse::launch(&desc).expect("baseline pipeline");
+        baseline.set_state(gst::State::Playing).expect("play");
+        sleep(2000);
+        let base = process_cpu_samples(6);
+        let _ = baseline.set_state(gst::State::Null);
+        println!("[sources only, no compositor] {}", summary(&base, cores));
         for (label, filter) in [("default", None), ("cpu", Some(cpu_only as Filter))] {
             let (mut b, _bus) = backend(filter);
             let info = b.compositor_start(&layout(4)).expect("start");
             let stamps = stamp_pad(&out_pad(b.compositor().expect("running")));
             sleep(2000);
-            let pid = get_current_pid().expect("pid");
-            let mut sys = System::new();
-            let kind = ProcessRefreshKind::nothing().with_cpu();
-            let mut cpu_time = || {
-                sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[pid]), true, kind);
-                sys.process(pid)
-                    .map(|p| p.accumulated_cpu_time())
-                    .unwrap_or(0)
-            };
-            let before = cpu_time();
-            let (t, frames_before) = (Instant::now(), stamps.lock().expect("stamps").len());
-            sleep(8000);
-            let (after, wall) = (cpu_time(), t.elapsed());
+            let (frames_before, t) = (stamps.lock().expect("stamps").len(), Instant::now());
+            let cpu = process_cpu_samples(6);
             let frames = stamps.lock().expect("stamps").len() - frames_before;
-            let cpu = (after - before) as f64 / wall.as_millis() as f64 * 100.0;
-            let cores = std::thread::available_parallelism()
-                .map(|n| n.get())
-                .unwrap_or(1);
             println!(
-                "[{label}] element={} cpu={cpu:.1}% of one core = {:.1}% of {cores} cores, out_fps={:.1}",
+                "[{label}] element={} {} out_fps={:.1}",
                 info.element,
-                cpu / cores as f64,
-                frames as f64 / wall.as_secs_f64()
+                summary(&cpu, cores),
+                frames as f64 / t.elapsed().as_secs_f64()
             );
             b.shutdown();
         }
