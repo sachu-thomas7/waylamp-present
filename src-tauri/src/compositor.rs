@@ -225,6 +225,8 @@ pub fn select_compositor(platform: Platform, available: impl Fn(&str) -> bool) -
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputSink {
     Display,
+    /// The preview window plus the in-process `program` channel that the stream engine (`intervideosrc`) encodes.
+    DisplayAndProgram,
     /// Paced like a real sink but renders nothing (zero processing deadline, else its 20 ms is added to the compositor wait); for tests and headless runs.
     Discard,
 }
@@ -234,6 +236,9 @@ pub fn spine_description(choice: &CompositorChoice, sink: OutputSink) -> String 
     let post: String = choice.post.iter().map(|p| format!("{p} ! ")).collect();
     let tail = match sink {
         OutputSink::Display => "videoconvert ! autovideosink",
+        OutputSink::DisplayAndProgram => {
+            "tee name=prog ! queue max-size-buffers=3 leaky=downstream ! videoconvert ! autovideosink              prog. ! queue max-size-buffers=3 leaky=downstream ! intervideosink channel=program sync=false"
+        }
         OutputSink::Discard => "fakesink name=out_sink sync=true processing-deadline=0",
     };
     format!(
@@ -503,6 +508,19 @@ mod tests {
 
     fn only(names: &'static [&'static str]) -> impl Fn(&str) -> bool {
         move |n| names.contains(&n)
+    }
+
+    #[test]
+    fn program_sink_feeds_the_stream_engine_without_touching_the_plain_sinks() {
+        let both = spine_description(&CPU, OutputSink::DisplayAndProgram);
+        assert!(
+            both.contains("intervideosink channel=program") && both.contains("autovideosink"),
+            "{both}"
+        );
+        assert!(both.contains("tee name=prog"), "{both}");
+        let plain = spine_description(&CPU, OutputSink::Display);
+        assert!(!plain.contains("intervideosink"), "{plain}");
+        assert!(!spine_description(&CPU, OutputSink::Discard).contains("intervideosink"));
     }
 
     #[test]

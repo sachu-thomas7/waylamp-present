@@ -954,6 +954,17 @@ run_f4_1() {
     bash -c 'cd controller && npx vitest run src/components/StreamPanel.test.tsx src/lib/events.exhaustive.test.ts src/App.test.tsx >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
   check "presentation exhaustive-event test + typecheck" \
     bash -c 'cd presentation && npx vitest run src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+
+  if [ -n "${GSTREAMER_1_0_ROOT_MSVC_X86_64:-}" ]; then
+    export PKG_CONFIG_PATH="${GSTREAMER_1_0_ROOT_MSVC_X86_64}/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+    export PATH="${GSTREAMER_1_0_ROOT_MSVC_X86_64}/bin:$PATH"
+  fi
+  if pkg-config --exists gstreamer-1.0 2>/dev/null && docker info >/dev/null 2>&1; then
+    check "real engine: GStreamer encodes once and streams to a local RTMP server (fan-out, runtime add/remove, dead-destination isolation, EOS)" \
+      bash scripts/stream-e2e.sh
+  else
+    warn "GStreamer SDK or Docker not available — real streaming engine test skipped (bash scripts/stream-e2e.sh)"
+  fi
 }
 
 run_t0() {

@@ -18,6 +18,8 @@ pub mod slide;
 pub mod slide_state_machine;
 pub mod state;
 pub mod stream;
+#[cfg(feature = "gstreamer")]
+pub mod stream_gst;
 pub mod stream_service;
 pub mod whip;
 pub mod whip_server;

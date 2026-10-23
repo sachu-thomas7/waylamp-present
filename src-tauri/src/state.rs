@@ -286,6 +286,17 @@ pub fn manage_stream<R: Runtime, M: Manager<R>>(
     controller
 }
 
+#[cfg(feature = "gstreamer")]
+pub fn production_stream_backend() -> Box<dyn crate::stream_service::StreamBackend> {
+    match crate::stream_gst::GstStreamBackend::new() {
+        Ok(b) => Box::new(b),
+        Err(e) => Box::new(crate::stream_service::UnavailableStreamBackend(
+            e.to_string(),
+        )),
+    }
+}
+
+#[cfg(not(feature = "gstreamer"))]
 pub fn production_stream_backend() -> Box<dyn crate::stream_service::StreamBackend> {
     Box::new(crate::stream_service::UnavailableStreamBackend(
         "streaming engine not compiled in (build with --features gstreamer)".into(),

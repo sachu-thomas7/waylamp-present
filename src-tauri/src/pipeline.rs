@@ -547,7 +547,7 @@ pub mod gst_backend {
                 running: None,
                 sources: Default::default(),
                 compositor: None,
-                compositor_sink: OutputSink::Display,
+                compositor_sink: OutputSink::DisplayAndProgram,
                 available: Box::new(crate::compositor::gst_compositor::factory_available),
             })
         }

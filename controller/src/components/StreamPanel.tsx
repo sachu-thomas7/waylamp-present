@@ -143,14 +143,14 @@ export function StreamPanel() {
         const ds: DestinationState = st?.state ?? { state: 'Idle' };
         return (
           <div key={d.id} data-testid={`stream-dest-${d.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: '1 1 160px' }}>
                 <span
                   aria-hidden="true"
                   style={{ width: 9, height: 9, borderRadius: '50%', background: healthColor(ds.state), flexShrink: 0 }}
                 />
-                <span style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
-                <Badge>{PLATFORM_LABEL[d.platform]}</Badge>
+                <span style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{d.name}</span>
+                <span style={{ flexShrink: 0 }}><Badge>{PLATFORM_LABEL[d.platform]}</Badge></span>
                 {!d.key_set && <Badge tone="warn">No key</Badge>}
               </span>
               <span style={{ display: 'flex', gap: 6 }}>
