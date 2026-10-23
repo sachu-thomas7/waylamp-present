@@ -9,17 +9,15 @@ no-default-features = false
 [advisories]
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
+unmaintained = "all"
+unsound = "all"
+# unmaintained/unsound are checked for transitive crates too ("all"), not only workspace members.
+# Every entry below was confirmed present by `cargo deny check`; delete an entry when it stops matching.
 ignore = [
-  # unic-* family — unmaintained, transitive via Tauri's own urlpattern
-  # dependency (tauri-utils). No safe upgrade exists upstream yet;
-  # re-evaluate on the next tauri bump.
-  { id = "RUSTSEC-2025-0100", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
-  { id = "RUSTSEC-2025-0098", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
-  { id = "RUSTSEC-2025-0080", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
-  { id = "RUSTSEC-2025-0081", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
-  { id = "RUSTSEC-2025-0075", reason = "transitive via tauri-utils' urlpattern dep; no upstream fix yet" },
-  # proc-macro-error — unmaintained, transitive via Tauri's Linux GTK menu
-  # bindings (muda -> glib-macros). Linux-only build path; no safe upgrade yet.
+  # Linux-only: gtk-rs 0.18 (gtk/atk/glib) is pulled in by tauri's menu crate (muda). We never call glib directly
+  # and the Windows build does not compile it. The fix needs Tauri to move to a newer gtk-rs; re-check at each Tauri bump.
+  { id = "RUSTSEC-2024-0429", reason = "glib 0.18.5 VariantStrIter unsoundness; Linux-only via muda/gtk, not used directly; blocked on Tauri" },
+  # proc-macro-error — unmaintained, transitive via Tauri's Linux GTK menu bindings (muda -> glib-macros). Linux-only.
   { id = "RUSTSEC-2024-0370", reason = "transitive via tauri's Linux GTK menu bindings (muda/glib-macros); no upstream fix yet" },
 ]
 

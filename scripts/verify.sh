@@ -278,7 +278,7 @@ run_f0_1() {
   subsection "CI pipeline"
   if [ -d ".github/workflows" ]; then
     check       "CI workflow file exists"     bash -c 'ls .github/workflows/*.yml 2>/dev/null | grep -q .'
-    check_warn  "CI runs cargo test"          bash -c 'grep -r "cargo test"   .github/workflows/ | grep -q .'
+    check_warn  "CI runs cargo test"          bash -c 'grep -rE "cargo (test|nextest)" .github/workflows/ | grep -q .'
     check_warn  "CI runs cargo clippy"        bash -c 'grep -r "cargo clippy" .github/workflows/ | grep -q .'
     check_warn  "CI runs npm run typecheck"   bash -c 'grep -r "typecheck"    .github/workflows/ | grep -q .'
   else
@@ -866,6 +866,12 @@ run_core() {
   check "cargo test" \
     bash -c 'cd src-tauri && cargo test 2>&1 | tee /tmp/sd-test.log \
              && ! grep -q "FAILED" /tmp/sd-test.log'
+  if command -v cargo-nextest >/dev/null 2>&1; then
+    check_warn "cargo nextest (what CI runs; per-test processes)" \
+      bash -c 'cd src-tauri && cargo nextest run --locked --no-fail-fast'
+  else
+    skip "cargo-nextest not installed (cargo install cargo-nextest --locked); CI runs it"
+  fi
 
   subsection "TypeScript typecheck (always independent)"
   for win in controller presentation; do
@@ -899,6 +905,13 @@ run_core() {
     check_warn "cargo deny check" bash -c 'cd src-tauri && cargo deny check'
   else
     skip "cargo-deny not installed locally — runs in CI via cargo-deny-action (cargo install cargo-deny to check here)"
+  fi
+
+  subsection "osv-scanner — OSV advisories across Cargo.lock and both npm lockfiles (non-blocking locally)"
+  if command -v osv-scanner >/dev/null 2>&1 || docker info >/dev/null 2>&1; then
+    check_warn "osv-scanner" bash scripts/osv-scan.sh
+  else
+    skip "neither osv-scanner nor Docker available — runs in CI (bash scripts/osv-scan.sh)"
   fi
 }
 

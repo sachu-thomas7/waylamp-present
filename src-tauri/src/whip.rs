@@ -153,7 +153,7 @@ pub fn select_codec(offer_sdp: &str) -> Result<CodecChoice, WhipError> {
         .filter(|pt| {
             let params = fmtp.get(pt).map(String::as_str).unwrap_or("");
             // A missing profile-level-id defaults to baseline (RFC 6184 §8.1).
-            fmtp_param(params, "profile-level-id").map_or(true, is_baseline)
+            fmtp_param(params, "profile-level-id").is_none_or(is_baseline)
         })
         .collect();
     let mode1 = baseline.iter().copied().find(|pt| {

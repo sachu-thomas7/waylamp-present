@@ -1,0 +1,11 @@
+# Reviewed exceptions for scripts/osv-scan.sh. Each expires so it gets looked at again.
+
+[[IgnoredVulns]]
+id = "GHSA-wrw7-89jp-8q8g"
+ignoreUntil = 2027-01-31
+reason = "glib 0.18.5 VariantStrIter (RUSTSEC-2024-0429): Linux-only gtk-rs 0.18 via tauri's muda; not used directly, Windows build does not compile it. Needs Tauri to move to a newer gtk-rs."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2024-0370"
+ignoreUntil = 2027-01-31
+reason = "proc-macro-error unmaintained: Linux-only via tauri's muda/glib-macros; no upstream fix."

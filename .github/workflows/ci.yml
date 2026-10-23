@@ -81,11 +81,17 @@ jobs:
       - name: cargo fmt
         run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
 
-      - name: cargo test
-        run: cargo test --no-fail-fast --manifest-path src-tauri/Cargo.toml
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      # Each test runs in its own process, so process-global state (e.g. the PRESENTING flag) cannot leak between tests.
+      - name: cargo nextest
+        run: cargo nextest run --locked --no-fail-fast --manifest-path src-tauri/Cargo.toml
 
       - name: cargo clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
 
   # ── Rust dependency security / license / bans ───────────────────────────────
   cargo-deny:
@@ -96,6 +102,15 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: src-tauri/Cargo.toml
+          arguments: --locked
+
+  # ── OSV: Cargo.lock + both npm lockfiles (reviewed exceptions live in osv-scanner.toml) ──
+  osv:
+    name: osv-scanner (all lockfiles)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash scripts/osv-scan.sh
 
   # ── Frontend type-checks, lint, unit tests ──────────────────────────────────
   frontend:
