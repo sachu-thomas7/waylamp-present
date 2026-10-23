@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { mediaUrl } from '../lib/mediaUrl';
 import { useSlideStore } from '../store/slideStore';
 
 function computeScale(containerWidth: number, containerHeight: number): {
@@ -58,7 +59,7 @@ export function SlideCanvas() {
         {slide?.background_path && (
           <img
             data-testid="slide-background"
-            src={slide.background_path}
+            src={mediaUrl(slide.background_path)}
             alt=""
             style={{
               position: 'absolute',

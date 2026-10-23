@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SlidePayload } from '../lib/ipc';
+import { mediaUrl } from '../lib/mediaUrl';
 
 interface SlideCanvasProps {
   slide: SlidePayload;
@@ -38,7 +39,7 @@ export function SlideCanvas({ slide, scale = 1.0, fluid = false }: SlideCanvasPr
     transformOrigin: 'top left',
     backgroundColor: slide.background_path ? undefined : '#1a1a2e',
     backgroundImage: slide.background_path
-      ? `url(${slide.background_path})`
+      ? `url("${mediaUrl(slide.background_path)}")`
       : undefined,
     backgroundSize: 'cover',
     position: 'relative',

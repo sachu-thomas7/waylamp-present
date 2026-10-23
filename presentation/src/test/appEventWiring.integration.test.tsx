@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
+import { mediaUrl } from '../lib/mediaUrl';
 import { useSlideStore } from '../store/slideStore';
 import type { AppEvent } from '../lib/events';
 
@@ -63,7 +64,7 @@ describe('presentation window scene switching', () => {
     });
 
     await waitFor(() =>
-      expect(container.querySelector('img')).toHaveAttribute('src', '/tmp/photo.png'),
+      expect(container.querySelector('img')).toHaveAttribute('src', mediaUrl('/tmp/photo.png')),
     );
   });
 

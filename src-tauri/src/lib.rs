@@ -7,6 +7,7 @@ pub mod deck_importer;
 pub mod display;
 pub mod error;
 pub mod events;
+pub mod media_protocol;
 pub mod ndi;
 pub mod pipeline;
 pub mod preview;

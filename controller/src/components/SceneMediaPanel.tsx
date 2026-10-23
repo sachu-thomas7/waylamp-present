@@ -9,6 +9,7 @@ import {
   SceneSource,
 } from '../lib/ipc';
 import { open } from '@tauri-apps/plugin-dialog';
+import { mediaUrl } from '../lib/mediaUrl';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { SegmentedControl } from './ui/SegmentedControl';
@@ -92,7 +93,7 @@ export function SceneMediaPanel() {
             <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Staged: {currentMedia.display_name}</span>
             {currentMedia.media_type === 'Image' && (
               <img
-                src={currentMedia.path}
+                src={mediaUrl(currentMedia.path)}
                 alt={currentMedia.display_name}
                 style={{ maxWidth: '100%', maxHeight: 120, display: 'block', marginTop: 8, borderRadius: 'var(--radius-sm)' }}
               />

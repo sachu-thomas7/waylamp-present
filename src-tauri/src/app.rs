@@ -24,6 +24,45 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .register_asynchronous_uri_scheme_protocol(
+            crate::media_protocol::SCHEME,
+            |ctx, request, responder| {
+                let app = ctx.app_handle().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let path = request.uri().path().to_string();
+                    let range = request
+                        .headers()
+                        .get("range")
+                        .and_then(|v| v.to_str().ok())
+                        .map(str::to_owned);
+                    let staged = app
+                        .try_state::<crate::scene::SceneStateHandle>()
+                        .and_then(|s| s.blocking_read().current_media.clone())
+                        .filter(|m| matches!(m.media_type, crate::scene::SceneMediaType::Video))
+                        .map(|m| std::path::PathBuf::from(m.path));
+                    let r = match app.try_state::<crate::state::AppDataDir>() {
+                        Some(dir) => crate::media_protocol::respond(
+                            &dir.0,
+                            staged.as_deref(),
+                            &path,
+                            range.as_deref(),
+                        ),
+                        None => crate::media_protocol::MediaResponse {
+                            status: 503,
+                            headers: vec![],
+                            body: vec![],
+                        },
+                    };
+                    let mut b = tauri::http::Response::builder().status(r.status);
+                    for (k, v) in r.headers {
+                        b = b.header(k, v);
+                    }
+                    if let Ok(resp) = b.body(r.body) {
+                        responder.respond(resp);
+                    }
+                });
+            },
+        )
         .invoke_handler(crate::state::invoke_handler())
         .setup(move |app| {
             let presentation_url = if cfg!(debug_assertions) {

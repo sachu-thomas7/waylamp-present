@@ -1,3 +1,4 @@
+import { mediaUrl } from './lib/mediaUrl';
 import { screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AppEvent, SlidePayload } from './lib/events';
@@ -66,7 +67,7 @@ describe('presentation: slide rendering', () => {
 
   it('renders the background image only while the slide has one', async () => {
     await emitAppEvent(slide(0, 2, { background_path: '/bg/one.png' }));
-    expect(await screen.findByTestId('slide-background')).toHaveAttribute('src', '/bg/one.png');
+    expect(await screen.findByTestId('slide-background')).toHaveAttribute('src', mediaUrl('/bg/one.png'));
     await emitAppEvent(slide(1, 2, { background_path: null }));
     await screen.findByText('Title 2');
     expect(screen.queryByTestId('slide-background')).not.toBeInTheDocument();
@@ -110,7 +111,7 @@ describe('presentation: scene switching', () => {
     await emitAppEvent(slide(0, 1));
     await screen.findByText('Title 1');
     await showMedia(image);
-    expect(await screen.findByTestId('scene-media-image')).toHaveAttribute('src', '/media/photo.png');
+    expect(await screen.findByTestId('scene-media-image')).toHaveAttribute('src', mediaUrl('/media/photo.png'));
     expect(screen.queryByText('Title 1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('slide-canvas')).not.toBeInTheDocument();
   });
@@ -118,7 +119,7 @@ describe('presentation: scene switching', () => {
   it('plays a staged video looping and autoplaying', async () => {
     await showMedia(video);
     const el = (await screen.findByTestId('scene-media-video')) as HTMLVideoElement;
-    expect(el).toHaveAttribute('src', '/media/clip.mp4');
+    expect(el).toHaveAttribute('src', mediaUrl('/media/clip.mp4'));
     expect(el.loop).toBe(true);
     expect(el.autoplay).toBe(true);
     expect(screen.queryByTestId('scene-media-image')).not.toBeInTheDocument();
@@ -128,7 +129,7 @@ describe('presentation: scene switching', () => {
     await showMedia(image);
     await screen.findByTestId('scene-media-image');
     await emitAppEvent({ type: 'SceneMediaUpdate', payload: video });
-    expect(await screen.findByTestId('scene-media-video')).toHaveAttribute('src', '/media/clip.mp4');
+    expect(await screen.findByTestId('scene-media-video')).toHaveAttribute('src', mediaUrl('/media/clip.mp4'));
     expect(screen.queryByTestId('scene-media-image')).not.toBeInTheDocument();
   });
 

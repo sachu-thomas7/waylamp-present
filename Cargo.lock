@@ -3611,6 +3611,7 @@ dependencies = [
  "keyring",
  "notify",
  "pdfium-render",
+ "percent-encoding",
  "png 0.17.16",
  "qrcode",
  "quick-xml",

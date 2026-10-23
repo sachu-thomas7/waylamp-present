@@ -1,3 +1,4 @@
+import { mediaUrl } from '../lib/mediaUrl';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -99,7 +100,7 @@ describe('SceneMediaPanel', () => {
       payload: { media_type: 'Image', path: 'asset://logo.png', display_name: 'logo.png' },
     });
     expect(await screen.findByText('Staged: logo.png')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'logo.png' })).toHaveAttribute('src', 'asset://logo.png');
+    expect(screen.getByRole('img', { name: 'logo.png' })).toHaveAttribute('src', mediaUrl('asset://logo.png'));
   });
 
   it('a staged video shows its name and no image preview', async () => {

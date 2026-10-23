@@ -1,3 +1,4 @@
+import { mediaUrl } from '../lib/mediaUrl';
 import type { SceneMediaPayload } from '../lib/ipc';
 
 interface Props {
@@ -14,13 +15,13 @@ export function SceneMediaView({ media }: Props) {
   };
 
   if (media.media_type === 'Image') {
-    return <img data-testid="scene-media-image" src={media.path} alt="" style={style} />;
+    return <img data-testid="scene-media-image" src={mediaUrl(media.path)} alt="" style={style} />;
   }
 
   return (
     <video
       data-testid="scene-media-video"
-      src={media.path}
+      src={mediaUrl(media.path)}
       autoPlay
       loop
       style={style}
