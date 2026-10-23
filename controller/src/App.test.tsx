@@ -128,3 +128,23 @@ describe('App Clear Deck', () => {
     expect(screen.getByText('1 / 3')).toBeInTheDocument();
   });
 });
+
+describe('App BusLag recovery', () => {
+  it('re-fetches the slide, deck and scene snapshot when the bus reports dropped events', async () => {
+    mount(loadedHandlers(3));
+    await screen.findByRole('button', { name: 'Slide 1' });
+    const before = {
+      current: ipc.calls.filter((c) => c.cmd === 'slide_get_current').length,
+      all: ipc.calls.filter((c) => c.cmd === 'deck_get_all_slides').length,
+      scene: ipc.calls.filter((c) => c.cmd === 'scene_get_active_source').length,
+    };
+
+    await emitAppEvent({ type: 'BusLag', payload: { receiver_id: 'frontend-bridge', dropped: 12 } });
+
+    await waitFor(() => {
+      expect(ipc.calls.filter((c) => c.cmd === 'slide_get_current').length).toBeGreaterThan(before.current);
+      expect(ipc.calls.filter((c) => c.cmd === 'deck_get_all_slides').length).toBeGreaterThan(before.all);
+      expect(ipc.calls.filter((c) => c.cmd === 'scene_get_active_source').length).toBeGreaterThan(before.scene);
+    });
+  });
+});

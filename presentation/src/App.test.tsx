@@ -177,3 +177,21 @@ describe('presentation: events intentionally ignored', () => {
     expect(document.body.innerHTML).toBe(before);
   });
 });
+
+describe('BusLag recovery (snapshot is pushed by the backend)', () => {
+  it('a stale projector converges on the state replayed after a lag event', async () => {
+    await emitAppEvent(slide(0, 3));
+    await screen.findByText('Title 1');
+
+    await emitAppEvent({ type: 'BusLag', payload: { receiver_id: 'frontend-bridge', dropped: 9 } });
+    expect(screen.getByText('Title 1')).toBeInTheDocument();
+
+    await emitAppEvent(slide(2, 3));
+    await emitAppEvent({ type: 'SceneMediaUpdate', payload: image });
+    await emitAppEvent({ type: 'SceneSourceChanged', payload: { source: 'SceneMedia' } });
+    expect(await screen.findByTestId('scene-media-image')).toHaveAttribute('src', mediaUrl('/media/photo.png'));
+
+    await emitAppEvent({ type: 'SceneSourceChanged', payload: { source: 'SlideDeck' } });
+    expect(await screen.findByText('Title 3')).toBeInTheDocument();
+  });
+});

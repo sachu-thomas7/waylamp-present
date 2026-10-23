@@ -1,6 +1,8 @@
 // controller/src/App.tsx
 import { useEffect, useState } from 'react';
 import { getBuildInfo, deckClear } from './lib/ipc';
+import { onAppEvent } from './lib/events';
+import { resyncFromBackend } from './lib/resync';
 import { PresentButton } from './components/PresentButton';
 import { SlideDeckPanel } from './components/SlideDeckPanel';
 import { SceneMediaPanel } from './components/SceneMediaPanel';
@@ -35,6 +37,13 @@ export default function App() {
     getBuildInfo()
       .then(setBuildInfo)
       .catch((e: unknown) => setError(String(e)));
+  }, []);
+
+  useEffect(() => {
+    const unlisten = onAppEvent((event) => {
+      if (event.type === 'BusLag') resyncFromBackend().catch(console.error);
+    });
+    return () => { unlisten.then((fn) => fn()); };
   }, []);
 
   return (

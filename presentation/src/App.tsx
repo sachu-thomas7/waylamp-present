@@ -14,6 +14,7 @@ export default function App() {
   useEffect(() => {
     let dead = false;
     let off: (() => void) | undefined;
+    // BusLag needs no pull here: the projector cannot invoke, so Rust re-sends a full snapshot right after it.
     onAppEvent((event) => {
       if (event.type === 'SceneSourceChanged') {
         setSceneSource(event.payload.source);

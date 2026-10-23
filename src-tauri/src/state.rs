@@ -110,6 +110,29 @@ pub async fn restore_on_startup(
     notice.into_iter().collect()
 }
 
+/// Current state as events, re-sent after the bus dropped some: the projector cannot invoke, so it is pushed.
+pub async fn resync_events<R: Runtime, M: Manager<R>>(manager: &M) -> Vec<AppEvent> {
+    let mut out = Vec::new();
+    if let Some(machine) = manager.try_state::<StateMachineHandle>() {
+        out.push(AppEvent::SlideUpdate(
+            machine.read().await.current_payload(),
+        ));
+    }
+    if let Some(scene) = manager.try_state::<crate::scene::SceneStateHandle>() {
+        let scene = scene.read().await;
+        if let Some(media) = &scene.current_media {
+            out.push(AppEvent::SceneMediaUpdate(media.clone()));
+        }
+        out.push(AppEvent::SceneSourceChanged {
+            source: scene.active_source.clone(),
+        });
+    }
+    out.push(AppEvent::PresentationVisibility {
+        visible: crate::commands::presentation::is_presenting(),
+    });
+    out
+}
+
 /// Spawns the 1s timer task and keeps its abort handle in managed state. Needs a Tokio context.
 pub fn spawn_timer<R: Runtime, M: Manager<R>>(
     manager: &M,

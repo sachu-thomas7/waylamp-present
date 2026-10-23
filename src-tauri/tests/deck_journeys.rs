@@ -624,3 +624,40 @@ async fn a_pptx_with_no_readable_slides_does_not_replace_the_live_deck() {
     assert_eq!(current(&t)["title"], "Welcome");
     assert!(!active_id_file(&t).exists());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn resync_after_a_lagged_bus_replays_slide_media_scene_and_presentation_state() {
+    let t = TestApp::new();
+    import(&t);
+    invoke_unit(&t, "slide_advance", json!({}));
+    let png = t.data_dir.path().join("logo.png");
+    std::fs::write(&png, b"png").expect("png");
+    invoke_unit(
+        &t,
+        "scene_push_image",
+        json!({ "path": png.to_str().unwrap() }),
+    );
+    invoke_unit(&t, "scene_set_source", json!({ "source": "SceneMedia" }));
+
+    let events = streamdeck_lib::state::resync_events(&t.app).await;
+
+    let shape: Vec<String> = events
+        .iter()
+        .map(|e| match e {
+            AppEvent::SlideUpdate(p) => format!("SlideUpdate({}/{})", p.index, p.total),
+            AppEvent::SceneMediaUpdate(m) => format!("SceneMediaUpdate({})", m.display_name),
+            AppEvent::SceneSourceChanged { source } => format!("SceneSourceChanged({source:?})"),
+            AppEvent::PresentationVisibility { visible } => format!("Presentation({visible})"),
+            other => format!("{other:?}"),
+        })
+        .collect();
+    assert_eq!(
+        shape,
+        [
+            "SlideUpdate(1/5)",
+            "SceneMediaUpdate(logo.png)",
+            "SceneSourceChanged(SceneMedia)",
+            "Presentation(false)",
+        ]
+    );
+}

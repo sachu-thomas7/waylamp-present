@@ -295,6 +295,9 @@ async fn run_event_bridge(
                         dropped: n,
                     },
                 );
+                for event in crate::state::resync_events(&handle).await {
+                    let _ = handle.emit("app-event", &event);
+                }
             }
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         }
