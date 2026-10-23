@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-compositor-stop"
+description = "Enables the compositor_stop command without any pre-configured scope."
+commands.allow = ["compositor_stop"]
+
+[[permission]]
+identifier = "deny-compositor-stop"
+description = "Denies the compositor_stop command without any pre-configured scope."
+commands.deny = ["compositor_stop"]

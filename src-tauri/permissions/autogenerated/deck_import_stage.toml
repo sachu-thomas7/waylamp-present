@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-deck-import-stage"
+description = "Enables the deck_import_stage command without any pre-configured scope."
+commands.allow = ["deck_import_stage"]
+
+[[permission]]
+identifier = "deny-deck-import-stage"
+description = "Denies the deck_import_stage command without any pre-configured scope."
+commands.deny = ["deck_import_stage"]

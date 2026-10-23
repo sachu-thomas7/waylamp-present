@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-presentation-show"
+description = "Enables the presentation_show command without any pre-configured scope."
+commands.allow = ["presentation_show"]
+
+[[permission]]
+identifier = "deny-presentation-show"
+description = "Denies the presentation_show command without any pre-configured scope."
+commands.deny = ["presentation_show"]

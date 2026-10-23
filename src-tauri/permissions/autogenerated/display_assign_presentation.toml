@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-display-assign-presentation"
+description = "Enables the display_assign_presentation command without any pre-configured scope."
+commands.allow = ["display_assign_presentation"]
+
+[[permission]]
+identifier = "deny-display-assign-presentation"
+description = "Denies the display_assign_presentation command without any pre-configured scope."
+commands.deny = ["display_assign_presentation"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-whip-get-qr"
+description = "Enables the whip_get_qr command without any pre-configured scope."
+commands.allow = ["whip_get_qr"]
+
+[[permission]]
+identifier = "deny-whip-get-qr"
+description = "Denies the whip_get_qr command without any pre-configured scope."
+commands.deny = ["whip_get_qr"]

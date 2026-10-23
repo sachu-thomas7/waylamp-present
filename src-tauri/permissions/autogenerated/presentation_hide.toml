@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-presentation-hide"
+description = "Enables the presentation_hide command without any pre-configured scope."
+commands.allow = ["presentation_hide"]
+
+[[permission]]
+identifier = "deny-presentation-hide"
+description = "Denies the presentation_hide command without any pre-configured scope."
+commands.deny = ["presentation_hide"]

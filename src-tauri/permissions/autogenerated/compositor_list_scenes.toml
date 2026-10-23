@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-compositor-list-scenes"
+description = "Enables the compositor_list_scenes command without any pre-configured scope."
+commands.allow = ["compositor_list_scenes"]
+
+[[permission]]
+identifier = "deny-compositor-list-scenes"
+description = "Denies the compositor_list_scenes command without any pre-configured scope."
+commands.deny = ["compositor_list_scenes"]

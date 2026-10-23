@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-scene-push-image"
+description = "Enables the scene_push_image command without any pre-configured scope."
+commands.allow = ["scene_push_image"]
+
+[[permission]]
+identifier = "deny-scene-push-image"
+description = "Denies the scene_push_image command without any pre-configured scope."
+commands.deny = ["scene_push_image"]

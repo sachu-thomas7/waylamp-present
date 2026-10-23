@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-ndi-list-sources"
+description = "Enables the ndi_list_sources command without any pre-configured scope."
+commands.allow = ["ndi_list_sources"]
+
+[[permission]]
+identifier = "deny-ndi-list-sources"
+description = "Denies the ndi_list_sources command without any pre-configured scope."
+commands.deny = ["ndi_list_sources"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pipeline-resume"
+description = "Enables the pipeline_resume command without any pre-configured scope."
+commands.allow = ["pipeline_resume"]
+
+[[permission]]
+identifier = "deny-pipeline-resume"
+description = "Denies the pipeline_resume command without any pre-configured scope."
+commands.deny = ["pipeline_resume"]

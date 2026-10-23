@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-deck-restore"
+description = "Enables the deck_restore command without any pre-configured scope."
+commands.allow = ["deck_restore"]
+
+[[permission]]
+identifier = "deny-deck-restore"
+description = "Denies the deck_restore command without any pre-configured scope."
+commands.deny = ["deck_restore"]

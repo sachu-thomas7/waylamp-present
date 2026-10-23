@@ -5,6 +5,7 @@
   "windows": ["controller"],
   "permissions": [
     "core:default",
+    "controller-commands",
     "dialog:allow-open"
   ]
 }

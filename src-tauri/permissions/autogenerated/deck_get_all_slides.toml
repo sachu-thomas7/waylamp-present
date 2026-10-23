@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-deck-get-all-slides"
+description = "Enables the deck_get_all_slides command without any pre-configured scope."
+commands.allow = ["deck_get_all_slides"]
+
+[[permission]]
+identifier = "deny-deck-get-all-slides"
+description = "Denies the deck_get_all_slides command without any pre-configured scope."
+commands.deny = ["deck_get_all_slides"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slide-get-current"
+description = "Enables the slide_get_current command without any pre-configured scope."
+commands.allow = ["slide_get_current"]
+
+[[permission]]
+identifier = "deny-slide-get-current"
+description = "Denies the slide_get_current command without any pre-configured scope."
+commands.deny = ["slide_get_current"]

@@ -5,7 +5,31 @@ fn main() {
         chrono_or_manual_timestamp()
     );
     embed_test_manifest();
-    tauri_build::build()
+    // With an app manifest, app commands are denied to every window until a capability grants them
+    // (the controller gets the `controller-commands` set; the projector gets none).
+    println!("cargo:rerun-if-changed=src/state.rs");
+    println!("cargo:rerun-if-changed=permissions");
+    let commands: &'static [&'static str] = Box::leak(app_commands().into_boxed_slice());
+    tauri_build::try_build(
+        tauri_build::Attributes::new()
+            .app_manifest(tauri_build::AppManifest::new().commands(commands)),
+    )
+    .expect("failed to run tauri-build")
+}
+
+/// Command names from the `generate_handler!` list in state.rs, the single source of truth.
+fn app_commands() -> Vec<&'static str> {
+    let src = std::fs::read_to_string("src/state.rs").expect("read src/state.rs");
+    let list = src
+        .split("tauri::generate_handler![")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .expect("generate_handler! list in state.rs");
+    list.lines()
+        .filter_map(|l| l.trim().strip_prefix("crate::commands::"))
+        .filter_map(|l| l.trim_end_matches(',').rsplit("::").next())
+        .map(|name| &*Box::leak(name.to_string().into_boxed_str()))
+        .collect()
 }
 
 // Test binaries don't get tauri-build's app manifest; without Common Controls v6 they fail to start.

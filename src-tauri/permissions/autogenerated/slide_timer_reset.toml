@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slide-timer-reset"
+description = "Enables the slide_timer_reset command without any pre-configured scope."
+commands.allow = ["slide_timer_reset"]
+
+[[permission]]
+identifier = "deny-slide-timer-reset"
+description = "Denies the slide_timer_reset command without any pre-configured scope."
+commands.deny = ["slide_timer_reset"]

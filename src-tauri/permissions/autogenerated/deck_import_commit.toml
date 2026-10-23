@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-deck-import-commit"
+description = "Enables the deck_import_commit command without any pre-configured scope."
+commands.allow = ["deck_import_commit"]
+
+[[permission]]
+identifier = "deny-deck-import-commit"
+description = "Denies the deck_import_commit command without any pre-configured scope."
+commands.deny = ["deck_import_commit"]

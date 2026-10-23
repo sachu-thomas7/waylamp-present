@@ -509,9 +509,77 @@ fn controller_capability_holds_exactly_the_grants_its_ui_uses() {
     let cap = capability("default.json");
     assert_eq!(
         strings(&cap["permissions"]),
-        ["core:default", "dialog:allow-open"],
+        ["core:default", "controller-commands", "dialog:allow-open"],
         "shell/global-shortcut/create-webview-window were unused by controller JS; add grants only with a caller"
     );
+}
+
+fn handler_command_names() -> Vec<String> {
+    let src = read(&tauri_dir().join("src").join("state.rs"));
+    let list = src
+        .split("tauri::generate_handler![")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .expect("generate_handler! list");
+    list.lines()
+        .filter_map(|l| l.trim().strip_prefix("crate::commands::"))
+        .filter_map(|l| {
+            l.trim_end_matches(',')
+                .rsplit("::")
+                .next()
+                .map(str::to_string)
+        })
+        .collect()
+}
+
+#[test]
+fn only_the_controller_may_invoke_app_commands_and_the_set_matches_the_handler_list() {
+    let handlers = handler_command_names();
+    assert!(handlers.len() >= 40, "handler scan found {handlers:?}");
+
+    let set: toml::Value = read(
+        &tauri_dir()
+            .join("permissions")
+            .join("controller-commands.toml"),
+    )
+    .parse()
+    .expect("permissions toml");
+    let sets = set["set"].as_array().expect("[[set]]");
+    assert_eq!(sets.len(), 1);
+    assert_eq!(sets[0]["identifier"].as_str(), Some("controller-commands"));
+    let mut granted: Vec<String> = sets[0]["permissions"]
+        .as_array()
+        .expect("permissions")
+        .iter()
+        .map(|p| p.as_str().expect("string").to_string())
+        .collect();
+    let mut expected: Vec<String> = handlers
+        .iter()
+        .map(|h| format!("allow-{}", h.replace('_', "-")))
+        .collect();
+    granted.sort();
+    expected.sort();
+    assert_eq!(
+        granted, expected,
+        "permissions/controller-commands.toml must list exactly the commands in state.rs"
+    );
+
+    // Without an app manifest every command is open to every local window, including the projector.
+    let build_rs = read(&tauri_dir().join("build.rs"));
+    assert!(build_rs.contains(".app_manifest(") && build_rs.contains(".commands("));
+
+    for (name, cap) in all_capabilities() {
+        let grants_set = cap_permissions(&cap)
+            .iter()
+            .any(|p| p == "controller-commands");
+        let targets_presentation = cap_targets(&cap)
+            .iter()
+            .any(|t| glob_match(t, "presentation"));
+        assert!(
+            !(grants_set && targets_presentation),
+            "{name} gives the projector the controller's commands"
+        );
+    }
 }
 
 #[test]

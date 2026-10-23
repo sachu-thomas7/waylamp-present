@@ -1,4 +1,4 @@
-// Real-app smoke (local only): drives a running `cargo tauri dev` over WebView2 CDP and asserts decks/media actually render.
+// Real-app smoke (local only): drives a running dev or release build over WebView2 CDP and asserts decks/media actually render.
 // Launch the app with WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222, then:
 //   node scripts/check-media-render.mjs <repo-root> <video.webm|mp4>
 import path from 'node:path';
@@ -6,7 +6,10 @@ import path from 'node:path';
 const [, , root = process.cwd(), video] = process.argv;
 const port = process.env.CDP_PORT ?? '9222';
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-const page = (port) => targets.find((t) => t.type === 'page' && t.url.includes(`:${port}`));
+// Dev: controller :5173, presentation :5174. Release: both on tauri.localhost, the presentation under /presentation/.
+const pages = targets.filter((t) => t.type === 'page');
+const presentationTarget = pages.find((t) => t.url.includes(':5174') || t.url.includes('/presentation/'));
+const controllerTarget = pages.find((t) => t !== presentationTarget);
 
 function connect(target) {
   const ws = new WebSocket(target.webSocketDebuggerUrl);
@@ -27,8 +30,8 @@ function connect(target) {
   };
 }
 
-const controller = connect(page('5173'));
-const presentation = connect(page('5174'));
+const controller = connect(controllerTarget);
+const presentation = connect(presentationTarget);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const invoke = (cmd, args) =>
   controller(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify(args)}).then(() => 'ok', (e) => 'ERR ' + JSON.stringify(e))`);

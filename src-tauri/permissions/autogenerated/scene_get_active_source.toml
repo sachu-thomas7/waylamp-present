@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-scene-get-active-source"
+description = "Enables the scene_get_active_source command without any pre-configured scope."
+commands.allow = ["scene_get_active_source"]
+
+[[permission]]
+identifier = "deny-scene-get-active-source"
+description = "Denies the scene_get_active_source command without any pre-configured scope."
+commands.deny = ["scene_get_active_source"]

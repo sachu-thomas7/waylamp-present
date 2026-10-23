@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-whip-set-enabled"
+description = "Enables the whip_set_enabled command without any pre-configured scope."
+commands.allow = ["whip_set_enabled"]
+
+[[permission]]
+identifier = "deny-whip-set-enabled"
+description = "Denies the whip_set_enabled command without any pre-configured scope."
+commands.deny = ["whip_set_enabled"]

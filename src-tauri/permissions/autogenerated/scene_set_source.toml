@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-scene-set-source"
+description = "Enables the scene_set_source command without any pre-configured scope."
+commands.allow = ["scene_set_source"]
+
+[[permission]]
+identifier = "deny-scene-set-source"
+description = "Denies the scene_set_source command without any pre-configured scope."
+commands.deny = ["scene_set_source"]

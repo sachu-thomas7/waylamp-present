@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slide-advance"
+description = "Enables the slide_advance command without any pre-configured scope."
+commands.allow = ["slide_advance"]
+
+[[permission]]
+identifier = "deny-slide-advance"
+description = "Denies the slide_advance command without any pre-configured scope."
+commands.deny = ["slide_advance"]

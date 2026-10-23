@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-slide-jump-to"
+description = "Enables the slide_jump_to command without any pre-configured scope."
+commands.allow = ["slide_jump_to"]
+
+[[permission]]
+identifier = "deny-slide-jump-to"
+description = "Denies the slide_jump_to command without any pre-configured scope."
+commands.deny = ["slide_jump_to"]
