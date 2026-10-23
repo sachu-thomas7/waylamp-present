@@ -13,6 +13,7 @@ import { WhipPanel } from './components/WhipPanel';
 import { CompositorPanel } from './components/CompositorPanel';
 import { CameraPreviewGrid } from './components/CameraPreviewGrid';
 import { StartupNotices } from './components/StartupNotices';
+import { StreamPanel } from './components/StreamPanel';
 import { Popover } from './components/ui/Popover';
 import { IconButton } from './components/ui/IconButton';
 import { Button } from './components/ui/Button';
@@ -142,6 +143,7 @@ export default function App() {
         </div>
         <div style={{ flex: '1 1 32%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <SceneMediaPanel />
+          <StreamPanel />
         </div>
       </div>
     </div>

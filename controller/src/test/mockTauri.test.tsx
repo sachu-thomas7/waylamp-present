@@ -41,6 +41,8 @@ describe('mockTauri helpers (controller)', () => {
     const { calls, unhandled } = installMockIPC({
       get_build_info: () => ({ version: '0.0.0', tauri_version: '2', os: 'test', arch: 'x', profile: 'debug' }),
       get_startup_notices: () => [],
+      stream_get_config: () => ({ settings: {}, destinations: [] }),
+      stream_get_status: () => ({ state: 'Stopped', encoder: null, hardware: false, started_unix_ms: null, destinations: [] }),
       slide_get_current: () => null,
       deck_get_all_slides: () => [],
       scene_get_active_source: () => 'SlideDeck',
@@ -60,6 +62,8 @@ describe('mockTauri helpers (controller)', () => {
       'preview_get_snapshot',
       'scene_get_active_source',
       'slide_get_current',
+      'stream_get_config',
+      'stream_get_status',
       'whip_get_info',
     ]);
     expect(unhandled).toEqual([]);

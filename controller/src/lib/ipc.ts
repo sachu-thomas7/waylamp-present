@@ -337,3 +337,98 @@ export async function compositorSetLayout(sources: SourceGeometry[]): Promise<vo
 export async function compositorGetState(): Promise<CompositorStatus> {
   return invoke<CompositorStatus>('compositor_get_state');
 }
+
+// ── Streaming (F4) ──────────────────────────────────────────────────────────
+
+export type StreamPlatform = 'facebook' | 'youtube' | 'custom';
+
+export const PLATFORM_DEFAULT_URL: Record<StreamPlatform, string> = {
+  facebook: 'rtmps://live-api-s.facebook.com:443/rtmp/',
+  youtube: 'rtmp://a.rtmp.youtube.com/live2',
+  custom: '',
+};
+
+// @sync-with: src-tauri/src/stream.rs Destination
+export interface StreamDestination {
+  id: string;
+  name: string;
+  platform: StreamPlatform;
+  ingest_url: string;
+  enabled: boolean;
+}
+
+// @sync-with: src-tauri/src/stream.rs StreamSettings
+export interface StreamSettings {
+  width: number;
+  height: number;
+  fps: number;
+  video_kbps: number;
+  audio_kbps: number;
+  keyframe_secs: number;
+  encoder: string;
+}
+
+// @sync-with: src-tauri/src/stream_service.rs StreamConfigView
+export interface StreamConfigView {
+  settings: StreamSettings;
+  destinations: Array<StreamDestination & { key_set: boolean }>;
+}
+
+export type StreamState = 'Stopped' | 'Starting' | 'Live' | 'Stopping';
+
+// @sync-with: src-tauri/src/stream.rs DestinationState
+export type DestinationState =
+  | { state: 'Idle' }
+  | { state: 'Connecting' }
+  | { state: 'Live' }
+  | { state: 'Reconnecting'; detail: { attempt: number; retry_in_secs: number } }
+  | { state: 'Failed'; detail: string };
+
+// @sync-with: src-tauri/src/stream.rs StreamStatus
+export interface StreamStatus {
+  state: StreamState;
+  encoder: string | null;
+  hardware: boolean;
+  started_unix_ms: number | null;
+  destinations: Array<{
+    id: string;
+    name: string;
+    platform: StreamPlatform;
+    state: DestinationState;
+    bitrate_kbps: number;
+    dropped_frames: number;
+  }>;
+}
+
+export async function streamGetConfig(): Promise<StreamConfigView> {
+  return invoke<StreamConfigView>('stream_get_config');
+}
+
+export async function streamGetStatus(): Promise<StreamStatus> {
+  return invoke<StreamStatus>('stream_get_status');
+}
+
+/** `key` goes to the OS keychain; null keeps the stored key. */
+export async function streamSaveDestination(destination: StreamDestination, key: string | null): Promise<StreamConfigView> {
+  return invoke<StreamConfigView>('stream_save_destination', { destination, key });
+}
+
+export async function streamRemoveDestination(id: string): Promise<StreamConfigView> {
+  return invoke<StreamConfigView>('stream_remove_destination', { id });
+}
+
+export async function streamSetDestinationEnabled(id: string, enabled: boolean): Promise<StreamConfigView> {
+  return invoke<StreamConfigView>('stream_set_destination_enabled', { id, enabled });
+}
+
+export async function streamSetSettings(settings: StreamSettings): Promise<StreamConfigView> {
+  return invoke<StreamConfigView>('stream_set_settings', { settings });
+}
+
+export async function streamStart(): Promise<StreamStatus> {
+  return invoke<StreamStatus>('stream_start');
+}
+
+export async function streamStop(): Promise<StreamStatus> {
+  return invoke<StreamStatus>('stream_stop');
+}

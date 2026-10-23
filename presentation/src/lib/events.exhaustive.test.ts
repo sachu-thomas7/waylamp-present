@@ -42,6 +42,9 @@ const NOT_MODELLED: Record<string, string> = {
   WhipSessionChanged: 'phone ingest session status is controller-only',
   CompositorStateChanged: 'compositor status is controller-only',
   CompositorLayoutChanged: 'compositor layout is controller-only',
+  StreamStateChanged: 'streaming status is controller-only',
+  StreamDestinationChanged: 'per-destination streaming status is controller-only',
+  StreamHealth: 'streaming health is controller-only',
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

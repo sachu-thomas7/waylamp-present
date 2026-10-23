@@ -17,6 +17,8 @@ pub mod scene;
 pub mod slide;
 pub mod slide_state_machine;
 pub mod state;
+pub mod stream;
+pub mod stream_service;
 pub mod whip;
 pub mod whip_server;
 

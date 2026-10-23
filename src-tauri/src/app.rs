@@ -13,6 +13,7 @@ use crate::events::AppEvent;
 use crate::state::TimerAbortHandle;
 pub struct DisplayWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct NdiWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
+pub struct StreamTickAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct WhipTickAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct PreviewTaskAbortHandles(pub Vec<tauri::async_runtime::JoinHandle<()>>);
 
@@ -175,6 +176,21 @@ pub fn run() {
             );
             app.manage(NdiWatchAbortHandle(ndi_watch_abort));
 
+            let stream = crate::state::manage_stream(
+                app,
+                crate::state::production_stream_backend(),
+                Arc::clone(&bus_arc),
+                config_path.clone(),
+                Arc::new(crate::stream_service::KeyringKeyStore),
+                crate::stream_service::Sources {
+                    video: crate::stream::VideoSource::Program("program".into()),
+                    audio: crate::stream::AudioSource::Silence,
+                },
+            );
+            app.manage(StreamTickAbortHandle(
+                crate::stream_service::spawn_tick_task(stream),
+            ));
+
             let whip = crate::state::manage_whip(
                 app,
                 crate::whip::production_backend(preview),
@@ -215,6 +231,9 @@ pub fn run() {
                     if let Some(abort) = window.app_handle().try_state::<NdiWatchAbortHandle>() {
                         abort.0.abort();
                     }
+                    if let Some(abort) = window.app_handle().try_state::<StreamTickAbortHandle>() {
+                        abort.0.abort();
+                    }
                     if let Some(abort) = window.app_handle().try_state::<WhipTickAbortHandle>() {
                         abort.0.abort();
                     }
@@ -249,6 +268,11 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                if let Some(stream) =
+                    app.try_state::<Arc<crate::stream_service::StreamController>>()
+                {
+                    stream.shutdown();
+                }
                 if let Some(whip) = app.try_state::<Arc<crate::whip::WhipController>>() {
                     whip.service().shutdown_all();
                 }

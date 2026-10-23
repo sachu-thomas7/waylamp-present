@@ -38,6 +38,9 @@ const TS_VARIANTS: Record<AppEvent['type'], true> = {
   WhipSessionChanged: true,
   CompositorStateChanged: true,
   CompositorLayoutChanged: true,
+  StreamStateChanged: true,
+  StreamDestinationChanged: true,
+  StreamHealth: true,
 };
 
 const IDENT = /^[A-Za-z_]\w*$/;

@@ -5,6 +5,7 @@ use crate::pipeline::PipelineState;
 use crate::scene::SceneMediaPayload;
 use crate::scene::SceneSource;
 use crate::slide::SlidePayload;
+use crate::stream::{DestinationState, StreamState};
 use crate::whip::WhipLinkState;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -108,5 +109,17 @@ pub enum AppEvent {
     },
     CompositorLayoutChanged {
         sources: Vec<SourceGeometry>,
+    },
+    StreamStateChanged {
+        state: StreamState,
+    },
+    StreamDestinationChanged {
+        id: String,
+        state: DestinationState,
+    },
+    StreamHealth {
+        id: String,
+        bitrate_kbps: u32,
+        dropped_frames: u64,
     },
 }

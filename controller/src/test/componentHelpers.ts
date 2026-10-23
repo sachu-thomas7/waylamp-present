@@ -1,6 +1,7 @@
 import { waitFor } from '@testing-library/react';
 import { expect } from 'vitest';
 import type { DisplayInfo, SlidePayload, WhipInfo } from '../lib/ipc';
+import { useStreamStore } from '../store/streamStore';
 import { useWhipStore } from '../store/whipStore';
 import { useControllerSlideStore } from '../store/slideStore';
 import { useDisplayStore } from '../store/displayStore';
@@ -22,6 +23,7 @@ export function resetStores() {
   useNdiStore.setState({ discovered: [], added: [], unavailable: null, lastError: null });
   usePreviewStore.setState({ frames: {}, stats: {}, layout: '2x2' });
   useWhipStore.setState({ info: null, qr: {}, lastError: null });
+  useStreamStore.setState({ config: null, status: null, lastError: null });
   useCompositorStore.setState({ status: IDLE_COMPOSITOR, scenes: [], lastError: null });
 }
 
@@ -54,6 +56,8 @@ export function baseHandlers(over: Record<string, IpcHandler> = {}): Record<stri
   return {
     get_build_info: () => ({ build_timestamp: '2026-10-18T00:00:00Z', version: '1.2.3' }),
     get_startup_notices: () => [],
+    stream_get_config: () => ({ settings: { width: 1920, height: 1080, fps: 30, video_kbps: 6000, audio_kbps: 128, keyframe_secs: 2, encoder: '' }, destinations: [] }),
+    stream_get_status: () => ({ state: 'Stopped', encoder: null, hardware: false, started_unix_ms: null, destinations: [] }),
     slide_get_current: () => null,
     deck_get_all_slides: () => [],
     scene_get_active_source: () => 'SlideDeck',

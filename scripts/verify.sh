@@ -918,6 +918,44 @@ run_core() {
 # ══════════════════════════════════════════════════════════════════
 # T0 — Test-framework foundations (T0.2: fmt gate)
 # ══════════════════════════════════════════════════════════════════
+run_f4_1() {
+  section "F4.1 — Multi-destination live streaming (RTMP/RTMPS: Facebook, YouTube, custom)"
+
+  file_exists "src-tauri/src/stream.rs"
+  file_exists "src-tauri/src/stream_service.rs"
+  file_exists "src-tauri/src/commands/stream.rs"
+  file_exists "src-tauri/tests/stream_journeys.rs"
+  file_exists "controller/src/components/StreamPanel.tsx"
+  file_exists "controller/src/store/streamStore.ts"
+  file_contains "hardware encoders preferred"          "src-tauri/src/stream.rs" '"nvh264enc"'
+  file_contains "x264 (GPL) gated"                     "src-tauri/src/stream.rs" "allow_gpl"
+  file_contains "reconnect back-off"                   "src-tauri/src/stream.rs" "pub struct Backoff"
+  file_contains "keys never in config structs"         "src-tauri/src/stream.rs" "stream key is a secret and lives in the keychain"
+  file_contains "keys in the OS keychain"              "src-tauri/src/stream_service.rs" "KeyringKeyStore"
+  file_contains "engine seam"                          "src-tauri/src/stream_service.rs" "pub trait StreamBackend"
+  file_contains "stream commands registered"           "src-tauri/src/state.rs" "stream_start"
+  file_contains "StreamHealth event"                   "src-tauri/src/events.rs" "StreamHealth"
+  file_contains "StreamHealth in controller events.ts" "controller/src/lib/events.ts" "StreamHealth"
+  file_contains "StreamHealth NOT_MODELLED in presentation" "presentation/src/lib/events.exhaustive.test.ts" "StreamHealth"
+  file_contains "StreamPanel mounted"                  "controller/src/App.tsx" "<StreamPanel />"
+  file_contains "two-step Go Live"                     "controller/src/components/StreamPanel.tsx" "Yes, go live"
+
+  check "F4.1 pure unit tests (validation, encoder choice, back-off, redaction)" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --lib stream:: 2>&1 | tee /tmp/sd-f41-lib.log \
+      && ! grep -q "FAILED" /tmp/sd-f41-lib.log && grep -qE "test result: ok. (1[3-9]|[2-9][0-9]) passed" /tmp/sd-f41-lib.log'
+
+  check "F4.1 journeys over real IPC (fan-out, per-destination failure, reconnect, key secrecy)" \
+    bash -c 'set -o pipefail; cd src-tauri && cargo test --test stream_journeys 2>&1 | tee /tmp/sd-f41-j.log \
+      && cargo test --test invariants 2>&1 | tee /tmp/sd-f41-inv.log \
+      && ! grep -q "FAILED" /tmp/sd-f41-j.log /tmp/sd-f41-inv.log \
+      && grep -q "test result: ok. 11 passed" /tmp/sd-f41-j.log'
+
+  check "StreamPanel tests, event parity and controller typecheck" \
+    bash -c 'cd controller && npx vitest run src/components/StreamPanel.test.tsx src/lib/events.exhaustive.test.ts src/App.test.tsx >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+  check "presentation exhaustive-event test + typecheck" \
+    bash -c 'cd presentation && npx vitest run src/lib/events.exhaustive.test.ts >/dev/null 2>&1 && npm run typecheck >/dev/null 2>&1'
+}
+
 run_t0() {
   section "T0 — Test framework foundations"
 
@@ -1256,6 +1294,12 @@ case "$FILTER" in
   f3.1)
     run_invariants; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_f3_1
     ;;
+  f4.1)
+    run_invariants; run_f4_1
+    ;;
+  f4|phase4)
+    run_invariants; run_f4_1; run_core
+    ;;
   f3|phase3)
     run_invariants; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_f3_1; run_core
     ;;
@@ -1299,7 +1343,7 @@ case "$FILTER" in
     run_core
     ;;
   all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_f3_1; run_t0; run_t1; run_t2; run_release_pdfium; run_core
+    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_f2_1; run_f2_2; run_f2_3; run_f2_4; run_f3_1; run_f4_1; run_t0; run_t1; run_t2; run_release_pdfium; run_core
     ;;
 esac
 

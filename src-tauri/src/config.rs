@@ -14,6 +14,7 @@ pub struct StreamDeckConfig {
     pub presentation: PresentationConfig,
     pub ui: UiConfig,
     pub whip: WhipConfig,
+    pub stream: StreamConfig,
     pub scene: BTreeMap<String, SceneConfig>,
 }
 
@@ -25,6 +26,7 @@ impl Default for StreamDeckConfig {
             presentation: PresentationConfig::default(),
             ui: UiConfig::default(),
             whip: WhipConfig::default(),
+            stream: StreamConfig::default(),
             scene: BTreeMap::new(),
         }
     }
@@ -42,6 +44,15 @@ impl Default for UiConfig {
             preview_grid: "2x2".into(),
         }
     }
+}
+
+/// Live-stream output settings and destinations. Stream keys live in the OS keychain, never here.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StreamConfig {
+    #[serde(flatten)]
+    pub settings: crate::stream::StreamSettings,
+    pub destinations: Vec<crate::stream::Destination>,
 }
 
 /// Off by default: enabling binds a LAN-reachable port, so it is an explicit operator choice.

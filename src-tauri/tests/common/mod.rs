@@ -38,6 +38,9 @@ pub struct TestApp {
     pub whip: Arc<streamdeck_lib::whip::WhipController>,
     pub whip_backend: streamdeck_lib::whip::SimulatedWhipBackend,
     pub whip_tokens: Arc<streamdeck_lib::whip::MemoryTokenStore>,
+    pub stream: Arc<streamdeck_lib::stream_service::StreamController>,
+    pub stream_backend: streamdeck_lib::stream_service::SimulatedStreamBackend,
+    pub stream_keys: Arc<streamdeck_lib::stream_service::MemoryKeyStore>,
 }
 
 /// Scriptable monitor list standing in for the OS (mock `available_monitors` is unimplemented).
@@ -165,6 +168,20 @@ impl TestApp {
             whip_tokens.clone(),
         );
 
+        let stream_backend = streamdeck_lib::stream_service::SimulatedStreamBackend::new();
+        let stream_keys = Arc::new(streamdeck_lib::stream_service::MemoryKeyStore::default());
+        let stream = streamdeck_lib::state::manage_stream(
+            &app,
+            Box::new(stream_backend.clone()),
+            Arc::clone(&bus),
+            data_dir.path().join("config").join("streamdeck.toml"),
+            stream_keys.clone(),
+            streamdeck_lib::stream_service::Sources {
+                video: streamdeck_lib::stream::VideoSource::TestPattern,
+                audio: streamdeck_lib::stream::AudioSource::Silence,
+            },
+        );
+
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()
             .expect("mock controller window");
@@ -185,6 +202,9 @@ impl TestApp {
             whip,
             whip_backend,
             whip_tokens,
+            stream,
+            stream_backend,
+            stream_keys,
         }
     }
 

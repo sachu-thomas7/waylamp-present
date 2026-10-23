@@ -11,6 +11,8 @@
   --color-live: #9b8afc;
   --color-live-ink: #150e33;
   --color-warn: #d99a3d;
+  --color-ok: #4caf7d;
+  --color-bad: #e5534b;
   --slide-bg: #1a1a2e;
   --font-body: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;

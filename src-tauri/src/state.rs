@@ -192,6 +192,14 @@ macro_rules! handler {
             crate::commands::whip::whip_set_token,
             crate::commands::whip::whip_get_token,
             crate::commands::whip::whip_get_qr,
+            crate::commands::stream::stream_get_config,
+            crate::commands::stream::stream_get_status,
+            crate::commands::stream::stream_save_destination,
+            crate::commands::stream::stream_remove_destination,
+            crate::commands::stream::stream_set_destination_enabled,
+            crate::commands::stream::stream_set_settings,
+            crate::commands::stream::stream_start,
+            crate::commands::stream::stream_stop,
         ]
     };
 }
@@ -255,6 +263,33 @@ pub fn manage_whip<R: Runtime, M: Manager<R>>(
     ));
     manager.manage(Arc::clone(&controller));
     controller
+}
+
+/// Registers the stream controller; `backend` is the engine, `keys` the keychain.
+pub fn manage_stream<R: Runtime, M: Manager<R>>(
+    manager: &M,
+    backend: Box<dyn crate::stream_service::StreamBackend>,
+    bus: Arc<EventBus>,
+    config_path: PathBuf,
+    keys: Arc<dyn crate::stream_service::KeyStore>,
+    sources: crate::stream_service::Sources,
+) -> Arc<crate::stream_service::StreamController> {
+    let controller = Arc::new(crate::stream_service::StreamController::new(
+        backend,
+        bus,
+        config_path,
+        keys,
+        sources,
+        false,
+    ));
+    manager.manage(Arc::clone(&controller));
+    controller
+}
+
+pub fn production_stream_backend() -> Box<dyn crate::stream_service::StreamBackend> {
+    Box::new(crate::stream_service::UnavailableStreamBackend(
+        "streaming engine not compiled in (build with --features gstreamer)".into(),
+    ))
 }
 
 /// The real GStreamer backend when compiled in and initialisable, else one that reports why not.
