@@ -27,7 +27,7 @@ pub async fn deck_import(
     deck.save_to_json(&deck_json_path)?;
 
     let active_id_path = data_dir.join("decks").join("active_deck_id.txt");
-    std::fs::write(&active_id_path, &deck_id).map_err(|e| AppError::Internal(e.to_string()))?;
+    crate::persist::atomic_write(&active_id_path, deck_id.as_bytes())?;
 
     let first_payload = {
         let mut m = machine.write().await;

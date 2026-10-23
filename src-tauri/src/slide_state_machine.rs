@@ -13,6 +13,20 @@ struct SlideState {
     current_index: usize,
     #[serde(default)]
     timer_started_at: Option<u64>, // Unix ms; None = timer not yet started
+    #[serde(default)]
+    saved_at: Option<u64>, // Unix ms of this write; a stale file must not resurrect an old timer
+}
+
+/// A timer older than this at restore time belongs to a previous session, not a crash mid-service.
+const TIMER_RESTORE_MAX_AGE_MS: u64 = 6 * 60 * 60 * 1000;
+
+fn restorable_timer_start(
+    started_at: Option<u64>,
+    saved_at: Option<u64>,
+    now_ms: u64,
+) -> Option<u64> {
+    let (started, saved) = (started_at?, saved_at?);
+    (saved <= now_ms && now_ms - saved <= TIMER_RESTORE_MAX_AGE_MS).then_some(started)
 }
 
 pub struct SlideStateMachine {
@@ -182,17 +196,20 @@ pub async fn persist_state(handle: &StateMachineHandle, data_dir: &Path) -> Resu
 
 pub async fn restore_state(handle: &StateMachineHandle, data_dir: &Path) {
     let path = data_dir.join("slide_state.json");
-    let Ok(bytes) = std::fs::read(&path) else {
-        return;
-    };
-    let Ok(state) = serde_json::from_slice::<SlideState>(&bytes) else {
+    let (Some(state), _) =
+        crate::persist::load_recovering(&path, |s| serde_json::from_str::<SlideState>(s).ok())
+    else {
         return;
     };
     let mut sm = handle.write().await;
     if state.current_index < sm.total() {
         sm.current_index = state.current_index;
     }
-    sm.timer_started_at = state.timer_started_at;
+    sm.timer_started_at = restorable_timer_start(
+        state.timer_started_at,
+        state.saved_at,
+        now_unix_ms().unwrap_or(0),
+    );
 }
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -229,14 +246,11 @@ async fn persist_index(handle: &StateMachineHandle, data_dir: &Path) -> Result<(
     let state = SlideState {
         current_index: index,
         timer_started_at,
+        saved_at: Some(now_unix_ms()?),
     };
     let json = serde_json::to_string(&state)
         .map_err(|e| AppError::Internal(format!("serialize slide state: {e}")))?;
-    std::fs::create_dir_all(data_dir)
-        .map_err(|e| AppError::Internal(format!("create data_dir: {e}")))?;
-    std::fs::write(data_dir.join("slide_state.json"), json)
-        .map_err(|e| AppError::Internal(format!("persist slide state: {e}")))?;
-    Ok(())
+    crate::persist::atomic_write(&data_dir.join("slide_state.json"), json.as_bytes())
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -376,6 +390,7 @@ mod tests {
         let state = SlideState {
             current_index: 0,
             timer_started_at: Some(started_at),
+            saved_at: Some(now_ms),
         };
         std::fs::write(
             dir.path().join("slide_state.json"),
@@ -387,6 +402,91 @@ mod tests {
         let restored = handle.read().await.timer_started_at().unwrap();
         let elapsed = (now_ms - restored) / 1000;
         assert!(elapsed >= 30, "elapsed {elapsed} should be >= 30");
+    }
+
+    const HOUR: u64 = 60 * 60 * 1000;
+
+    #[test]
+    fn restorable_timer_rules() {
+        let now = 100 * HOUR;
+        assert_eq!(
+            restorable_timer_start(Some(now - HOUR), Some(now - 1000), now),
+            Some(now - HOUR)
+        );
+        assert_eq!(restorable_timer_start(None, Some(now), now), None);
+        assert_eq!(
+            restorable_timer_start(Some(1), None, now),
+            None,
+            "pre-saved_at files are stale"
+        );
+        assert_eq!(
+            restorable_timer_start(Some(1), Some(now - 7 * HOUR), now),
+            None
+        );
+        assert_eq!(
+            restorable_timer_start(Some(1), Some(now - 6 * HOUR), now),
+            Some(1)
+        );
+        assert_eq!(
+            restorable_timer_start(Some(1), Some(now + HOUR), now),
+            None,
+            "clock went backwards"
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_timer_from_a_previous_session_is_not_resurrected() {
+        let dir = tempdir().unwrap();
+        let nine_days_ago = now_unix_ms().unwrap() - 9 * 24 * HOUR;
+        std::fs::write(
+            dir.path().join("slide_state.json"),
+            format!(
+                r#"{{"current_index":2,"timer_started_at":{nine_days_ago},"saved_at":{nine_days_ago}}}"#
+            ),
+        )
+        .unwrap();
+        let handle = new_handle(SlideDeck::stub(), dir.path().to_path_buf());
+        restore_state(&handle, dir.path()).await;
+        assert_eq!(handle.read().await.timer_started_at(), None);
+        assert_eq!(
+            handle.read().await.current_index(),
+            2,
+            "position still restored"
+        );
+    }
+
+    #[tokio::test]
+    async fn legacy_state_without_saved_at_drops_its_timer() {
+        let dir = tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("slide_state.json"),
+            r#"{"current_index":1,"timer_started_at":1700000000000}"#,
+        )
+        .unwrap();
+        let handle = new_handle(SlideDeck::stub(), dir.path().to_path_buf());
+        restore_state(&handle, dir.path()).await;
+        assert_eq!(handle.read().await.timer_started_at(), None);
+    }
+
+    #[tokio::test]
+    async fn corrupt_slide_state_falls_back_to_the_previous_save() {
+        let dir = tempdir().unwrap();
+        let handle = new_handle(SlideDeck::stub(), dir.path().to_path_buf());
+        let (bus, _rx) = make_bus();
+        advance(&handle, &bus).await.unwrap();
+        advance(&handle, &bus).await.unwrap();
+        std::fs::write(
+            dir.path().join("slide_state.json"),
+            "{\"current_index\": 9, trunc",
+        )
+        .unwrap();
+        let fresh = new_handle(SlideDeck::stub(), dir.path().to_path_buf());
+        restore_state(&fresh, dir.path()).await;
+        assert_eq!(
+            fresh.read().await.current_index(),
+            1,
+            "restored from .bak, one save behind"
+        );
     }
 
     #[test]

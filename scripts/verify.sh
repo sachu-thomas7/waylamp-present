@@ -272,8 +272,8 @@ run_f0_1() {
   file_contains "presentation window defined" "src-tauri/tauri.conf.json" "presentation"
 
   subsection "Capabilities"
-  file_contains "core:webview:allow-create-webview-window" \
-    "src-tauri/capabilities/default.json" "core:webview:allow-create-webview-window"
+  file_not_contains "controller does not grant unused create-webview-window" \
+    "src-tauri/capabilities/default.json" "create-webview-window"
 
   subsection "CI pipeline"
   if [ -d ".github/workflows" ]; then

@@ -102,6 +102,10 @@ export async function getBuildInfo(): Promise<BuildInfo> {
   return invoke<BuildInfo>('get_build_info');
 }
 
+export async function getStartupNotices(): Promise<string[]> {
+  return invoke<string[]>('get_startup_notices');
+}
+
 export async function presentationShow(): Promise<void> {
   return invoke<void>('presentation_show');
 }

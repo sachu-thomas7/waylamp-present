@@ -140,13 +140,9 @@ impl SlideDeck {
     }
 
     pub fn save_to_json(&self, path: &std::path::Path) -> Result<(), crate::error::AppError> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
-        }
         let data = serde_json::to_string_pretty(self)
             .map_err(|e| crate::error::AppError::Internal(e.to_string()))?;
-        std::fs::write(path, data).map_err(|e| crate::error::AppError::Internal(e.to_string()))
+        crate::persist::atomic_write(path, data.as_bytes())
     }
 
     pub fn get(&self, index: usize) -> Option<&SlideEntry> {

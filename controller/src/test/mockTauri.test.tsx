@@ -40,6 +40,7 @@ describe('mockTauri helpers (controller)', () => {
   it('renders the real App against mocked IPC and reacts to events', async () => {
     const { calls, unhandled } = installMockIPC({
       get_build_info: () => ({ version: '0.0.0', tauri_version: '2', os: 'test', arch: 'x', profile: 'debug' }),
+      get_startup_notices: () => [],
       slide_get_current: () => null,
       deck_get_all_slides: () => [],
       scene_get_active_source: () => 'SlideDeck',
@@ -53,6 +54,7 @@ describe('mockTauri helpers (controller)', () => {
     expect(calls.map((c) => c.cmd).sort()).toEqual([
       'deck_get_all_slides',
       'get_build_info',
+      'get_startup_notices',
       'ndi_list_sources',
       'preview_get_layout',
       'preview_get_snapshot',

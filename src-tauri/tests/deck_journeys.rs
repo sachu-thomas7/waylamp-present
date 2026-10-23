@@ -433,3 +433,52 @@ async fn spawn_timer_manages_abort_handle_and_publishes_ticks() {
         "no TimerTick within deadline: {seen:?}"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn corrupt_deck_json_recovers_from_bak_and_reports_a_notice() {
+    let first = TestApp::new();
+    import(&first);
+    let TestApp { data_dir, .. } = first;
+    let id = std::fs::read_to_string(data_dir.path().join("decks/active_deck_id.txt")).expect("id");
+    let deck_json = data_dir
+        .path()
+        .join("decks")
+        .join(id.trim())
+        .join("deck.json");
+    let good = std::fs::read(&deck_json).expect("deck.json");
+    std::fs::write(streamdeck_lib::persist::backup_path(&deck_json), &good).expect("bak");
+    std::fs::write(&deck_json, b"{\"slides\": [ trunc").expect("corrupt");
+
+    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let notices =
+        streamdeck_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
+
+    assert_eq!(t.machine.read().await.total(), 5, "deck restored from .bak");
+    assert_eq!(notices.len(), 1);
+    assert!(
+        notices[0].contains("previous saved copy was restored"),
+        "{notices:?}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn corrupt_deck_json_without_bak_does_not_abort_startup() {
+    let first = TestApp::new();
+    import(&first);
+    let TestApp { data_dir, .. } = first;
+    let id = std::fs::read_to_string(data_dir.path().join("decks/active_deck_id.txt")).expect("id");
+    let deck_json = data_dir
+        .path()
+        .join("decks")
+        .join(id.trim())
+        .join("deck.json");
+    std::fs::write(&deck_json, b"not json").expect("corrupt");
+    let _ = std::fs::remove_file(streamdeck_lib::persist::backup_path(&deck_json));
+
+    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let notices =
+        streamdeck_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
+
+    assert_eq!(notices.len(), 1);
+    assert!(notices[0].contains("defaults are in use"), "{notices:?}");
+}

@@ -31,10 +31,7 @@ impl ConfigLoader {
             let default = StreamDeckConfig::default();
             let toml_str =
                 toml::to_string_pretty(&default).map_err(|e| AppError::Config(e.to_string()))?;
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| AppError::Config(e.to_string()))?;
-            }
-            std::fs::write(path, toml_str).map_err(|e| AppError::Config(e.to_string()))?;
+            crate::persist::atomic_write(path, toml_str.as_bytes())?;
             return Ok(default);
         }
 
@@ -42,13 +39,26 @@ impl ConfigLoader {
         toml::from_str::<StreamDeckConfig>(&content).map_err(|e| AppError::Config(e.to_string()))
     }
 
-    pub fn save(path: &PathBuf, config: &StreamDeckConfig) -> Result<(), AppError> {
+    pub fn save(path: &std::path::Path, config: &StreamDeckConfig) -> Result<(), AppError> {
         let toml_str =
             toml::to_string_pretty(config).map_err(|e| AppError::Config(e.to_string()))?;
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| AppError::Config(e.to_string()))?;
+        crate::persist::atomic_write(path, toml_str.as_bytes())
+    }
+
+    /// Startup load that never fails on a damaged file: restores the `.bak` or falls back to defaults.
+    pub fn load_or_recover(path: &std::path::Path) -> (StreamDeckConfig, crate::persist::Recovery) {
+        let (cfg, recovery) =
+            crate::persist::load_recovering(path, |s| toml::from_str::<StreamDeckConfig>(s).ok());
+        match cfg {
+            Some(c) => (c, recovery),
+            None => {
+                let default = StreamDeckConfig::default();
+                if let Ok(toml_str) = toml::to_string_pretty(&default) {
+                    let _ = crate::persist::atomic_write(path, toml_str.as_bytes());
+                }
+                (default, recovery)
+            }
         }
-        std::fs::write(path, toml_str).map_err(|e| AppError::Config(e.to_string()))
     }
 
     pub fn spawn_watcher(
@@ -144,5 +154,40 @@ mod tests {
         let config = ConfigLoader::load_or_default(&path).unwrap();
         assert_eq!(config.version, 0);
         assert_eq!(config.app.log_level, "info");
+    }
+
+    #[test]
+    fn corrupt_config_recovers_from_bak_instead_of_aborting_startup() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("streamdeck.toml");
+        let mut c = StreamDeckConfig::default();
+        c.app.log_level = "debug".into();
+        ConfigLoader::save(&path, &c).unwrap();
+        ConfigLoader::save(&path, &c).unwrap();
+        fs::write(&path, "log_level = \"half writ").unwrap();
+        let (config, recovery) = ConfigLoader::load_or_recover(&path);
+        assert_eq!(config.app.log_level, "debug");
+        assert!(matches!(
+            recovery,
+            crate::persist::Recovery::FromBackup { .. }
+        ));
+        assert!(
+            ConfigLoader::load_or_default(&path).is_ok(),
+            "primary file is healed"
+        );
+    }
+
+    #[test]
+    fn corrupt_config_without_bak_starts_with_defaults_and_keeps_the_broken_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("streamdeck.toml");
+        fs::write(&path, "not valid toml ][[[").unwrap();
+        let (config, recovery) = ConfigLoader::load_or_recover(&path);
+        assert_eq!(config.version, crate::config::CONFIG_VERSION);
+        let crate::persist::Recovery::Defaults { broken } = recovery else {
+            panic!("expected Defaults")
+        };
+        assert_eq!(fs::read_to_string(broken).unwrap(), "not valid toml ][[[");
+        assert!(ConfigLoader::load_or_default(&path).is_ok());
     }
 }

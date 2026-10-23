@@ -10,6 +10,7 @@ import { NdiSourcesPanel } from './components/NdiSourcesPanel';
 import { WhipPanel } from './components/WhipPanel';
 import { CompositorPanel } from './components/CompositorPanel';
 import { CameraPreviewGrid } from './components/CameraPreviewGrid';
+import { StartupNotices } from './components/StartupNotices';
 import { Popover } from './components/ui/Popover';
 import { IconButton } from './components/ui/IconButton';
 import { Button } from './components/ui/Button';
@@ -121,6 +122,8 @@ export default function App() {
           <PresentButton />
         </div>
       </div>
+
+      <StartupNotices />
 
       {/* Main content */}
       <div style={{ flex: 1, display: 'flex', gap: 20, padding: '20px 24px', minHeight: 0, overflow: 'auto' }}>

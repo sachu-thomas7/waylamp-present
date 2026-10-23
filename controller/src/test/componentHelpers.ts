@@ -53,6 +53,7 @@ export function makeDisplay(id: string, over: Partial<DisplayInfo> = {}): Displa
 export function baseHandlers(over: Record<string, IpcHandler> = {}): Record<string, IpcHandler> {
   return {
     get_build_info: () => ({ build_timestamp: '2026-10-18T00:00:00Z', version: '1.2.3' }),
+    get_startup_notices: () => [],
     slide_get_current: () => null,
     deck_get_all_slides: () => [],
     scene_get_active_source: () => 'SlideDeck',

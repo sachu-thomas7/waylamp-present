@@ -10,6 +10,10 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 // Prevents double-registration of the Escape shortcut.
 static PRESENTING: AtomicBool = AtomicBool::new(false);
 
+pub fn is_presenting() -> bool {
+    PRESENTING.load(Ordering::SeqCst)
+}
+
 pub(crate) fn escape_shortcut() -> Shortcut {
     Shortcut::new(None::<Modifiers>, Code::Escape)
 }

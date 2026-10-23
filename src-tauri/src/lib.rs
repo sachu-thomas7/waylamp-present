@@ -9,6 +9,7 @@ pub mod error;
 pub mod events;
 pub mod media_protocol;
 pub mod ndi;
+pub mod persist;
 pub mod pipeline;
 pub mod preview;
 pub mod scene;

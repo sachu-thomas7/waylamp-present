@@ -95,10 +95,7 @@ pub fn run() {
                 Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
             })?;
 
-            let config = ConfigLoader::load_or_default(&config_path).map_err(|e| {
-                eprintln!("Config load failed: {e}");
-                Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error>
-            })?;
+            let (config, config_recovery) = ConfigLoader::load_or_recover(&config_path);
 
             let machine = crate::state::manage_core(
                 app,
@@ -107,18 +104,20 @@ pub fn run() {
                 config_path.clone(),
                 config.clone(),
             );
-            let machine_for_restore = Arc::clone(&machine);
-            let bus_for_restore = Arc::clone(&bus_arc);
-            let app_handle_for_restore = app.handle().clone();
-
+            let notices = app.state::<crate::state::StartupNotices>();
+            if let Some(n) = config_recovery.notice("Settings (streamdeck.toml)") {
+                notices.push(n);
+            }
+            for n in tauri::async_runtime::block_on(crate::state::restore_on_startup(
+                &machine, &bus_arc, &data_dir,
+            )) {
+                notices.push(n);
+            }
+            let machine_for_timer = Arc::clone(&machine);
+            let bus_for_timer = Arc::clone(&bus_arc);
+            let app_handle_for_timer = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                crate::state::restore_on_startup(&machine_for_restore, &bus_for_restore, &data_dir)
-                    .await;
-                crate::state::spawn_timer(
-                    &app_handle_for_restore,
-                    machine_for_restore,
-                    bus_for_restore,
-                );
+                crate::state::spawn_timer(&app_handle_for_timer, machine_for_timer, bus_for_timer);
             });
 
             tauri::async_runtime::spawn(run_event_bridge(app.handle().clone(), rx));
@@ -199,6 +198,12 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if window.label() == "controller" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    if crate::commands::presentation::is_presenting() {
+                        api.prevent_close();
+                        confirm_close_while_presenting(window.clone());
+                    }
+                }
                 if let tauri::WindowEvent::Destroyed = event {
                     if let Some(abort) = window.app_handle().try_state::<TimerAbortHandle>() {
                         abort.0.abort();
@@ -250,6 +255,25 @@ pub fn run() {
                 if let Some(pipeline) = app.try_state::<crate::pipeline::PipelineHandle>() {
                     pipeline.shutdown_blocking(std::time::Duration::from_secs(3));
                 }
+            }
+        });
+}
+
+fn confirm_close_while_presenting(window: tauri::Window) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    let target = window.clone();
+    window
+        .dialog()
+        .message("The presentation is live on the projector. Closing the controller will end it.")
+        .title("Quit while presenting?")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Quit".into(),
+            "Keep presenting".into(),
+        ))
+        .show(move |quit| {
+            if quit {
+                let _ = target.destroy();
             }
         });
 }

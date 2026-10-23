@@ -17,6 +17,18 @@ pub struct AppDataDir(pub PathBuf);
 /// Path of `streamdeck.toml`, managed so commands (and tests) never re-resolve it from the OS.
 pub struct ConfigPath(pub PathBuf);
 
+/// One-time messages for the operator (e.g. a damaged file was recovered), shown as a banner.
+#[derive(Default)]
+pub struct StartupNotices(pub std::sync::Mutex<Vec<String>>);
+
+impl StartupNotices {
+    pub fn push(&self, notice: String) {
+        if let Ok(mut n) = self.0.lock() {
+            n.push(notice);
+        }
+    }
+}
+
 pub struct TimerAbortHandle(pub tokio::task::AbortHandle);
 
 /// Registers the managed state shared by the app and the mock-runtime test harness.
@@ -28,6 +40,7 @@ pub fn manage_core<R: Runtime, M: Manager<R>>(
     config: StreamDeckConfig,
 ) -> StateMachineHandle {
     let machine = slide_state_machine::new_handle(SlideDeck::stub(), data_dir.clone());
+    manager.manage(StartupNotices::default());
     manager.manage(AppDataDir(data_dir));
     manager.manage(ConfigPath(config_path));
     manager.manage(bus);
@@ -54,32 +67,46 @@ pub async fn restore_deck(
     machine: &StateMachineHandle,
     data_dir: &std::path::Path,
 ) -> Result<Option<SlidePayload>, AppError> {
-    let decks_dir = data_dir.join("decks");
-    let Ok(raw) = std::fs::read_to_string(decks_dir.join("active_deck_id.txt")) else {
-        return Ok(None);
-    };
-    let deck_json_path = decks_dir.join(raw.trim()).join("deck.json");
-    if !deck_json_path.exists() {
-        return Ok(None);
+    match restore_deck_noting_recovery(machine, data_dir).await {
+        (None, Some(notice)) => Err(AppError::Internal(notice)),
+        (payload, _) => Ok(payload),
     }
-    let deck = SlideDeck::load_from_json(&deck_json_path)?;
-    let mut m = machine.write().await;
-    m.load_deck(deck);
-    Ok(Some(m.current_payload()))
 }
 
-/// Startup restore: the persisted deck first, then the saved slide index/timer. Best-effort.
+/// Like [`restore_deck`], but a damaged `deck.json` is recovered from its `.bak` (or skipped) and reported.
+pub async fn restore_deck_noting_recovery(
+    machine: &StateMachineHandle,
+    data_dir: &std::path::Path,
+) -> (Option<SlidePayload>, Option<String>) {
+    let decks_dir = data_dir.join("decks");
+    let Ok(raw) = std::fs::read_to_string(decks_dir.join("active_deck_id.txt")) else {
+        return (None, None);
+    };
+    let deck_json_path = decks_dir.join(raw.trim()).join("deck.json");
+    let (deck, recovery) = crate::persist::load_recovering(&deck_json_path, |s| {
+        serde_json::from_str::<SlideDeck>(s).ok()
+    });
+    let notice = recovery.notice("The saved slide deck");
+    let Some(deck) = deck else {
+        return (None, notice);
+    };
+    let mut m = machine.write().await;
+    m.load_deck(deck);
+    (Some(m.current_payload()), notice)
+}
+
+/// Startup restore: the persisted deck first, then the saved slide index/timer. Best-effort;
+/// returns operator-facing notices for anything that had to be recovered.
 pub async fn restore_on_startup(
     machine: &StateMachineHandle,
     bus: &Arc<EventBus>,
     data_dir: &std::path::Path,
-) {
-    if let Err(e) = restore_deck(machine, data_dir).await {
-        eprintln!("Deck restore failed: {e}");
-    }
+) -> Vec<String> {
+    let (_, notice) = restore_deck_noting_recovery(machine, data_dir).await;
     slide_state_machine::restore_state(machine, data_dir).await;
     let payload = machine.read().await.current_payload();
     bus.publish(AppEvent::SlideUpdate(payload));
+    notice.into_iter().collect()
 }
 
 /// Spawns the 1s timer task and keeps its abort handle in managed state. Needs a Tokio context.
@@ -99,6 +126,7 @@ macro_rules! handler {
             crate::commands::info::get_build_info,
             crate::commands::system::ping,
             crate::commands::config::get_config,
+            crate::commands::config::get_startup_notices,
             crate::commands::slide::slide_advance,
             crate::commands::slide::slide_rewind,
             crate::commands::slide::slide_jump_to,
