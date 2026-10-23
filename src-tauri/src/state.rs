@@ -167,6 +167,7 @@ macro_rules! handler {
             crate::commands::whip::whip_get_info,
             crate::commands::whip::whip_set_enabled,
             crate::commands::whip::whip_set_token,
+            crate::commands::whip::whip_get_token,
             crate::commands::whip::whip_get_qr,
         ]
     };

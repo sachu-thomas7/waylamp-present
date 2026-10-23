@@ -34,11 +34,11 @@ describe('WhipPanel', () => {
     expect(ipc.calls.filter((c) => c.cmd === 'whip_get_info').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('running: lists the four phone URLs, a no-token warning and Disable', async () => {
+  it('running: lists the four phone URLs and Disable', async () => {
     mount(whipInfo({ running: true, enabled: true }));
     expect(await screen.findByText('http://192.168.1.20:8088/whip/camera1')).toBeInTheDocument();
     expect(screen.getByText('http://192.168.1.20:8088/whip/camera4')).toBeInTheDocument();
-    expect(screen.getByText(/No access token set/)).toBeInTheDocument();
+    expect(screen.queryByText(/No access token set/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Disable phone cameras' })).toBeInTheDocument();
     expect(screen.getByText('Listening :8088')).toBeInTheDocument();
   });
@@ -82,11 +82,22 @@ describe('WhipPanel', () => {
     expect(field).toHaveValue('');
   });
 
-  it('Clear removes an existing token', async () => {
+  it('Regenerate asks the backend for a fresh token and never offers to leave the endpoint open', async () => {
     const user = userEvent.setup();
     mount(whipInfo({ running: true, enabled: true, token_set: true }), { whip_set_token: () => null });
-    await user.click(await screen.findByRole('button', { name: 'Clear' }));
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Regenerate' }));
     await expectCalled(ipc, 'whip_set_token', [{ token: null }]);
+  });
+
+  it('Show token reveals the current token and Hide token hides it again', async () => {
+    const user = userEvent.setup();
+    mount(whipInfo({ running: true, enabled: true, token_set: true }), { whip_get_token: () => 'abc123tokenvalue' });
+    expect(screen.queryByTestId('whip-token')).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Show token' }));
+    expect(await screen.findByTestId('whip-token')).toHaveTextContent('abc123tokenvalue');
+    await user.click(screen.getByRole('button', { name: 'Hide token' }));
+    expect(screen.queryByTestId('whip-token')).not.toBeInTheDocument();
   });
 
   it('shows why phone ingest is unavailable and command errors', async () => {

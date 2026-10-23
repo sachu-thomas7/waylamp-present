@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { onAppEvent } from '../lib/events';
-import { whipGetQr, whipSetEnabled, whipSetToken, type WhipLinkState } from '../lib/ipc';
+import { whipGetQr, whipGetToken, whipSetEnabled, whipSetToken, type WhipLinkState } from '../lib/ipc';
 import { refreshWhip, useWhipStore } from '../store/whipStore';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -21,6 +21,7 @@ export function WhipPanel() {
   const { info, qr, lastError, setQr, setLastError } = useWhipStore();
   const [token, setToken] = useState('');
   const [qrSlot, setQrSlot] = useState<string | null>(null);
+  const [shownToken, setShownToken] = useState<string | null>(null);
 
   useEffect(() => {
     const report = (e: unknown) => setLastError(JSON.stringify(e));
@@ -75,11 +76,6 @@ export function WhipPanel() {
       {info?.unavailable && <p style={{ ...note, color: 'var(--color-warn)' }}>{info.unavailable}</p>}
       {info?.last_error && !running && <p style={{ ...note, color: 'var(--color-warn)' }}>{info.last_error}</p>}
       {lastError && <p style={{ ...note, color: 'var(--color-warn)' }}>{lastError}</p>}
-      {running && info && !info.token_set && (
-        <p style={{ ...note, color: 'var(--color-warn)' }}>
-          No access token set — anyone on this network can push video here.
-        </p>
-      )}
       {running && info && !info.host && (
         <p style={{ ...note, color: 'var(--color-warn)' }}>No LAN address found — connect to a network.</p>
       )}
@@ -104,15 +100,28 @@ export function WhipPanel() {
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder={info.token_set ? 'Token set (stored in keychain)' : 'Access token (optional)'}
+            placeholder={info.token_set ? 'Token set (stored in keychain)' : 'Generated when first enabled'}
             aria-label="Access token"
             style={{ flex: 1, minWidth: 0, padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', fontSize: 12 }}
           />
           <Button variant="secondary" disabled={!token.trim()} onClick={() => run(async () => { await whipSetToken(token); setToken(''); })}>Save</Button>
-          {info.token_set && <Button variant="secondary" onClick={() => run(() => whipSetToken(null))}>Clear</Button>}
+          {info.token_set && (
+            <Button variant="secondary" onClick={() => run(async () => { await whipSetToken(null); setShownToken(null); })}>Regenerate</Button>
+          )}
         </div>
       )}
-      {running && <p style={{ ...note, color: 'var(--color-text-muted)' }}>Phones send the token as a Bearer header; the QR encodes the URL only.</p>}
+      {info?.token_set && (
+        <div style={row}>
+          {shownToken ? <span style={mono} data-testid="whip-token">{shownToken}</span> : <span style={{ ...note, color: 'var(--color-text-muted)' }}>Token hidden</span>}
+          <Button
+            variant="secondary"
+            onClick={() => (shownToken ? setShownToken(null) : run(async () => setShownToken(await whipGetToken())))}
+          >
+            {shownToken ? 'Hide token' : 'Show token'}
+          </Button>
+        </div>
+      )}
+      {running && <p style={{ ...note, color: 'var(--color-text-muted)' }}>Phones must send the token as a Bearer header; the QR encodes the URL only. Browsers are refused.</p>}
     </div>
   );
 }

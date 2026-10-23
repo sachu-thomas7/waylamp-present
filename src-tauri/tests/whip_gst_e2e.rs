@@ -13,7 +13,7 @@ use streamdeck_lib::config_loader::ConfigLoader;
 use streamdeck_lib::preview::PreviewHub;
 use streamdeck_lib::whip::gst_whip::GstWhipBackend;
 use streamdeck_lib::whip::{
-    FixedLocalIp, MemoryTokenStore, WhipController, WhipLinkState, WhipService,
+    FixedLocalIp, MemoryTokenStore, TokenStore, WhipController, WhipLinkState, WhipService,
 };
 use streamdeck_lib::whip_server::http_request;
 
@@ -32,19 +32,24 @@ async fn gstreamer_whip_client_reaches_the_preview_hub_through_the_endpoint() {
     config.whip.bind_address = "127.0.0.1".into();
     config.whip.port = 0;
     ConfigLoader::save(&config_path, &config).expect("save");
+    let tokens = Arc::new(MemoryTokenStore::default());
     let controller = WhipController::new(
         Arc::clone(&service),
         bus,
         config_path,
         Arc::new(FixedLocalIp(vec!["192.168.1.20".parse().expect("ip")])),
-        Arc::new(MemoryTokenStore::default()),
+        tokens.clone(),
     );
     let addr = controller.start().await.expect("start");
+    let token = tokens
+        .get()
+        .expect("store")
+        .expect("first start generates a token");
 
     let mut frames = hub.subscribe();
     let started = std::time::Instant::now();
     let client = gst::parse::launch(&format!(
-        "videotestsrc is-live=true ! videoconvert ! openh264enc ! h264parse ! whipclientsink signaller::whip-endpoint=http://127.0.0.1:{}/whip/camera1",
+        "videotestsrc is-live=true ! videoconvert ! openh264enc ! h264parse ! whipclientsink signaller::whip-endpoint=http://127.0.0.1:{}/whip/camera1 signaller::auth-token={token}",
         addr.port()
     ))
     .expect("client pipeline");
@@ -81,9 +86,16 @@ async fn gstreamer_whip_client_reaches_the_preview_hub_through_the_endpoint() {
 
     let _ = client.set_state(gst::State::Null);
     let loc = format!("/whip/camera1/{}", "x");
-    let r = http_request(addr, "DELETE", &loc, &[], "")
-        .await
-        .expect("http");
+    let auth = format!("Bearer {token}");
+    let r = http_request(
+        addr,
+        "DELETE",
+        &loc,
+        &[("Authorization", auth.as_str())],
+        "",
+    )
+    .await
+    .expect("http");
     assert_eq!(r.status, 404, "a wrong session id never deletes");
     let stopped = std::time::Instant::now();
     controller.stop().await;

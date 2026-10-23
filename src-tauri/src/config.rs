@@ -45,6 +45,7 @@ impl Default for UiConfig {
 }
 
 /// Off by default: enabling binds a LAN-reachable port, so it is an explicit operator choice.
+/// `bind_address` is "auto" (the detected LAN interface only) or an explicit IP address.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct WhipConfig {
@@ -57,7 +58,7 @@ impl Default for WhipConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            bind_address: "0.0.0.0".into(),
+            bind_address: "auto".into(),
             port: 8088,
         }
     }
@@ -116,7 +117,7 @@ mod tests {
         assert!(!restored.whip.enabled);
         assert_eq!(
             (restored.whip.bind_address.as_str(), restored.whip.port),
-            ("0.0.0.0", 8088)
+            ("auto", 8088)
         );
         let partial: StreamDeckConfig = toml::from_str(
             "[whip]

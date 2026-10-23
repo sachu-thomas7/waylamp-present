@@ -348,6 +348,27 @@ pub fn validate_token(token: &str) -> Result<(), AppError> {
     }
 }
 
+/// 256 bits from two random UUIDs (OS CSPRNG); printable and header-safe.
+fn generate_token() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
+}
+
+/// "auto" (and the legacy default "0.0.0.0") means the detected LAN interface only, loopback when none.
+pub fn resolve_bind_ip(bind_address: &str, candidates: &[IpAddr]) -> Result<IpAddr, AppError> {
+    match bind_address.trim() {
+        "" | "auto" | "0.0.0.0" => {
+            Ok(pick_lan_ip(candidates).unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)))
+        }
+        explicit => explicit
+            .parse()
+            .map_err(|_| AppError::Config(format!("invalid [whip] bind_address: {bind_address}"))),
+    }
+}
+
 /// Constant-time over the shorter length plus a length check, so timing does not leak the token.
 fn tokens_match(expected: &str, given: &str) -> bool {
     let (a, b) = (expected.as_bytes(), given.as_bytes());
@@ -606,11 +627,11 @@ impl WhipService {
             .is_some()
     }
 
-    /// `header` is the raw `Authorization` value; with no token configured everything passes.
+    /// `header` is the raw `Authorization` value; with no token configured nothing passes.
     pub fn authorize(&self, header: Option<&str>) -> Result<(), WhipError> {
         let guard = self.token.read().unwrap_or_else(PoisonError::into_inner);
         let Some(expected) = guard.as_deref() else {
-            return Ok(());
+            return Err(WhipError::Unauthorized);
         };
         let given = header
             .and_then(|h| h.split_once(' '))
@@ -872,13 +893,16 @@ impl WhipController {
 
     async fn bind_and_serve(&self) -> Result<(RunningServer, SocketAddr), AppError> {
         let config = ConfigLoader::load_or_default(&self.config_path)?.whip;
-        self.service.set_token(self.tokens.get()?);
-        let ip: IpAddr = config.bind_address.parse().map_err(|_| {
-            AppError::Config(format!(
-                "invalid [whip] bind_address: {}",
-                config.bind_address
-            ))
-        })?;
+        let token = match self.tokens.get()? {
+            Some(t) => t,
+            None => {
+                let t = generate_token();
+                self.tokens.set(Some(&t))?;
+                t
+            }
+        };
+        self.service.set_token(Some(token));
+        let ip = resolve_bind_ip(&config.bind_address, &self.ips.candidates())?;
         let listener = tokio::net::TcpListener::bind((ip, config.port))
             .await
             .map_err(|e| {
@@ -932,17 +956,21 @@ impl WhipController {
         Ok(())
     }
 
-    /// `None` clears the token (open endpoint); applies to the next request.
+    /// `None` or blank rotates to a fresh random token: the endpoint is never left open.
     pub fn set_token(&self, token: Option<String>) -> Result<(), AppError> {
         let token = token
             .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty());
-        if let Some(t) = &token {
-            validate_token(t)?;
-        }
-        self.tokens.set(token.as_deref())?;
-        self.service.set_token(token);
+            .filter(|t| !t.is_empty())
+            .unwrap_or_else(generate_token);
+        validate_token(&token)?;
+        self.tokens.set(Some(&token))?;
+        self.service.set_token(Some(token));
         Ok(())
+    }
+
+    /// The current token, for the operator to type into a phone app.
+    pub fn reveal_token(&self) -> Result<Option<String>, AppError> {
+        self.tokens.get()
     }
 
     pub async fn info(&self) -> Result<WhipInfo, AppError> {
@@ -1693,7 +1721,15 @@ a=rtpmap:100 VP9/90000\r\n";
     #[test]
     fn authorize_accepts_only_the_exact_bearer_token_once_one_is_set() {
         let r = rig();
-        assert!(r.service.authorize(None).is_ok());
+        assert_eq!(
+            r.service.authorize(None),
+            Err(WhipError::Unauthorized),
+            "no token configured fails closed"
+        );
+        assert_eq!(
+            r.service.authorize(Some("Bearer anything")),
+            Err(WhipError::Unauthorized)
+        );
         r.service.set_token(Some("s3cret".into()));
         assert!(r.service.token_set());
         assert_eq!(r.service.authorize(None), Err(WhipError::Unauthorized));
@@ -1712,6 +1748,41 @@ a=rtpmap:100 VP9/90000\r\n";
         assert!(r.service.authorize(Some("Bearer s3cret")).is_ok());
         assert!(r.service.authorize(Some("bearer s3cret")).is_ok());
         r.service.set_token(None);
-        assert!(r.service.authorize(None).is_ok());
+        assert_eq!(
+            r.service.authorize(Some("Bearer s3cret")),
+            Err(WhipError::Unauthorized)
+        );
+    }
+
+    #[test]
+    fn generated_tokens_are_long_unique_and_header_safe() {
+        let (a, b) = (generate_token(), generate_token());
+        assert_ne!(a, b);
+        assert!(a.len() >= 32 && validate_token(&a).is_ok());
+    }
+
+    #[test]
+    fn bind_defaults_to_the_lan_interface_never_all_interfaces() {
+        let ip = |s: &str| s.parse::<IpAddr>().unwrap();
+        let cands = [ip("127.0.0.1"), ip("192.168.1.20")];
+        for legacy in ["auto", "", "  ", "0.0.0.0"] {
+            assert_eq!(
+                resolve_bind_ip(legacy, &cands).unwrap(),
+                ip("192.168.1.20"),
+                "{legacy:?}"
+            );
+        }
+        assert_eq!(
+            resolve_bind_ip("auto", &[]).unwrap(),
+            ip("127.0.0.1"),
+            "no LAN: loopback only"
+        );
+        assert_eq!(resolve_bind_ip("10.0.0.5", &cands).unwrap(), ip("10.0.0.5"));
+        assert_eq!(resolve_bind_ip("::1", &cands).unwrap(), ip("::1"));
+        assert!(matches!(
+            resolve_bind_ip("my-laptop", &cands),
+            Err(AppError::Config(_))
+        ));
+        assert_eq!(crate::config::WhipConfig::default().bind_address, "auto");
     }
 }

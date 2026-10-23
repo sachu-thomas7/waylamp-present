@@ -27,10 +27,26 @@ fn enable(t: &TestApp) -> SocketAddr {
     SocketAddr::from(([127, 0, 0, 1], i["port"].as_u64().expect("port") as u16))
 }
 
-async fn post(addr: SocketAddr, slot: &str, headers: &[(&str, &str)]) -> HttpResponse {
+fn bearer(t: &TestApp) -> String {
+    format!(
+        "Bearer {}",
+        t.whip_token().expect("enable generates a token")
+    )
+}
+
+/// POST without any credentials added.
+async fn post_raw(addr: SocketAddr, slot: &str, headers: &[(&str, &str)]) -> HttpResponse {
     http_request(addr, "POST", &format!("/whip/{slot}"), headers, OFFER)
         .await
         .expect("http")
+}
+
+/// POST carrying the endpoint's current bearer token.
+async fn post(t: &TestApp, addr: SocketAddr, slot: &str, headers: &[(&str, &str)]) -> HttpResponse {
+    let auth = bearer(t);
+    let mut all = headers.to_vec();
+    all.push(("Authorization", auth.as_str()));
+    post_raw(addr, slot, &all).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -64,7 +80,7 @@ async fn enable_serves_http_publishes_source_events_and_disable_stops_it() {
     let mut events = t.collect_events();
     let addr = enable(&t);
 
-    let r = post(addr, "camera1", &[SDP]).await;
+    let r = post(&t, addr, "camera1", &[SDP]).await;
     assert_eq!(r.status, 201);
     assert!(r.body.contains("a=recvonly"));
     let i = info(&t);
@@ -111,9 +127,9 @@ async fn bearer_token_is_enforced_and_never_written_to_toml() {
     t.invoke::<()>("whip_set_token", json!({ "token": "tok-12345" }))
         .expect("set token");
     assert_eq!(info(&t)["token_set"], true);
-    assert_eq!(post(addr, "camera1", &[SDP]).await.status, 401);
+    assert_eq!(post_raw(addr, "camera1", &[SDP]).await.status, 401);
     let ok = [SDP, ("Authorization", "Bearer tok-12345")];
-    assert_eq!(post(addr, "camera1", &ok).await.status, 201);
+    assert_eq!(post_raw(addr, "camera1", &ok).await.status, 201);
 
     let toml = std::fs::read_to_string(t.config_path()).expect("config");
     assert!(!toml.contains("tok-12345"));
@@ -122,9 +138,26 @@ async fn bearer_token_is_enforced_and_never_written_to_toml() {
     let bad: Result<(), Value> = t.invoke("whip_set_token", json!({ "token": "has space" }));
     assert_eq!(bad.expect_err("rejected")["type"], "InvalidInput");
     t.invoke::<()>("whip_set_token", json!({ "token": null }))
-        .expect("clear");
-    assert_eq!(info(&t)["token_set"], false);
-    assert_eq!(post(addr, "camera2", &[SDP]).await.status, 201);
+        .expect("rotate");
+    assert_eq!(
+        info(&t)["token_set"],
+        true,
+        "clearing never opens the endpoint"
+    );
+    let rotated = t.whip_token().expect("token");
+    assert_ne!(rotated, "tok-12345");
+    assert_eq!(
+        post_raw(
+            addr,
+            "camera2",
+            &[SDP, ("Authorization", "Bearer tok-12345")]
+        )
+        .await
+        .status,
+        401
+    );
+    assert_eq!(post_raw(addr, "camera2", &[SDP]).await.status, 401);
+    assert_eq!(post(&t, addr, "camera2", &[SDP]).await.status, 201);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -181,7 +214,7 @@ async fn phone_source_feeds_the_same_preview_path_as_ndi() {
     let t = TestApp::with_preview_feeds(30);
     let mut frames = t.preview.subscribe();
     let addr = enable(&t);
-    assert_eq!(post(addr, "camera1", &[SDP]).await.status, 201);
+    assert_eq!(post(&t, addr, "camera1", &[SDP]).await.status, 201);
     let frame = tokio::time::timeout(Duration::from_secs(3), frames.recv())
         .await
         .expect("a frame arrives")
@@ -215,15 +248,22 @@ async fn session_survives_a_short_interruption_and_is_lost_after_the_grace_perio
     let service = t.whip.service();
     let t0 = Instant::now();
     for slot in ["camera1", "camera2"] {
-        let r = post(addr, slot, &[SDP]).await;
+        let r = post(&t, addr, slot, &[SDP]).await;
         let loc = r.header("location").expect("location").to_string();
         let id = loc.rsplit('/').next().expect("id").to_string();
         service.ice_signal(slot, &id, false, t0).expect("down");
         if slot == "camera1" {
             let frag = ("Content-Type", "application/trickle-ice-sdpfrag");
-            let p = http_request(addr, "PATCH", &loc, &[frag], "a=ice-ufrag:x")
-                .await
-                .expect("patch");
+            let auth = bearer(&t);
+            let p = http_request(
+                addr,
+                "PATCH",
+                &loc,
+                &[frag, ("Authorization", auth.as_str())],
+                "a=ice-ufrag:x",
+            )
+            .await
+            .expect("patch");
             assert_eq!(p.status, 204);
         }
     }
@@ -239,5 +279,77 @@ async fn session_survives_a_short_interruption_and_is_lost_after_the_grace_perio
         .iter()
         .any(|e| matches!(e, AppEvent::SourceLost { name } if name == "camera1")));
     // The phone can take its slot back with a fresh offer.
-    assert_eq!(post(addr, "camera2", &[SDP]).await.status, 201);
+    assert_eq!(post(&t, addr, "camera2", &[SDP]).await.status, 201);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn first_enable_generates_a_random_token_that_lives_only_in_the_keychain() {
+    let t = TestApp::new();
+    assert_eq!(t.whip_token(), None);
+    let addr = enable(&t);
+
+    let token = t.whip_token().expect("generated on first enable");
+    assert!(token.len() >= 32, "token too short: {}", token.len());
+    assert_eq!(info(&t)["token_set"], true);
+    assert_eq!(
+        post_raw(addr, "camera1", &[SDP]).await.status,
+        401,
+        "never open"
+    );
+    let ok = [SDP, ("Authorization", format!("Bearer {token}").as_str())]
+        .map(|(k, v)| (k.to_string(), v.to_string()));
+    let ok_refs: Vec<(&str, &str)> = ok.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+    assert_eq!(post_raw(addr, "camera1", &ok_refs).await.status, 201);
+    assert!(!std::fs::read_to_string(t.config_path())
+        .expect("config")
+        .contains(&token));
+
+    let shown: Option<String> = t.invoke("whip_get_token", json!({})).expect("reveal");
+    assert_eq!(shown.as_deref(), Some(token.as_str()));
+
+    t.invoke::<()>("whip_set_enabled", json!({ "enabled": false }))
+        .expect("disable");
+    t.invoke::<()>("whip_set_enabled", json!({ "enabled": true }))
+        .expect("re-enable");
+    assert_eq!(
+        t.whip_token().as_deref(),
+        Some(token.as_str()),
+        "a restart keeps the same token"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn browser_origin_is_rejected_even_with_a_valid_token_and_no_cors_headers_are_served() {
+    let t = TestApp::new();
+    let addr = enable(&t);
+
+    let attack = post(
+        &t,
+        addr,
+        "camera1",
+        &[SDP, ("Origin", "https://evil.example")],
+    )
+    .await;
+    assert_eq!(attack.status, 403);
+    assert!(attack.header("access-control-allow-origin").is_none());
+
+    let preflight = http_request(
+        addr,
+        "OPTIONS",
+        "/whip/camera1",
+        &[
+            ("Origin", "https://evil.example"),
+            ("Access-Control-Request-Method", "POST"),
+        ],
+        "",
+    )
+    .await
+    .expect("preflight");
+    assert_eq!(preflight.status, 403);
+    assert!(preflight.header("access-control-allow-origin").is_none());
+
+    let native = post(&t, addr, "camera1", &[SDP]).await;
+    assert_eq!(native.status, 201, "non-browser publishers are unaffected");
+    assert!(native.header("access-control-allow-origin").is_none());
+    assert_eq!(info(&t)["slots"][0]["session"]["state"], "Connected");
 }

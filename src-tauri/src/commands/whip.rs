@@ -33,3 +33,10 @@ pub async fn whip_get_qr(
 ) -> Result<QrMatrix, AppError> {
     controller.qr(&slot).await
 }
+
+#[tauri::command]
+pub async fn whip_get_token(
+    controller: tauri::State<'_, Arc<WhipController>>,
+) -> Result<Option<String>, AppError> {
+    controller.reveal_token()
+}

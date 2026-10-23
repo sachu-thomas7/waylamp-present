@@ -286,6 +286,10 @@ export async function whipSetToken(token: string | null): Promise<void> {
   return invoke<void>('whip_set_token', { token });
 }
 
+export async function whipGetToken(): Promise<string | null> {
+  return invoke<string | null>('whip_get_token');
+}
+
 export async function whipGetQr(slot: string): Promise<QrMatrix> {
   return invoke<QrMatrix>('whip_get_qr', { slot });
 }

@@ -5,7 +5,6 @@ use std::time::Instant;
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode};
-use axum::middleware::map_response;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, post};
 use axum::Router;
@@ -42,29 +41,16 @@ impl IntoResponse for WhipError {
     }
 }
 
-/// Browser-based WHIP clients need CORS, including on error responses.
-async fn cors(mut response: Response) -> Response {
-    let h = response.headers_mut();
-    let set = |h: &mut HeaderMap, name: HeaderName, value: &'static str| {
-        h.insert(name, HeaderValue::from_static(value));
-    };
-    set(h, header::ACCESS_CONTROL_ALLOW_ORIGIN, "*");
-    set(
-        h,
-        header::ACCESS_CONTROL_ALLOW_METHODS,
-        "POST, PATCH, DELETE, OPTIONS",
-    );
-    set(
-        h,
-        header::ACCESS_CONTROL_ALLOW_HEADERS,
-        "authorization, content-type, if-match",
-    );
-    set(
-        h,
-        header::ACCESS_CONTROL_EXPOSE_HEADERS,
-        "location, link, etag",
-    );
-    response
+/// Real WHIP publishers (Larix, OBS, GStreamer) never send `Origin`; a browser does, so a web page on the
+/// operator's machine cannot drive this endpoint. No CORS headers are served either.
+async fn reject_browser_origin(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    if request.headers().contains_key(header::ORIGIN) {
+        return (StatusCode::FORBIDDEN, "browser requests are not accepted").into_response();
+    }
+    next.run(request).await
 }
 
 fn authorize(ctx: &Ctx, headers: &HeaderMap) -> Result<(), WhipError> {
@@ -189,7 +175,7 @@ pub fn router(service: Arc<WhipService>) -> Router {
                 .options(options_resource),
         )
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
-        .layer(map_response(cors))
+        .layer(axum::middleware::from_fn(reject_browser_origin))
         .with_state(service)
 }
 
@@ -288,6 +274,7 @@ mod tests {
         let (bus, _keep) = EventBus::new();
         let backend = SimulatedWhipBackend::default();
         let service = WhipService::new(Arc::new(backend.clone()), Arc::new(bus));
+        service.set_token(Some(TEST_TOKEN.into()));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind");
@@ -302,7 +289,10 @@ mod tests {
         }
     }
 
-    async fn req(
+    const TEST_TOKEN: &str = "test-token";
+
+    /// Sends the request exactly as given (no credentials added).
+    async fn req_raw(
         s: &Server,
         method: &str,
         path: &str,
@@ -312,6 +302,25 @@ mod tests {
         http_request(s.addr, method, path, headers, body)
             .await
             .expect("http")
+    }
+
+    /// Sends the request with the server's bearer token unless the caller supplies credentials.
+    async fn req(
+        s: &Server,
+        method: &str,
+        path: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+    ) -> HttpResponse {
+        let auth = format!("Bearer {TEST_TOKEN}");
+        let mut all = headers.to_vec();
+        if !headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("authorization"))
+        {
+            all.push(("Authorization", auth.as_str()));
+        }
+        req_raw(s, method, path, &all, body).await
     }
 
     #[tokio::test]
@@ -327,18 +336,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn options_advertises_post_and_cors_without_auth() {
+    async fn options_advertises_post_without_auth_and_without_cors() {
         let s = serve().await;
-        s.service.set_token(Some("tok".into()));
-        let r = req(&s, "OPTIONS", "/whip/camera1", &[], "").await;
+        let r = req_raw(&s, "OPTIONS", "/whip/camera1", &[], "").await;
         assert_eq!(r.status, 204);
         assert_eq!(r.header("allow"), Some("OPTIONS, POST"));
         assert_eq!(r.header("accept-post"), Some("application/sdp"));
-        assert_eq!(r.header("access-control-allow-origin"), Some("*"));
-        assert!(r
-            .header("access-control-allow-headers")
-            .is_some_and(|h| h.contains("authorization")));
-        let res = req(&s, "OPTIONS", "/whip/camera1/abc", &[], "").await;
+        assert!(r.header("access-control-allow-origin").is_none());
+        assert!(r.header("access-control-allow-headers").is_none());
+        let res = req_raw(&s, "OPTIONS", "/whip/camera1/abc", &[], "").await;
         assert_eq!(
             (res.status, res.header("allow")),
             (204, Some("OPTIONS, PATCH, DELETE"))
@@ -461,23 +467,25 @@ mod tests {
     async fn bearer_token_gates_post_delete_and_patch_but_not_preflight() {
         let s = serve().await;
         s.service.set_token(Some("s3cret".into()));
-        let denied = req(&s, "POST", "/whip/camera1", &[SDP_HEADER], OFFER).await;
+        let denied = req_raw(&s, "POST", "/whip/camera1", &[SDP_HEADER], OFFER).await;
         assert_eq!(denied.status, 401);
         assert_eq!(denied.header("www-authenticate"), Some("Bearer"));
         let wrong = [SDP_HEADER, ("Authorization", "Bearer nope")];
         assert_eq!(
-            req(&s, "POST", "/whip/camera1", &wrong, OFFER).await.status,
+            req_raw(&s, "POST", "/whip/camera1", &wrong, OFFER)
+                .await
+                .status,
             401
         );
         assert!(s.service.sessions().is_empty());
         let ok = [SDP_HEADER, ("Authorization", "Bearer s3cret")];
-        let r = req(&s, "POST", "/whip/camera1", &ok, OFFER).await;
+        let r = req_raw(&s, "POST", "/whip/camera1", &ok, OFFER).await;
         assert_eq!(r.status, 201);
         let loc = r.header("location").expect("location").to_string();
-        assert_eq!(req(&s, "DELETE", &loc, &[], "").await.status, 401);
+        assert_eq!(req_raw(&s, "DELETE", &loc, &[], "").await.status, 401);
         assert_eq!(s.service.sessions().len(), 1);
         assert_eq!(
-            req(
+            req_raw(
                 &s,
                 "DELETE",
                 &loc,
