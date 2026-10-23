@@ -528,7 +528,9 @@ run_f1_4() {
   file_contains "DeckImportProgress pres"       "presentation/src/lib/events.ts"              "DeckImportProgress"
 
   file_contains "pptx_extracts_title test"   "src-tauri/src/deck_importer.rs" "pptx_extracts_title_body_notes"
-  file_contains "is_code_slide test"         "src-tauri/src/deck_importer.rs" "is_code_slide_true_for_monospace"
+  file_contains "is_code_slide test"         "src-tauri/src/pptx.rs" "is_code_slide_true_for_monospace"
+  file_contains "importer enforces zip-bomb limits" "src-tauri/src/pptx.rs" "fn check_archive"
+  file_exists "src-tauri/fuzz/fuzz_targets/pptx_import.rs"
   file_contains "load_deck_resets test"      "src-tauri/src/slide_state_machine.rs" "load_deck_resets_index_and_timer"
   file_contains "round_trip_json test"       "src-tauri/src/slide.rs"         "deck_save_and_load_json_round_trips"
 

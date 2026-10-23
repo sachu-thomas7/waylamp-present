@@ -1,0 +1,27 @@
+[package]
+name = "streamdeck-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Only the pure PPTX parser is compiled (via #[path]), so no Tauri/GTK stack is needed.
+[dependencies]
+libfuzzer-sys = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
+
+# Not part of the app workspace.
+[workspace]
+
+[[bin]]
+name = "pptx_import"
+path = "fuzz_targets/pptx_import.rs"
+test = false
+doc = false
+bench = false

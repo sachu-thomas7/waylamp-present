@@ -62,8 +62,24 @@ export async function pickDeckFile(): Promise<string | null> {
   return typeof result === 'string' ? result : null;
 }
 
-export async function deckImport(path: string): Promise<string> {
-  return invoke<string>('deck_import', { path });
+// @sync-with: src-tauri/src/commands/deck.rs ImportPreview
+export interface ImportPreview {
+  staging_id: string;
+  slide_count: number;
+  skipped: number;
+  first_titles: string[];
+}
+
+export async function deckImportStage(path: string): Promise<ImportPreview> {
+  return invoke<ImportPreview>('deck_import_stage', { path });
+}
+
+export async function deckImportCommit(stagingId: string): Promise<string> {
+  return invoke<string>('deck_import_commit', { stagingId });
+}
+
+export async function deckImportDiscard(stagingId: string): Promise<void> {
+  return invoke<void>('deck_import_discard', { stagingId });
 }
 
 export async function deckClear(): Promise<void> {

@@ -11,6 +11,7 @@ pub mod media_protocol;
 pub mod ndi;
 pub mod persist;
 pub mod pipeline;
+pub mod pptx;
 pub mod preview;
 pub mod scene;
 pub mod slide;

@@ -482,3 +482,145 @@ async fn corrupt_deck_json_without_bak_does_not_abort_startup() {
     assert_eq!(notices.len(), 1);
     assert!(notices[0].contains("defaults are in use"), "{notices:?}");
 }
+
+fn decks_dir(t: &TestApp) -> PathBuf {
+    t.data_dir.path().join("decks")
+}
+
+fn deck_dirs(t: &TestApp) -> usize {
+    std::fs::read_dir(decks_dir(t))
+        .map(|d| {
+            d.filter_map(Result::ok)
+                .filter(|e| e.path().is_dir())
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn staging_an_import_leaves_the_live_deck_untouched_until_committed() {
+    let t = TestApp::new();
+    let mut events = t.collect_events();
+
+    let preview: Value = t
+        .invoke("deck_import_stage", json!({ "path": fixture_pptx() }))
+        .expect("stage");
+
+    assert_eq!(preview["slide_count"], 5);
+    assert_eq!(preview["skipped"], 0);
+    assert_eq!(preview["first_titles"][0], TITLES[0]);
+    assert_eq!(current(&t)["title"], "Welcome", "live deck unchanged");
+    assert!(!active_id_file(&t).exists(), "nothing activated");
+    assert!(
+        !tags(&events.drain())
+            .iter()
+            .any(|e| e.starts_with("SlideUpdate")),
+        "no SlideUpdate before commit"
+    );
+
+    let id = preview["staging_id"].as_str().expect("id").to_string();
+    let committed: String = t
+        .invoke("deck_import_commit", json!({ "stagingId": id }))
+        .expect("commit");
+    assert_eq!(committed, id);
+    assert_eq!(current(&t)["title"], TITLES[0]);
+    assert_eq!(std::fs::read_to_string(active_id_file(&t)).unwrap(), id);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn discarding_a_staged_import_removes_it_and_cannot_be_committed() {
+    let t = TestApp::new();
+    let preview: Value = t
+        .invoke("deck_import_stage", json!({ "path": fixture_pptx() }))
+        .expect("stage");
+    let id = preview["staging_id"].as_str().expect("id").to_string();
+    assert_eq!(deck_dirs(&t), 1);
+
+    invoke_unit(&t, "deck_import_discard", json!({ "stagingId": id }));
+
+    assert_eq!(deck_dirs(&t), 0, "staged files removed");
+    let res: Result<String, Value> = t.invoke("deck_import_commit", json!({ "stagingId": id }));
+    assert_eq!(res.expect_err("nothing staged")["type"], "NotFound");
+    assert_eq!(current(&t)["title"], "Welcome");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_newer_stage_replaces_the_older_and_only_the_newer_commits() {
+    let t = TestApp::new();
+    let first: Value = t
+        .invoke("deck_import_stage", json!({ "path": fixture_pptx() }))
+        .expect("stage 1");
+    let second: Value = t
+        .invoke("deck_import_stage", json!({ "path": fixture_pptx() }))
+        .expect("stage 2");
+    assert_eq!(deck_dirs(&t), 1, "the first staging dir was cleaned up");
+
+    let stale: Result<String, Value> = t.invoke(
+        "deck_import_commit",
+        json!({ "stagingId": first["staging_id"] }),
+    );
+    assert_eq!(stale.expect_err("stale id")["type"], "NotFound");
+    let _: String = t
+        .invoke(
+            "deck_import_commit",
+            json!({ "stagingId": second["staging_id"] }),
+        )
+        .expect("commit newer");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_hostile_pptx_is_rejected_without_touching_the_live_deck_or_leaving_files() {
+    let t = TestApp::new();
+    let src = tempfile::tempdir().expect("src");
+    let bomb = src.path().join("bomb.pptx");
+    {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(std::fs::File::create(&bomb).expect("create"));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        w.start_file("ppt/slides/slide1.xml", opts).expect("entry");
+        w.write_all(&vec![0u8; 12 * 1024 * 1024]).expect("write");
+        w.finish().expect("finish");
+    }
+    let mut events = t.collect_events();
+
+    let res: Result<Value, Value> = t.invoke(
+        "deck_import_stage",
+        json!({ "path": bomb.to_str().unwrap() }),
+    );
+
+    let err = res.expect_err("bomb rejected");
+    assert_eq!(err["type"], "InvalidInput");
+    assert!(
+        err["message"].as_str().unwrap_or("").contains("unsafe"),
+        "{err}"
+    );
+    assert_eq!(current(&t)["title"], "Welcome");
+    assert_eq!(deck_dirs(&t), 0, "no staging dir left behind");
+    assert!(events.drain().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pptx_with_no_readable_slides_does_not_replace_the_live_deck() {
+    let t = TestApp::new();
+    let src = tempfile::tempdir().expect("src");
+    let empty = src.path().join("empty.pptx");
+    {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(std::fs::File::create(&empty).expect("create"));
+        w.start_file("readme.txt", zip::write::SimpleFileOptions::default())
+            .expect("entry");
+        w.write_all(b"not a deck").expect("write");
+        w.finish().expect("finish");
+    }
+
+    let res: Result<String, Value> =
+        t.invoke("deck_import", json!({ "path": empty.to_str().unwrap() }));
+
+    assert_eq!(
+        res.expect_err("empty deck rejected")["type"],
+        "InvalidInput"
+    );
+    assert_eq!(current(&t)["title"], "Welcome");
+    assert!(!active_id_file(&t).exists());
+}

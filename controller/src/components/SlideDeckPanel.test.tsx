@@ -24,6 +24,14 @@ async function mountLoaded(
   return deck;
 }
 
+const preview = (over: Record<string, unknown> = {}) => ({
+  staging_id: 'st-1',
+  slide_count: 12,
+  skipped: 0,
+  first_titles: ['Welcome', 'Call to worship'],
+  ...over,
+});
+
 const callsOf = (cmd: string) => ipc.calls.filter((c) => c.cmd === cmd);
 
 beforeEach(resetStores);
@@ -42,11 +50,43 @@ describe('SlideDeckPanel empty state', () => {
     expect(screen.queryByRole('button', { name: /Next/ })).not.toBeInTheDocument();
   });
 
-  it('Import a Deck sends the picked path to deck_import', async () => {
+  it('Import a Deck stages the picked path and asks before replacing anything', async () => {
     const user = userEvent.setup();
-    mount({ 'plugin:dialog|open': () => '/decks/talk.pptx', deck_import: () => 'deck-1' });
+    mount({ 'plugin:dialog|open': () => '/decks/talk.pptx', deck_import_stage: () => preview() });
     await user.click(await screen.findByRole('button', { name: 'Import a Deck' }));
-    await expectCalled(ipc, 'deck_import', [{ path: '/decks/talk.pptx' }]);
+    await expectCalled(ipc, 'deck_import_stage', [{ path: '/decks/talk.pptx' }]);
+    const group = await screen.findByRole('group', { name: 'Pending import' });
+    expect(group).toHaveTextContent('Ready to import 12 slides');
+    expect(group).toHaveTextContent('Welcome · Call to worship');
+    expect(callsOf('deck_import_commit')).toEqual([]);
+  });
+
+  it('Use this deck commits the staged import', async () => {
+    const user = userEvent.setup();
+    mount({
+      'plugin:dialog|open': () => '/decks/talk.pptx',
+      deck_import_stage: () => preview(),
+      deck_import_commit: () => 'deck-1',
+    });
+    await user.click(await screen.findByRole('button', { name: 'Import a Deck' }));
+    await user.click(await screen.findByRole('button', { name: 'Use this deck' }));
+    await expectCalled(ipc, 'deck_import_commit', [{ stagingId: 'st-1' }]);
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Pending import' })).not.toBeInTheDocument());
+  });
+
+  it('Cancel discards the staged import and commits nothing', async () => {
+    const user = userEvent.setup();
+    mount({
+      'plugin:dialog|open': () => '/decks/talk.pptx',
+      deck_import_stage: () => preview({ skipped: 2 }),
+      deck_import_discard: () => null,
+    });
+    await user.click(await screen.findByRole('button', { name: 'Import a Deck' }));
+    expect(await screen.findByRole('group', { name: 'Pending import' })).toHaveTextContent('2 could not be read');
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await expectCalled(ipc, 'deck_import_discard', [{ stagingId: 'st-1' }]);
+    expect(callsOf('deck_import_commit')).toEqual([]);
+    expect(screen.queryByRole('group', { name: 'Pending import' })).not.toBeInTheDocument();
   });
 
   it('opens the dialog filtered to pptx and pdf', async () => {
@@ -63,12 +103,12 @@ describe('SlideDeckPanel empty state', () => {
     const user = userEvent.setup();
     mount({
       'plugin:dialog|open': () => '/decks/bad.pptx',
-      deck_import: () => {
+      deck_import_stage: () => {
         throw new Error('unsupported');
       },
     });
     await user.click(await screen.findByRole('button', { name: 'Import a Deck' }));
-    await expectCalled(ipc, 'deck_import', [{ path: '/decks/bad.pptx' }]);
+    await expectCalled(ipc, 'deck_import_stage', [{ path: '/decks/bad.pptx' }]);
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(await screen.findByText(/unsupported/)).toBeInTheDocument();
     expect(screen.queryByText(/Slide 0/)).not.toBeInTheDocument();
@@ -80,7 +120,7 @@ describe('SlideDeckPanel empty state', () => {
     mount({ 'plugin:dialog|open': () => null });
     await user.click(await screen.findByRole('button', { name: 'Import a Deck' }));
     await waitFor(() => expect(callsOf('plugin:dialog|open')).toHaveLength(1));
-    expect(callsOf('deck_import')).toEqual([]);
+    expect(callsOf('deck_import_stage')).toEqual([]);
   });
 
   it('shows import progress and failure reason', async () => {
@@ -191,11 +231,14 @@ describe('SlideDeckPanel loaded state', () => {
     });
   });
 
-  it('Import Deck in the loaded state sends the picked path', async () => {
+  it('Import Deck in the loaded state stages the picked path and keeps the live deck until confirmed', async () => {
     const user = userEvent.setup();
-    await mountLoaded(2, {}, { 'plugin:dialog|open': () => '/decks/b.pdf', deck_import: () => 'd' });
+    await mountLoaded(2, {}, { 'plugin:dialog|open': () => '/decks/b.pdf', deck_import_stage: () => preview() });
     await user.click(screen.getByRole('button', { name: 'Import Deck' }));
-    await expectCalled(ipc, 'deck_import', [{ path: '/decks/b.pdf' }]);
+    await expectCalled(ipc, 'deck_import_stage', [{ path: '/decks/b.pdf' }]);
+    expect(await screen.findByRole('group', { name: 'Pending import' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Slide 1' })).toBeInTheDocument();
+    expect(callsOf('deck_import_commit')).toEqual([]);
   });
 
   it('shows import progress and failure above the strip', async () => {

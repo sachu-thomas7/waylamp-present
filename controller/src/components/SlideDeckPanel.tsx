@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useControllerSlideStore } from '../store/slideStore';
 import { onAppEvent } from '../lib/events';
 import {
-  slideAdvance, slideRewind, slideJumpTo, slideGetCurrent, slideTimerReset, pickDeckFile, deckImport, deckGetAllSlides,
+  slideAdvance, slideRewind, slideJumpTo, slideGetCurrent, slideTimerReset, pickDeckFile, deckImportStage, deckImportCommit, deckImportDiscard, deckGetAllSlides,
 } from '../lib/ipc';
+import type { ImportPreview } from '../lib/ipc';
 import { SlideCanvas } from './SlideCanvas';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
@@ -43,6 +44,7 @@ export function SlideDeckPanel() {
 
   const [jumpIndex, setJumpIndex] = useState('');
   const [filter, setFilter] = useState('');
+  const [pending, setPending] = useState<ImportPreview | null>(null);
 
   useEffect(() => {
     slideGetCurrent()
@@ -107,12 +109,56 @@ export function SlideDeckPanel() {
     const path = await pickDeckFile();
     if (path !== null) {
       setImportError(null);
-      await deckImport(path).catch((e) => {
-        console.error(e);
-        setImportError({ slide: 0, reason: errorMessage(e) });
-      });
+      if (pending) deckImportDiscard(pending.staging_id).catch(console.error);
+      setPending(null);
+      await deckImportStage(path)
+        .then(setPending)
+        .catch((e) => {
+          console.error(e);
+          setImportError({ slide: 0, reason: errorMessage(e) });
+        });
+      setImportProgress(null);
     }
   }
+
+  async function confirmImport() {
+    if (!pending) return;
+    const id = pending.staging_id;
+    setPending(null);
+    await deckImportCommit(id).catch((e) => {
+      console.error(e);
+      setImportError({ slide: 0, reason: errorMessage(e) });
+    });
+  }
+
+  function cancelImport() {
+    if (!pending) return;
+    deckImportDiscard(pending.staging_id).catch(console.error);
+    setPending(null);
+  }
+
+  const pendingCard = pending && (
+    <div
+      role="group"
+      aria-label="Pending import"
+      style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, border: '1px solid var(--color-primary)', borderRadius: 'var(--radius-sm)', background: 'var(--color-bg)', textAlign: 'left' }}
+    >
+      <span style={{ fontSize: 13, fontWeight: 600 }}>
+        Ready to import {pending.slide_count} {pending.slide_count === 1 ? 'slide' : 'slides'}
+        {pending.skipped > 0 && ' (' + pending.skipped + ' could not be read and will be left out)'}
+      </span>
+      <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>
+        {pending.first_titles.filter(Boolean).join(' · ')}
+      </span>
+      <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>
+        Your current deck stays live until you choose to use this one.
+      </span>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Button variant="primary" onClick={confirmImport}>Use this deck</Button>
+        <Button variant="secondary" onClick={cancelImport}>Cancel</Button>
+      </div>
+    </div>
+  );
 
   const filteredIndices = useMemo(() => {
     if (!filter.trim()) return slides.map((_, i) => i);
@@ -141,6 +187,7 @@ export function SlideDeckPanel() {
             </span>
           </div>
           <Button variant="primary" pill icon={<IconUpload />} onClick={handleImport}>Import a Deck</Button>
+          {pendingCard}
           {importError && (
             <span style={{ fontSize: 11.5, color: 'var(--color-warn)' }}>⚠ {importErrorText(importError)}</span>
           )}
@@ -170,6 +217,7 @@ export function SlideDeckPanel() {
         </div>
         <Button variant="secondary" icon={<IconUpload />} onClick={handleImport}>Import Deck</Button>
       </div>
+      {pendingCard}
       {importProgress && (
         <span style={{ fontSize: 11.5, color: 'var(--color-text-muted)' }}>Importing… slide {importProgress.slide} / {importProgress.total}</span>
       )}

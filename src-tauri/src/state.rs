@@ -41,6 +41,7 @@ pub fn manage_core<R: Runtime, M: Manager<R>>(
 ) -> StateMachineHandle {
     let machine = slide_state_machine::new_handle(SlideDeck::stub(), data_dir.clone());
     manager.manage(StartupNotices::default());
+    manager.manage(crate::commands::deck::StagedImports::default());
     manager.manage(AppDataDir(data_dir));
     manager.manage(ConfigPath(config_path));
     manager.manage(bus);
@@ -134,6 +135,9 @@ macro_rules! handler {
             crate::commands::slide::slide_timer_reset,
             crate::commands::deck::deck_get_all_slides,
             crate::commands::deck::deck_import,
+            crate::commands::deck::deck_import_stage,
+            crate::commands::deck::deck_import_commit,
+            crate::commands::deck::deck_import_discard,
             crate::commands::deck::deck_restore,
             crate::commands::deck::deck_clear,
             crate::commands::scene::scene_push_image,
