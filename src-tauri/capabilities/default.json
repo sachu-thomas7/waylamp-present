@@ -5,10 +5,6 @@
   "windows": ["controller"],
   "permissions": [
     "core:default",
-    "core:webview:allow-create-webview-window",
-    "shell:allow-open",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
     "dialog:allow-open"
   ]
 }

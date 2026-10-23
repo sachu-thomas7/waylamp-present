@@ -16,12 +16,13 @@ pub struct NdiWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct WhipTickAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
 pub struct PreviewTaskAbortHandles(pub Vec<tauri::async_runtime::JoinHandle<()>>);
 
+const DEV_PRESENTATION_CAPABILITY: &str = r#"{"identifier":"presentation-dev-remote","windows":["presentation"],"remote":{"urls":["http://localhost:5174/*"]},"permissions":["core:event:allow-listen","core:event:allow-unlisten"]}"#;
+
 pub fn run() {
     let (bus, rx) = EventBus::new();
     let bus_arc = Arc::new(bus);
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol(
@@ -65,6 +66,10 @@ pub fn run() {
         )
         .invoke_handler(crate::state::invoke_handler())
         .setup(move |app| {
+            if cfg!(debug_assertions) {
+                // Dev-server content is remote and gets zero IPC unless its origin is allowlisted; never shipped.
+                app.add_capability(DEV_PRESENTATION_CAPABILITY)?;
+            }
             let presentation_url = if cfg!(debug_assertions) {
                 WebviewUrl::External("http://localhost:5174".parse().expect("valid URL"))
             } else {

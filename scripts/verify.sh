@@ -423,7 +423,7 @@ run_f1_1() {
 
   subsection "Multi-window dev/build wiring (regression check — see CLAUDE.md)"
   file_contains "presentation window uses dev server URL in debug builds" "src-tauri/src/app.rs" "localhost:5174"
-  file_contains "presentation capability allows remote dev-server IPC" "src-tauri/capabilities/presentation.json" "remote"
+  file_contains "presentation dev-server IPC is granted at runtime, debug builds only" "src-tauri/src/app.rs" "presentation-dev-remote"
   file_contains "beforeDevCommand runs both dev servers" "src-tauri/tauri.conf.json" "dev-both.cjs"
   file_contains "beforeBuildCommand merges presentation dist" "src-tauri/tauri.conf.json" "merge-presentation-dist.cjs"
   file_contains "presentation build uses relative asset base" "presentation/vite.config.ts" 'base: "./"'
@@ -1022,7 +1022,7 @@ run_t1_4() {
   file_contains "invariants test covers capabilities" "src-tauri/tests/invariants.rs" "fn presentation_capability_is_listen_only"
   file_contains "invariants test covers event union parity" "src-tauri/tests/invariants.rs" "fn controller_event_union_mirrors_every_rust_variant"
   file_contains "invariants test covers unwrap ban" "src-tauri/tests/invariants.rs" "fn command_handlers_never_unwrap_or_expect"
-  file_contains "invariants test covers every capability file" "src-tauri/tests/invariants.rs" "fn no_capability_grants_presentation_more_than_core_event_default"
+  file_contains "invariants test covers every capability file" "src-tauri/tests/invariants.rs" "fn no_capability_grants_presentation_more_than_listen_and_unlisten"
   file_contains "invariants test covers emit allow-list" "src-tauri/tests/invariants.rs" "fn emit_is_only_called_from_the_app_event_bridge"
 
   local t14_log

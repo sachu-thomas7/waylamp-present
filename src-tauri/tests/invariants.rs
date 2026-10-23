@@ -393,6 +393,10 @@ fn cap_permissions(cap: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+// `core:event:default` also contains emit/emit_to, so the projector may only hold these two.
+const PRESENTATION_PERMISSIONS: [&str; 2] =
+    ["core:event:allow-listen", "core:event:allow-unlisten"];
+
 fn presentation_violations(caps: &[(String, Value)]) -> Vec<String> {
     let mut out = Vec::new();
     for (name, cap) in caps {
@@ -403,7 +407,7 @@ fn presentation_violations(caps: &[(String, Value)]) -> Vec<String> {
             continue;
         }
         for p in cap_permissions(cap) {
-            if p != "core:event:default" {
+            if !PRESENTATION_PERMISSIONS.contains(&p.as_str()) {
                 out.push(format!("{name} grants presentation `{p}`"));
             }
         }
@@ -412,7 +416,7 @@ fn presentation_violations(caps: &[(String, Value)]) -> Vec<String> {
 }
 
 #[test]
-fn no_capability_grants_presentation_more_than_core_event_default() {
+fn no_capability_grants_presentation_more_than_listen_and_unlisten() {
     let caps = all_capabilities();
     assert!(caps.len() >= 2, "capability scan found {caps:?}");
     let violations = presentation_violations(&caps);
@@ -420,9 +424,9 @@ fn no_capability_grants_presentation_more_than_core_event_default() {
     assert!(
         caps.iter().any(
             |(_, c)| cap_targets(c).contains(&"presentation".to_string())
-                && cap_permissions(c) == ["core:event:default"]
+                && cap_permissions(c) == PRESENTATION_PERMISSIONS
         ),
-        "no capability grants presentation core:event:default"
+        "no capability grants presentation listen + unlisten"
     );
 }
 
@@ -431,7 +435,7 @@ fn presentation_violation_scanner_self_test() {
     use serde_json::json;
     let c = |v: Value| vec![("x".to_string(), v)];
     assert!(presentation_violations(&c(
-        json!({"windows": ["presentation"], "permissions": ["core:event:default"]})
+        json!({"windows": ["presentation"], "permissions": ["core:event:allow-listen"]})
     ))
     .is_empty());
     assert!(presentation_violations(&c(
@@ -440,10 +444,12 @@ fn presentation_violation_scanner_self_test() {
     .is_empty());
     for bad in [
         json!({"windows": ["presentation"], "permissions": ["core:default"]}),
+        json!({"windows": ["presentation"], "permissions": ["core:event:default"]}),
+        json!({"windows": ["presentation"], "permissions": ["core:event:allow-emit"]}),
         json!({"windows": ["*"], "permissions": ["core:default"]}),
         json!({"windows": ["pres*"], "permissions": ["shell:allow-open"]}),
         json!({"webviews": ["presentation"], "permissions": [{"identifier": "dialog:allow-open"}]}),
-        json!({"windows": ["controller", "presentation"], "permissions": ["core:event:default", "core:window:default"]}),
+        json!({"windows": ["controller", "presentation"], "permissions": ["core:event:allow-listen", "core:window:default"]}),
     ] {
         assert_eq!(presentation_violations(&c(bad.clone())).len(), 1, "{bad}");
     }
@@ -456,18 +462,87 @@ fn presentation_capability_is_listen_only() {
     assert_eq!(strings(&cap["windows"]), ["presentation"]);
     assert_eq!(
         strings(&cap["permissions"]),
-        ["core:event:default"],
-        "presentation may hold core:event:default and nothing else (no invoke)"
+        PRESENTATION_PERMISSIONS,
+        "presentation may only listen/unlisten (core:event:default would also grant emit)"
     );
 }
 
 #[test]
-fn presentation_capability_allowlists_only_the_dev_server_origin() {
-    let cap = capability("presentation.json");
+fn no_shipped_capability_carries_remote_origins_and_dev_origin_is_debug_only() {
+    for (name, cap) in all_capabilities() {
+        assert!(
+            cap.get("remote").is_none(),
+            "{name}: remote.urls must not ship"
+        );
+    }
+    let app = read(&tauri_dir().join("src").join("app.rs"));
+    let at = app
+        .find("DEV_PRESENTATION_CAPABILITY)?")
+        .expect("dev capability is added");
+    assert!(
+        app[..at]
+            .rfind("if cfg!(debug_assertions)")
+            .is_some_and(|i| at - i < 300),
+        "dev capability must sit directly under cfg!(debug_assertions)"
+    );
+    let json = app
+        .lines()
+        .find(|l| l.starts_with("const DEV_PRESENTATION_CAPABILITY"))
+        .expect("const present");
+    for needed in [
+        "http://localhost:5174/*",
+        "core:event:allow-listen",
+        "core:event:allow-unlisten",
+    ] {
+        assert!(json.contains(needed), "dev capability lacks {needed}");
+    }
+    for forbidden in ["emit", "core:default", "invoke"] {
+        assert!(
+            !json.contains(forbidden),
+            "dev capability must stay listen-only: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn controller_capability_holds_exactly_the_grants_its_ui_uses() {
+    let cap = capability("default.json");
     assert_eq!(
-        strings(&cap["remote"]["urls"]),
-        ["http://localhost:5174/*"],
-        "dev presentation needs exactly this remote origin (CLAUDE.md bug #3)"
+        strings(&cap["permissions"]),
+        ["core:default", "dialog:allow-open"],
+        "shell/global-shortcut/create-webview-window were unused by controller JS; add grants only with a caller"
+    );
+}
+
+#[test]
+fn csp_has_no_script_unsafe_inline() {
+    let conf = read_json(&tauri_dir().join("tauri.conf.json"));
+    let csp = conf["app"]["security"]["csp"].as_str().expect("csp set");
+    let script_src = csp
+        .split(';')
+        .map(str::trim)
+        .find(|d| d.starts_with("script-src"))
+        .expect("script-src directive");
+    assert!(
+        !script_src.contains("unsafe-inline") && !script_src.contains("unsafe-eval"),
+        "{script_src}"
+    );
+    assert!(csp.contains("default-src 'self'"), "{csp}");
+}
+
+#[test]
+fn devtools_and_shell_are_not_shipped() {
+    let cargo: toml::Value = read(&tauri_dir().join("Cargo.toml"))
+        .parse()
+        .expect("Cargo.toml");
+    let deps = cargo["dependencies"].as_table().expect("dependencies");
+    assert!(
+        !dep_features(&deps["tauri"]).contains(&"devtools".to_string()),
+        "tauri devtools feature enables the inspector in release builds"
+    );
+    assert!(
+        !deps.contains_key("tauri-plugin-shell"),
+        "shell plugin is unused"
     );
 }
 

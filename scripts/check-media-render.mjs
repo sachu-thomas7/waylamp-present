@@ -64,4 +64,9 @@ if (video) {
   check('scene video loads (readyState >= 2, no error)', v && v.ready >= 2 && !v.err, JSON.stringify(v));
 }
 await invoke('scene_set_source', { source: 'SlideDeck' });
+
+const denied = (cmd, args) =>
+  presentation(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(cmd)}, ${JSON.stringify(args)}).then(() => 'allowed', () => 'denied')`);
+check('presentation cannot emit events', (await denied('plugin:event|emit', { event: 'app-event', payload: { type: 'DeckEnd' } })) === 'denied', 'emit allowed');
+check('presentation cannot invoke app commands', (await denied('slide_get_current', {})) === 'denied', 'invoke allowed');
 process.exit(failed ? 1 : 0);

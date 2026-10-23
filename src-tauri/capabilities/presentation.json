@@ -1,12 +1,10 @@
 {
   "$schema": "https://schema.tauri.app/config/2/capability",
   "identifier": "presentation",
-  "description": "Listen-only capability for the Presentation window. No invoke permissions — all state changes flow from the Controller through Rust commands and are pushed here via the event bus.",
+  "description": "Listen-only capability for the Presentation window: listen/unlisten, never emit, never invoke. The dev-server origin is granted at runtime by app.rs in debug builds only.",
   "windows": ["presentation"],
-  "remote": {
-    "urls": ["http://localhost:5174/*"]
-  },
   "permissions": [
-    "core:event:default"
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }
