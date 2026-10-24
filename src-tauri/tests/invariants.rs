@@ -535,7 +535,7 @@ fn handler_command_names() -> Vec<String> {
 #[test]
 fn only_the_controller_may_invoke_app_commands_and_the_set_matches_the_handler_list() {
     let handlers = handler_command_names();
-    assert!(handlers.len() >= 40, "handler scan found {handlers:?}");
+    assert!(handlers.len() >= 20, "handler scan found {handlers:?}");
 
     let set: toml::Value = read(
         &tauri_dir()

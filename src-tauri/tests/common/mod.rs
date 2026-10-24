@@ -29,18 +29,6 @@ pub struct TestApp {
     pub machine: StateMachineHandle,
     pub data_dir: tempfile::TempDir,
     pub displays: Arc<FakeDisplays>,
-    pub pipeline_backend: streamdeck_lib::pipeline::SimulatedBackend,
-    pub pipeline: streamdeck_lib::pipeline::PipelineHandle,
-    pub ndi_discovery: streamdeck_lib::ndi::SimulatedDiscovery,
-    pub ndi_provider: streamdeck_lib::ndi::NdiDiscoveryHandle,
-    pub ndi_state: streamdeck_lib::ndi::NdiStateHandle,
-    pub preview: streamdeck_lib::preview::PreviewHub,
-    pub whip: Arc<streamdeck_lib::whip::WhipController>,
-    pub whip_backend: streamdeck_lib::whip::SimulatedWhipBackend,
-    pub whip_tokens: Arc<streamdeck_lib::whip::MemoryTokenStore>,
-    pub stream: Arc<streamdeck_lib::stream_service::StreamController>,
-    pub stream_backend: streamdeck_lib::stream_service::SimulatedStreamBackend,
-    pub stream_keys: Arc<streamdeck_lib::stream_service::MemoryKeyStore>,
 }
 
 /// Scriptable monitor list standing in for the OS (mock `available_monitors` is unimplemented).
@@ -102,16 +90,10 @@ impl TestApp {
 
     /// Boots an app on an existing data dir, simulating a restart over persisted files.
     pub fn with_data_dir(data_dir: tempfile::TempDir, config: StreamDeckConfig) -> Self {
-        Self::build(data_dir, config, None)
+        Self::build(data_dir, config)
     }
 
-    /// Attached sources emit synthetic 320x180 frames at `source_fps` into the preview hub.
-    pub fn with_preview_feeds(source_fps: u32) -> Self {
-        let data_dir = tempfile::tempdir().expect("temp app-data dir");
-        Self::build(data_dir, StreamDeckConfig::default(), Some(source_fps))
-    }
-
-    fn build(data_dir: tempfile::TempDir, config: StreamDeckConfig, feed_fps: Option<u32>) -> Self {
+    fn build(data_dir: tempfile::TempDir, config: StreamDeckConfig) -> Self {
         let (bus, _rx) = EventBus::new();
         let bus = Arc::new(bus);
 
@@ -133,55 +115,6 @@ impl TestApp {
         ]));
         streamdeck_lib::state::manage_display(&app, &config, displays.clone());
 
-        let preview = streamdeck_lib::state::manage_preview(&app);
-        let pipeline_backend = match feed_fps {
-            Some(fps) => {
-                streamdeck_lib::pipeline::SimulatedBackend::with_preview(preview.clone(), fps)
-            }
-            None => streamdeck_lib::pipeline::SimulatedBackend::default(),
-        };
-        let pipeline = streamdeck_lib::state::manage_pipeline(
-            &app,
-            Box::new(pipeline_backend.clone()),
-            Arc::clone(&bus),
-        );
-
-        let ndi_discovery = streamdeck_lib::ndi::SimulatedDiscovery::default();
-        let ndi_provider: streamdeck_lib::ndi::NdiDiscoveryHandle = Arc::new(ndi_discovery.clone());
-        let ndi_state = streamdeck_lib::state::manage_ndi(&app, Arc::clone(&ndi_provider));
-
-        let whip_backend = match feed_fps {
-            Some(fps) => {
-                streamdeck_lib::whip::SimulatedWhipBackend::with_preview(preview.clone(), fps)
-            }
-            None => streamdeck_lib::whip::SimulatedWhipBackend::default(),
-        };
-        let whip_tokens = Arc::new(streamdeck_lib::whip::MemoryTokenStore::default());
-        let whip = streamdeck_lib::state::manage_whip(
-            &app,
-            Arc::new(whip_backend.clone()),
-            Arc::clone(&bus),
-            data_dir.path().join("config").join("streamdeck.toml"),
-            Arc::new(streamdeck_lib::whip::FixedLocalIp(vec!["192.168.1.20"
-                .parse()
-                .expect("ip")])),
-            whip_tokens.clone(),
-        );
-
-        let stream_backend = streamdeck_lib::stream_service::SimulatedStreamBackend::new();
-        let stream_keys = Arc::new(streamdeck_lib::stream_service::MemoryKeyStore::default());
-        let stream = streamdeck_lib::state::manage_stream(
-            &app,
-            Box::new(stream_backend.clone()),
-            Arc::clone(&bus),
-            data_dir.path().join("config").join("streamdeck.toml"),
-            stream_keys.clone(),
-            streamdeck_lib::stream_service::Sources {
-                video: streamdeck_lib::stream::VideoSource::TestPattern,
-                audio: streamdeck_lib::stream::AudioSource::Silence,
-            },
-        );
-
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()
             .expect("mock controller window");
@@ -193,46 +126,7 @@ impl TestApp {
             machine,
             data_dir,
             displays,
-            pipeline_backend,
-            pipeline,
-            ndi_discovery,
-            ndi_provider,
-            ndi_state,
-            preview,
-            whip,
-            whip_backend,
-            whip_tokens,
-            stream,
-            stream_backend,
-            stream_keys,
         }
-    }
-
-    /// One NDI poll step, as the 2s watch task would run it.
-    pub async fn poll_ndi(&self) {
-        streamdeck_lib::ndi::reconcile_sources(
-            &self.ndi_provider,
-            &self.pipeline,
-            &self.bus,
-            &self.ndi_state,
-        )
-        .await;
-    }
-
-    /// The token currently held in the in-memory keychain.
-    pub fn whip_token(&self) -> Option<String> {
-        use streamdeck_lib::whip::TokenStore;
-        self.whip_tokens.get().expect("token store")
-    }
-
-    /// Points the WHIP endpoint at loopback with an OS-assigned port, as a test must never bind 0.0.0.0:8088.
-    pub fn use_loopback_whip(&self) {
-        let path = self.config_path();
-        let mut config =
-            streamdeck_lib::config_loader::ConfigLoader::load_or_default(&path).expect("config");
-        config.whip.bind_address = "127.0.0.1".into();
-        config.whip.port = 0;
-        streamdeck_lib::config_loader::ConfigLoader::save(&path, &config).expect("save config");
     }
 
     /// The `streamdeck.toml` the app under test reads/writes (inside the temp data dir).

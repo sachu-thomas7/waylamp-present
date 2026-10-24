@@ -1,8 +1,5 @@
 use serde::Deserialize;
 use serde::Serialize;
-use std::collections::BTreeMap;
-
-use crate::compositor::SceneConfig;
 
 pub const CONFIG_VERSION: u32 = 1;
 
@@ -12,10 +9,6 @@ pub struct StreamDeckConfig {
     pub version: u32,
     pub app: AppConfig,
     pub presentation: PresentationConfig,
-    pub ui: UiConfig,
-    pub whip: WhipConfig,
-    pub stream: StreamConfig,
-    pub scene: BTreeMap<String, SceneConfig>,
 }
 
 impl Default for StreamDeckConfig {
@@ -24,53 +17,6 @@ impl Default for StreamDeckConfig {
             version: CONFIG_VERSION,
             app: AppConfig::default(),
             presentation: PresentationConfig::default(),
-            ui: UiConfig::default(),
-            whip: WhipConfig::default(),
-            stream: StreamConfig::default(),
-            scene: BTreeMap::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct UiConfig {
-    pub preview_grid: String,
-}
-
-impl Default for UiConfig {
-    fn default() -> Self {
-        Self {
-            preview_grid: "2x2".into(),
-        }
-    }
-}
-
-/// Live-stream output settings and destinations. Stream keys live in the OS keychain, never here.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct StreamConfig {
-    #[serde(flatten)]
-    pub settings: crate::stream::StreamSettings,
-    pub destinations: Vec<crate::stream::Destination>,
-}
-
-/// Off by default: enabling binds a LAN-reachable port, so it is an explicit operator choice.
-/// `bind_address` is "auto" (the detected LAN interface only) or an explicit IP address.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct WhipConfig {
-    pub enabled: bool,
-    pub bind_address: String,
-    pub port: u16,
-}
-
-impl Default for WhipConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            bind_address: "auto".into(),
-            port: 8088,
         }
     }
 }
@@ -119,25 +65,17 @@ mod tests {
     }
 
     #[test]
-    fn whip_defaults_to_disabled_and_old_configs_still_load() {
+    fn old_configs_with_live_sections_still_load() {
         let restored: StreamDeckConfig = toml::from_str(
             "version = 1
-",
-        )
-        .unwrap();
-        assert!(!restored.whip.enabled);
-        assert_eq!(
-            (restored.whip.bind_address.as_str(), restored.whip.port),
-            ("auto", 8088)
-        );
-        let partial: StreamDeckConfig = toml::from_str(
-            "[whip]
+[whip]
 enabled = true
+[ui]
+preview_grid = \"2x2\"
 ",
         )
         .unwrap();
-        assert!(partial.whip.enabled);
-        assert_eq!(partial.whip.port, 8088);
+        assert_eq!(restored.version, 1);
     }
 
     #[test]

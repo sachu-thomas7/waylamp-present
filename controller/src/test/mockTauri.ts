@@ -4,7 +4,6 @@ import { act, render } from '@testing-library/react';
 import { createElement } from 'react';
 import App from '../App';
 import type { AppEvent } from '../lib/events';
-import type { PreviewFrame } from '../lib/ipc';
 
 export type IpcHandler = (args: Record<string, unknown>) => unknown;
 export interface IpcCall {
@@ -35,13 +34,6 @@ export function installMockIPC(handlers: Record<string, IpcHandler> = {}): { cal
 export async function emitAppEvent(event: AppEvent): Promise<void> {
   await act(async () => {
     await emit('app-event', event);
-  });
-}
-
-// Delivers a thumbnail through the real `listen('preview-frame')` path.
-export async function emitPreviewFrame(frame: PreviewFrame): Promise<void> {
-  await act(async () => {
-    await emit('preview-frame', frame);
   });
 }
 

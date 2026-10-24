@@ -12,10 +12,6 @@ use crate::events::AppEvent;
 
 use crate::state::TimerAbortHandle;
 pub struct DisplayWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
-pub struct NdiWatchAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
-pub struct StreamTickAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
-pub struct WhipTickAbortHandle(pub tauri::async_runtime::JoinHandle<()>);
-pub struct PreviewTaskAbortHandles(pub Vec<tauri::async_runtime::JoinHandle<()>>);
 
 const DEV_PRESENTATION_CAPABILITY: &str = r#"{"identifier":"presentation-dev-remote","windows":["presentation"],"remote":{"urls":["http://localhost:5174/*"]},"permissions":["core:event:allow-listen","core:event:allow-unlisten"]}"#;
 
@@ -151,65 +147,6 @@ pub fn run() {
 
             app.manage(watcher);
 
-            let preview = crate::state::manage_preview(app);
-            app.manage(PreviewTaskAbortHandles(vec![
-                crate::preview::spawn_stats_task(preview.clone(), Arc::clone(&bus_arc)),
-                tauri::async_runtime::spawn(run_preview_bridge(
-                    app.handle().clone(),
-                    preview.subscribe(),
-                )),
-            ]));
-
-            let pipeline = crate::state::manage_pipeline(
-                app,
-                crate::state::production_pipeline_backend(Arc::clone(&bus_arc), preview.clone()),
-                Arc::clone(&bus_arc),
-            );
-
-            let ndi_provider = crate::ndi::production_discovery();
-            let ndi_state = crate::state::manage_ndi(app, Arc::clone(&ndi_provider));
-            let ndi_watch_abort = crate::ndi::spawn_watch_task(
-                ndi_provider,
-                pipeline,
-                Arc::clone(&bus_arc),
-                ndi_state,
-            );
-            app.manage(NdiWatchAbortHandle(ndi_watch_abort));
-
-            let stream = crate::state::manage_stream(
-                app,
-                crate::state::production_stream_backend(),
-                Arc::clone(&bus_arc),
-                config_path.clone(),
-                Arc::new(crate::stream_service::KeyringKeyStore),
-                crate::stream_service::Sources {
-                    video: crate::stream::VideoSource::Program("program".into()),
-                    audio: crate::stream::AudioSource::Silence,
-                },
-            );
-            app.manage(StreamTickAbortHandle(
-                crate::stream_service::spawn_tick_task(stream),
-            ));
-
-            let whip = crate::state::manage_whip(
-                app,
-                crate::whip::production_backend(preview),
-                Arc::clone(&bus_arc),
-                config_path,
-                Arc::new(crate::whip::SystemLocalIp),
-                Arc::new(crate::whip::KeyringTokenStore),
-            );
-            app.manage(WhipTickAbortHandle(crate::whip::spawn_tick_task(
-                Arc::clone(whip.service()),
-            )));
-            if config.whip.enabled {
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = whip.start().await {
-                        eprintln!("WHIP endpoint failed to start: {e}");
-                    }
-                });
-            }
-
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -227,19 +164,6 @@ pub fn run() {
                     if let Some(abort) = window.app_handle().try_state::<DisplayWatchAbortHandle>()
                     {
                         abort.0.abort();
-                    }
-                    if let Some(abort) = window.app_handle().try_state::<NdiWatchAbortHandle>() {
-                        abort.0.abort();
-                    }
-                    if let Some(abort) = window.app_handle().try_state::<StreamTickAbortHandle>() {
-                        abort.0.abort();
-                    }
-                    if let Some(abort) = window.app_handle().try_state::<WhipTickAbortHandle>() {
-                        abort.0.abort();
-                    }
-                    if let Some(tasks) = window.app_handle().try_state::<PreviewTaskAbortHandles>()
-                    {
-                        tasks.0.iter().for_each(|t| t.abort());
                     }
                     if let Some(presentation) =
                         window.app_handle().get_webview_window("presentation")
@@ -266,21 +190,7 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if let tauri::RunEvent::Exit = event {
-                if let Some(stream) =
-                    app.try_state::<Arc<crate::stream_service::StreamController>>()
-                {
-                    stream.shutdown();
-                }
-                if let Some(whip) = app.try_state::<Arc<crate::whip::WhipController>>() {
-                    whip.service().shutdown_all();
-                }
-                if let Some(pipeline) = app.try_state::<crate::pipeline::PipelineHandle>() {
-                    pipeline.shutdown_blocking(std::time::Duration::from_secs(3));
-                }
-            }
-        });
+        .run(|_app, _event| {});
 }
 
 fn confirm_close_while_presenting(window: tauri::Window) {
@@ -323,22 +233,6 @@ async fn run_event_bridge(
                     let _ = handle.emit("app-event", &event);
                 }
             }
-            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-        }
-    }
-}
-
-// High-rate thumbnails skip the AppEvent bus (it would flood every window and the 256-slot ring); controller only.
-async fn run_preview_bridge(
-    handle: tauri::AppHandle,
-    mut rx: tokio::sync::broadcast::Receiver<crate::preview::PreviewFrame>,
-) {
-    loop {
-        match rx.recv().await {
-            Ok(frame) => {
-                let _ = handle.emit_to("controller", "preview-frame", &frame);
-            }
-            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
         }
     }
