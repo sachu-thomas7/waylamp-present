@@ -32,7 +32,7 @@ thiserror          = "2"
 ts-rs              = { version = "12", features = ["serde-compat"] }
 anyhow             = "1"
 toml               = "0.8"
-notify             = "6"
+notify             = "8"
 zip             = { version = "9", default-features = false, features = ["deflate"] }
 quick-xml       = { version = "0.42", features = ["serialize"] }
 pdfium-render   = { version = "0.8", features = ["sync"] }
