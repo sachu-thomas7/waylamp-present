@@ -19,7 +19,7 @@ bash scripts/verify.sh release [bundle]  # delegates to the release scripts if p
 Use `quick` mid-work and `push` to finish (the hook runs `push` before any `git push`). `core` = `push`; `--no-frontend`
 skips the frontend lane.
 
-**Environment (Windows/Git Bash):** the script adds `/c/Users/sachu/.cargo/bin` and fnm itself. Set
+**Environment (Windows/Git Bash):** the script adds `/c/Users/<you>/.cargo/bin` and fnm itself. Set
 `CARGO_TARGET_DIR` to the shared target dir if you build in a worktree.
 
 ## Interpreting the result

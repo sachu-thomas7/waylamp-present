@@ -1,5 +1,5 @@
 version: 2
-# CI minutes are metered: monthly cadence, one grouped PR per ecosystem, low open-PR cap.
+# Monthly cadence, one grouped PR per ecosystem, low open-PR cap to keep review load small.
 updates:
   - package-ecosystem: "cargo"
     directory: "/src-tauri"
@@ -46,7 +46,7 @@ updates:
     commit-message:
       prefix: "deps"
     ignore:
-      # Tag is the toolchain version; it must match rust-toolchain.toml, not drift.
+      # The toolchain is pinned in rust-toolchain.toml and ci.yml; bump the action SHA by hand.
       - dependency-name: "dtolnay/rust-toolchain"
     groups:
       actions:

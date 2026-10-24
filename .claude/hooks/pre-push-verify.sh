@@ -10,9 +10,9 @@ grep -q 'git push' <<<"$(cat)" || exit 0
 
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
-# $HOME resolves to the MSYS home (/c/msys64/home/...), NOT the Windows user profile,
+# $HOME resolves to the MSYS home (e.g. /c/msys64/home/<you>), NOT the Windows user profile,
 # in this Git Bash environment — cargo/fnm live under the Windows profile instead.
-for candidate in "/c/Users/sachu/.cargo/bin" "$HOME/.cargo/bin" "$USERPROFILE/.cargo/bin"; do
+for candidate in "$(cygpath -u "${USERPROFILE:-}" 2>/dev/null)/.cargo/bin" "$HOME/.cargo/bin" "${USERPROFILE:-}/.cargo/bin"; do
   [ -d "$candidate" ] && export PATH="$candidate:$PATH" && break
 done
 if command -v fnm >/dev/null 2>&1; then

@@ -1,6 +1,6 @@
 ---
 name: test-engineer
-description: Implements exactly one item from dev-docs/test_framework_roadmap.md (e.g. "T1.2", "T2.2", "T4.3") end-to-end — plans scenarios, writes the tests, proves they can fail, wires the verify.sh gate, and updates the test plan. Use for "build test item TX.Y", "add tests for <feature>", or "heal this failing/flaky test"; not for implementing product features (use feature-builder) or for reviewing tests (use test-reviewer).
+description: Implements exactly one item from dev-docs/test_framework_roadmap.md (e.g. "T1.2", "T2.2", "T4.3") end-to-end — plans scenarios, writes the tests, proves they can fail, wires the verify.sh gate, and updates the test plan. Use for "build test item TX.Y", "add tests for <feature>", or "heal this failing/flaky test"; not for implementing product features (use a feature branch) or for reviewing tests (use test-reviewer).
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
@@ -45,14 +45,13 @@ WON'T:
   (T0.1, T5.3, T6.4) requires it, prepare the change as a proposed diff in your report.
 - Touch the user's real app-data directory, or leave processes (app, WebView2, Vite) running.
 - Start another roadmap item, refactor unrelated code, or add Phase 2+ scaffolding.
-- Write `dev-docs/*-handoff.md` files.
 
 ## Environment (Windows / Git Bash)
 
 ```bash
-export PATH="/c/Users/sachu/.cargo/bin:$PATH"; eval "$(fnm env --shell bash)"
+export PATH="/c/Users/<you>/.cargo/bin:$PATH"; eval "$(fnm env --shell bash)"
 ```
-`$HOME` is the MSYS home — use explicit `/c/Users/sachu/...` paths. If a broken working tree
+`$HOME` is the MSYS home — use explicit `/c/Users/<you>/...` paths. If a broken working tree
 makes the pre-push hook block every Bash call, switch to the PowerShell tool to fix it (and
 report that the hook misfired — roadmap T0.1).
 

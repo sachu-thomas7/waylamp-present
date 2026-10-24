@@ -21,11 +21,9 @@ node dev-docs/test-assets/make_test_assets.cjs
 - **`streamdeck-test-deck.pdf`** — 3 pages of real extractable text (Helvetica, not images),
   one slide per page expected on import.
 
-  ⚠️ **PDF import currently panics at runtime** unless a native `pdfium` shared library is
-  present on the machine — `pdfium-render`'s `Pdfium::default()` doesn't return an `Err` in
-  that case, it panics. Nothing in this repo bundles or downloads that library yet. See
-  `CLAUDE.md` before relying on this file to validate PDF import end-to-end — it will
-  demonstrate the crash, not a successful import, on a machine without pdfium installed.
+  Note: PDF import needs the native `pdfium` library. Without it the import returns an error
+  (it does not panic). Run `bash scripts/fetch-deps.sh` to stage a pinned copy for development;
+  see `CLAUDE.md`.
 - **`streamdeck-test-scene-image.png`** — solid red 640×360 PNG for testing
   `scene_push_image` / the Scene Media panel. For video (`scene_push_video`), use any small
   local `.mp4`/`.webm` — one wasn't hand-generated here since a valid encoded video file

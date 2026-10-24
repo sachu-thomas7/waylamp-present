@@ -13,12 +13,12 @@ traceability matrix (§4) whenever a test is added.
 1. Know within minutes, locally, whether a code change or dependency upgrade broke the
    product — including the multi-window/IPC wiring that `verify.sh` historically missed.
 2. Localise failures: the lowest layer able to see a bug should be the one that fails.
-3. Cost: zero extra CI minutes by default (private repo; macOS 10x, Windows 2x).
+3. Cost: zero extra CI minutes by default (metered runners; macOS 10x, Windows 2x).
 4. Honesty: a green run means something. Tests must be able to fail (roadmap principle 3).
 
 **Out of scope for automation:** physical multi-display/projector behaviour, mirrored-output
-(ClickShare) behaviour, OS-level global shortcuts, the native file picker (§9 manual list).
-Phase 2+ media (GStreamer/NDI/WHIP) is covered by roadmap T7 extension points, not here.
+(casting dongle) behaviour, OS-level global shortcuts, the native file picker (§9 manual list).
+Live-production media (GStreamer/NDI/WHIP) lives on `feature/live-production` and is not covered here.
 
 ## 2. Test strategy — layers
 
@@ -49,7 +49,7 @@ sources: roadmap T4.0 spike decision gate.
 | R5 | Event union drifts between Rust and TS | CLAUDE.md lesson | T1.4, T2.4 (done), T3.2 |
 | R6 | Presentation window gains invoke permission | invariant 5 | T1.4 capability assertion; T2.3 "never invokes" |
 | R7 | Operator trapped by fullscreen / window close destroys presentation | CLAUDE.md bugs #2, #4, #5 | L4 J4 (close → hidden, not destroyed); §9 manual |
-| R8 | Tests pollute the user's real app-data deck | active-deck persistence | T4.1 data-dir seam; fixtures own temp dir |
+| R8 | Tests pollute the user's real app-data deck | active-deck persistence | planned T4.1 data-dir seam (not implemented yet); fixtures own temp dir |
 | R9 | Tests that cannot fail (false green) | industry pattern | skill "Prove it can fail"; T6.1 scanner; T6.2 mutation |
 | R10 | Dev tooling blocks work (hook runs on every Bash call) | 2026-10 session | T0.1 |
 | R11 | PDF import without pdfium must be an error, not a panic | CLAUDE.md | ✅ `load_pdfium` unit test + `pdf_import_never_panics_when_pdfium_is_missing`; real PDF test still ignored until pdfium is bundled |
@@ -73,7 +73,7 @@ test you add.
 | F1.5 multi-display | enumerate, assign, fallback on `DisplayLost` | ✅ `display` | ✅ T1.3 `display_journeys` (list, assign persisted to temp `streamdeck.toml`, NotFound, corrupt config, `reconcile_displays`: `DisplaysChanged`/`DisplayLost`, stable, provider failure, no displays); the mock window's `set_position` is a no-op, so window repositioning (assign and the DisplayLost fallback to primary) is manual-only (checklist M1); `display_assign_presentation` persists config first, then moves the window, updates state and publishes (on config failure state and window are unchanged) | — | 🟡 J9 (read-only) + §9 manual |
 | Empty deck / Clear Deck (2026-10) | `SlidePayload::empty`, `deck_clear`, Present disabled | ✅ `current_payload_on_empty_deck…` | ✅ `deck_journeys` clear (+idempotent, empty-deck boundaries); ✅ T2.2 `App.test` (Clear Deck -> `deck_clear` -> empty state, Present disabled) | — | ⬜ J6 |
 | Persistence | `active_deck_id.txt`, restore on startup | — | ✅ `deck_journeys` restore/no-op/corrupt/clear-then-restart/`restore_on_startup` (saved index + timer survive restart; product bug fixed), re-import resets index/timer, `spawn_timer` ticks | — | ⬜ J7 |
-| Architecture invariants (CLAUDE.md) | no unwrap/expect in `commands/`, `mod app` gated, presentation capability listen-only (`core:event:default` only, dev `remote.urls`), controller capability, every window label in a capability, controller TS `AppEvent` union == Rust variants (presentation subset, same shapes), `{type,payload}` tagging, no secret-like config fields, `tauri/test` dev-only, no `withGlobalTauri`, presentation never imports invoke wrappers | — | ✅ T1.4 `tests/invariants.rs` (28 tests incl. scanner self-tests; every capability file + inline conf capabilities scanned for presentation grants, wildcard-aware; `.emit(` only in `app.rs` bridge (#2); unwrap/expect/panic!/todo! ban also covers `state.rs`; mutation-proven). **Not covered / deferred:** #1 process separation (no pipeline exists until Phase 2) and #4 coexistence (no static check possible). `state::mock_invoke_handler` is a non-gated test seam, accepted as harmless (not reachable from release IPC). | — | — |
+| Architecture invariants (CLAUDE.md) | no unwrap/expect in `commands/`, `mod app` gated, presentation capability listen-only (`core:event:default` only, dev `remote.urls`), controller capability, every window label in a capability, controller TS `AppEvent` union == Rust variants (presentation subset, same shapes), `{type,payload}` tagging, no secret-like config fields, `tauri/test` dev-only, no `withGlobalTauri`, presentation never imports invoke wrappers | — | ✅ T1.4 `tests/invariants.rs` (28 tests incl. scanner self-tests; every capability file + inline conf capabilities scanned for presentation grants, wildcard-aware; `.emit(` only in `app.rs` bridge (#2); unwrap/expect/panic!/todo! ban also covers `state.rs`; mutation-proven). **Not covered / deferred:** #1 process separation (no media pipeline on `main`; it lives on `feature/live-production`) and #4 coexistence (no static check possible). `state::mock_invoke_handler` is a non-gated test seam, accepted as harmless (not reachable from release IPC). | — | — |
 | Event-union drift (R5) | every Rust `AppEvent` variant is in each TS union or explicitly allow-listed | ✅ T1.4 `invariants.rs` (source-parsing) | ✅ T2.4 `src/lib/events.exhaustive.test.ts` in both frontends (controller 7, presentation 9 tests). The runtime half (Rust variants vs TS union names) overlaps T1.4 `invariants.rs`; new in T2.4: the type-level `Record<AppEvent['type'], true>` table (typecheck fails on union drift), the TS-side `NOT_MODELLED` allow-list with reasons and stale-entry detection (presentation, 11 controller-only variants), and a fail-loud `events.rs` parser (rejects discriminants, raw idents, unbalanced input; cross-checked against an independent reduction count) | — | — |
 | Window safety (Esc, hide-on-close) | Esc re-registered; OS close hides | — | — | — | ⬜ J4 (+ §9 for Esc) |
 
@@ -88,7 +88,7 @@ integration. No component/render tests, no E2E; coverage baseline in §12.
 - **Fixtures:** `src-tauri/tests/fixtures/` (and `dev-docs/test-assets/`), regenerated with
   `node dev-docs/test-assets/make_test_assets.cjs`. New fixtures go through that generator so
   they are reproducible, not hand-edited binaries.
-- **Isolation:** every L4 run uses its own temp data dir (`STREAMDECK_DATA_DIR`, T4.1),
+- **Isolation:** every L4 run is meant to use its own temp data dir (a seam planned in T4.1; no such env var exists in the code today),
   WebView2 user-data folder, and CDP port. No test reads or writes the real `%APPDATA%`.
 - **Build under test:** primary = production-like (`cargo tauri build --no-bundle`), because
   it exercises `beforeBuildCommand` + `merge-presentation-dist` (the bug class that hid for
@@ -153,7 +153,7 @@ Tauri/OS-integration bumps.
 
 - [ ] M1 Two physical displays: Present goes fullscreen on the assigned display; always-on-top
       only with 2+ displays; unplug assigned display → fallback to primary + `DisplayLost` shown.
-- [ ] M2 Single display mirrored to projector (ClickShare): Present is fullscreen, Alt+Tab
+- [ ] M2 Single display mirrored to a projector (casting dongle): Present is fullscreen, Alt+Tab
       reaches other windows.
 - [ ] M3 Global shortcuts: arrows advance/rewind from another focused app; Escape exits
       presenting and is re-registered on every Present.

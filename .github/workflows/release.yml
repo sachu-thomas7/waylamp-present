@@ -1,39 +1,41 @@
 name: release
 
-# Tag-triggered only (metered minutes); never runs on pull_request.
+# Tag-triggered only; never runs on pull_request, so signing secrets are never exposed to PRs.
 on:
   push:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   windows-installer:
     runs-on: windows-2022
     timeout-minutes: 60
+    permissions:
+      contents: write # create the draft release
     env:
       HAVE_AZURE_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Read pinned toolchain
         id: tc
         run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
 
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: ${{ steps.tc.outputs.channel }}
           components: clippy, rustfmt
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: ". -> target"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
 
@@ -84,7 +86,7 @@ jobs:
           if (Test-Path $exe) { throw 'streamdeck.exe left behind after uninstall' }
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-installer
           path: |

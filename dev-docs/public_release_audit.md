@@ -177,3 +177,19 @@ L1 `.claude/`/AI scaffolding published as-is is harmless but noisy; L2 CSP `styl
 - **PR #27** (LICENSE, `release.yml`, `tauri.conf.json`, Cargo/package.json, `check-bundle.sh`, `deny.toml`): blocks 4.1-4, 4.1-7 licence fields, release-workflow review.
 - **PR #9** (dependabot pdfium-render 0.9): decide before public.
 - **Name decision**: blocks the rename, README, signing policy and privacy text, and the fixtures regeneration.
+
+## Public-release status (2026-10-24, branch claude/public-cleanup-845485)
+
+Fixed in the tree:
+- H2/S3 owner-private and AI-process docs: deleted from the tree (history is not rewritten; the repo will be published as a fresh squashed commit). `unverified_items.md`, the roadmap, `release_bundling_plan.md` and the test docs were scrubbed and trimmed.
+- S2/M5 personal paths: replaced in `.claude/*`, `scripts/*`, `CLAUDE.md`, docs (hooks still fall back `cygpath $USERPROFILE` -> `$HOME` -> `$USERPROFILE`).
+- M2 README rewritten; `CLAUDE.md` refreshed. M3 added `SECURITY.md`, `CONTRIBUTING.md` (DCO), `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue and PR templates, `docs/privacy.md` (checked: no HTTP client crate in the dependency tree, no network code in `src-tauri/src`), `docs/code-signing-policy.md`, `CHANGELOG.md`.
+- M4/L4 CI: `permissions: contents: read` (release job alone has `contents: write`), all actions SHA-pinned, no `pull_request_target`, metered-minutes comments removed; actionlint 1.7.7 clean. `dtolnay/rust-toolchain` is pinned to a master SHA with `toolchain: 1.96.0` and stays ignored by Dependabot (bump by hand with `rust-toolchain.toml`). `deny.toml` licence comment was already fixed by PR #27. Licence fields are `GPL-3.0-or-later` in Cargo.toml and both package.json files.
+
+Depends on the later rename: M1, product name in README/`CLAUDE.md`/docs/policies, test-fixture names, `streamdeck.toml`, identifier, `test-assets` metadata (creator "StreamDeck"), L6 icon review.
+
+Needs the owner:
+- Contact: no email is published by design; SECURITY.md and CODE_OF_CONDUCT.md point to GitHub private vulnerability reporting, so that setting must be enabled after the repo is public.
+- Publish as a fresh squashed repo; drop `dev-docs/handover_presentation_release_2026-10-24.md` and this audit's old-history discussion in that step.
+- GitHub settings after the repo is public: ruleset/branch protection on `main` (PR + CI required, no force-push), private vulnerability reporting, Dependabot alerts and security updates, secret scanning + push protection, approval for first-time contributors' workflows, default `GITHUB_TOKEN` read-only. Close or merge Dependabot PR #9.
+- Signing applications (Certum, SignPath) and the SignPath attribution line only once SignPath is in use.

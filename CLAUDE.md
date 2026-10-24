@@ -1,12 +1,11 @@
 # StreamDeck
 
-Cross-platform desktop app (macOS/Windows/Linux) presentation control (import PPTX/PDF, projector output, controller with
-notes/timer/scene media, multi-display); live production is on `feature/live-production`. Built on Tauri v2 + Rust/Tokio +
-React/TypeScript. Goal: zero dependency on Mevo Studio / ProPresenter by Phase 5.
+Cross-platform desktop app (Windows primary; Linux builds in CI, macOS not built) for presentation control: import PPTX/PDF,
+projector output, controller with notes/timer/scene media, multi-display. Built on Tauri v2 + Rust/Tokio + React/TypeScript.
+GPL-3.0-or-later. Live production is developed on `feature/live-production`, not on `main`.
 
-Full spec: `dev-docs/streamdeck_product_roadmap_2026.md` — the authoritative phase/feature
-list with acceptance criteria. Read it before starting any new feature. Don't paste it
-wholesale into context — reference the specific phase/feature section needed.
+Scope and plans: `dev-docs/streamdeck_product_roadmap_2026.md`. Read it before starting any new feature, and
+reference only the section you need.
 
 ## Stack
 
@@ -94,7 +93,7 @@ controller/src/components/ui/  Design-system primitives (Button, IconButton, Bad
                             controller panel instead of hand-rolled inline styles; see
                             "Design system" below
 presentation/src/          Projector output — listen-only, zero invoke permissions
-dev-docs/                  Roadmap + one "AI handoff" doc per shipped feature (historical record)
+dev-docs/                  Roadmap, test plan, release process, unverified-items list
 scripts/verify.sh          Acceptance-gate script — see "Verification" below
 ```
 
@@ -155,61 +154,33 @@ isn't tracked in the repo.
 then merge `feature/live-production`. Keep edits to shared files (`events.rs`, `state.rs`, `app.rs`, `config.rs`, controller `App.tsx`) small meanwhile. Full plan: `dev-docs/handover_presentation_release_2026-10-24.md`.
 `verify.sh` still has its old per-feature structure for the remaining features; a tiered rebuild is a separate follow-on.
 
-## Current status (2026-10-24)
-- **2026-10-23 "stop the bleeding"** (WHIP/keyring/preview items below describe code now only on `feature/live-production`; fixes from `dev-docs/review/architecture_review_2026-10-23.md`, one commit each): **F-01 was real** (backgrounds/scene media never loaded: `naturalWidth 0`, video error 4, checked in the running app) and is fixed by the `sdmedia` URI scheme (`media_protocol.rs`: serves only files under the app data dir plus the one staged video, with Range; frontends build URLs via `lib/mediaUrl.ts`; CSP `img-src`/`media-src` allow it). `node scripts/check-media-render.mjs <repo> <video>` re-checks it, and that the projector cannot emit/invoke, against a running `cargo tauri dev` started with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`. F-08: presentation is listen-only for real, unused grants/shell plugin/`devtools` feature/script `unsafe-inline` removed; **in release builds the projector could also invoke every app command** (dev hid it: remote origin), so `build.rs` now declares an app manifest from the `state.rs` handler list and `permissions/controller-commands.toml` grants those commands to the controller only (adding a command means adding its `allow-…` line there; `invariants.rs` fails otherwise). F-03/F-10: `persist.rs` (temp+fsync+rename, `.bak`, damaged files set aside as `*.broken-<ts>`; startup never aborts; banner via `get_startup_notices`), slide timer restored only if saved <6 h ago, confirm-on-close while presenting. F-04: `pptx.rs` (zip-bomb/size/slide caps, `ImportLimits`), imports are staged (`deck_import_stage` → `deck_import_commit`/`discard`; `deck_import` = both, kept for automation), `src-tauri/fuzz` cargo-fuzz target run in Docker. F-05: WHIP always has a keychain token (random on first enable, clearing rotates), binds the LAN interface (`bind_address = "auto"`), rejects any request with `Origin`, no CORS. F-07: bridge replays slide/scene/presentation state after `BusLag` (`state::resync_events`), controller re-pulls the rest (`lib/resync.ts`). Deps: tokio and serde_with bumped (RUSTSEC-2026-0386 appeared in a fresh DB), deny.toml pruned and set to `unmaintained/unsound = "all"`, `scripts/osv-scan.sh` + CI job, `--locked`, nextest in CI, `rust-version` set. Still owed (needs the owner/hardware): see `dev-docs/unverified_items.md`.
-- **Unverified/owed checks live in `dev-docs/unverified_items.md` (prioritized) — update it each session; a feature's "done" claim should name which items it leaves open.**
-- **Release step 1 (2026-10-19) — PDFium bundling**: `release/deps.json` pins bblanchon/pdfium-binaries `chromium/8100` (157.0.8100.0) with per-platform SHA-256 (windows-x64, linux-x64; no macOS). `bash scripts/fetch-deps.sh [platform]` downloads, verifies (hard fail on mismatch), and stages the library + license into gitignored `src-tauri/resources/pdfium/`; idempotent. Bundling uses the overlay `release/bundle.pdfium.conf.json`, passed only to builds: `cargo tauri build --config release/bundle.pdfium.conf.json` (after fetch-deps). It is deliberately NOT in `tauri.conf.json` or a `tauri.<platform>.conf.json`, because tauri-build errors on a resource glob that matches nothing and would break `cargo test`/clippy/`cargo tauri dev` on a clean checkout. `bash scripts/check-bundle.sh <installer.exe|.deb|dir>` extracts (7z/dpkg-deb, never executes) and asserts required files, no `.pdb`/fixtures/tests leaks, and size vs `release/bundle-budget.json` (Windows 10 MB; Linux unset). Gate: `bash scripts/verify.sh release`. Found and fixed a real bug the ignored test had hidden: PDF import failed every page with "image format Png is not supported" (pdfium-render enables `image` without PNG) — added `image` 0.25 with `png`. Windows NSIS build verified (installer 6.8 MB); Linux layout/fetch is untested (no Linux machine). Later steps (GStreamer, NDI) extend `REQUIRED` in check-bundle.sh.
-- **2026-10-18**: jump-to-slide takes a 1-based number (matches the "n / total" badge; Go is disabled outside 1..total); the selected thumbnail scrolls into view; no-notes shows "No notes for this slide"; Tauri crates bumped to 2.12 to match the npm `@tauri-apps/api` 2.12 (the CLI warns on mismatch). Manually verified in `cargo tauri dev` via UI Automation (navigate/jump/present/stop).
-- **T0.2 (2026-10)**: `cargo fmt --check` is now in `verify.sh core` (and `verify.sh t0`); tree was reformatted once. CI runs it too (2026-10-21).
-- **T0.3 (2026-10)**: test directory contract documented in the test-authoring skill (§2b), `e2e/{specs,pages,fixtures}` created with READMEs, `verify.sh t0` asserts all dirs exist.
+## Current status
 
-- **Phase 0** (F0.1–F0.4: bootstrap, IPC layer, event bus, TOML config) — done.
-- **Phase 1 — all of F1.1–F1.5 done**: presentation window + slide renderer, slide state
-  machine, controller slide panel + timer, PPTX/PDF import + scene media push, and
-  multi-display assignment (`display.rs` — monitor enumeration, hotplug polling every 2s,
-  `DisplaysChanged`/`DisplayLost`/`DisplayAssigned` events, assignment persisted to
-  `streamdeck.toml`, fallback to primary display on disconnect). 49/49 Rust tests passing,
-  clippy clean, typecheck clean in both frontends. `bash scripts/verify.sh f1` is green.
-- **Frontend tests are thin** — Vitest store + event-wiring tests only (controller 12,
-  presentation 4; baseline coverage in `dev-docs/test_plan.md` §12), no component render
-  tests yet. Rust side has solid coverage (49 `#[test]`s across bus, config,
-  config_loader, slide, slide_state_machine, deck_importer, display, commands::system).
-- `deck_importer.rs` now has fixture-based integration tests
-  (`src-tauri/tests/deck_import_fixtures.rs`) against real generated `.pptx`/`.pdf` files in
-  `src-tauri/tests/fixtures/` (same files as `dev-docs/test-assets/`, regenerate both via
-  `node dev-docs/test-assets/make_test_assets.cjs`). This caught and fixed a real bug: the
-  `.pptx` parser only handled `<p:ph type="title">` when quick-xml emitted it as an
-  `Event::Start`, but real PowerPoint always writes placeholders as self-closing tags
-  (`Event::Empty`) — title/body extraction was silently broken for every real-world file.
-  Fixed via a shared `classify_ph()` helper called from both event arms.
-- **PDF import needs a native `pdfium` library** — `load_pdfium` searches a pure candidate list (`pdfium_candidate_dirs`: next to exe, `resources/pdfium`, `pdfium/`, `../lib/StreamDeck` for deb/AppImage, cargo `deps/` parent and the staging dir in debug builds), then the system, and returns an `AppError` instead of panicking. The real PDF fixture test now runs when pdfium is found and prints SKIPPED otherwise. See the Release bundling entry below.
-- Git history was ~5 commits behind the actual working tree until 2026-09-18 — F1.1–F1.4
-  and the scene/deck-import system existed only as uncommitted/untracked changes. Now
-  clean and committed; keep commits current going forward — don't let multiple shipped
-  features pile up uncommitted.
-- **Controller UI redesign (2026-09-19)**: the design-system pass above — replaced every
-  hand-rolled inline-style panel with the `ui/` primitives, added `SlidePayload.
-  layout_unsupported` end-to-end (was on the internal `SlideEntry` since F1.4 but never
-  reached the frontend, despite F1.4's own AC requiring it visible in the controller),
-  moved Displays/Build Info behind a Settings popover and Shortcuts behind a Help popover
-  (progressive disclosure — they're configured once, not touched during a show), and
-  fixed three UX issues found in manual testing: an unstyled native scrollbar on the
-  thumbnail strip, the Scene Media active-source toggle having no visible on-screen
-  consequence (pushing media only stages it — the toggle is what actually puts it on the
-  projector, and nothing said so), and Prev/Next being squeezed into tiny icon buttons
-  sandwiched inside the Jump-to-slide group instead of being the prominent, adjacent pair
-  an operator clicks constantly.
-- Removed a dead scaffold leftover at the repo root (`tsconfig.json`, `tsconfig.node.json`,
-  `package.json` from before the repo split into `controller/`/`presentation/` — the
-  tsconfig's `include: ["src"]` pointed at a `src/` containing only an icon `assets/`
-  folder, no TypeScript; confirmed unused by both `verify.sh` and CI, which always use
-  `--prefix controller`/`--prefix presentation` explicitly).
-
-- **T2.1 (2026-10)**: `src/test/mockTauri.ts` in both frontends (`installMockIPC` with call log, `emitAppEvent` via real `listen`/`emit`, `renderApp`), setup runs `clearMocks` after each test. Gate: `bash scripts/verify.sh t2.1` (`t2`).
-- **T2.2 (2026-10)**: controller component tests (`App`, `SlideDeckPanel`, `PresentButton`, `SceneMediaPanel`, `DisplayPanel` `*.test.tsx`) over `installMockIPC` + real stores (`test/componentHelpers.ts` resets them); `data-testid`s added: `preview-current`, `preview-next`; thumbnails are real `<button aria-label="Slide N">`s and `SegmentedControl` exposes `aria-pressed`. Two bugs it found are fixed (keyboard shortcuts ignore input fields; failed display assign no longer shows Assigned); gate asserts no `it.fails` remain. Gate: `bash scripts/verify.sh t2.2` (`t2`).
-- **T2.4 (2026-10)**: `src/lib/events.exhaustive.test.ts` in both frontends: typed `Record<AppEvent['type'], true>` table (typecheck fails on union drift) plus runtime parse of `events.rs` (via `?raw`; `vitest.config.ts` gained `server.fs.allow` for the project dir + `src-tauri/src`; the parser throws on discriminants/raw idents/unbalanced input) failing on a new Rust variant, TS-only variant, or stale `NOT_MODELLED` allow-list entry (presentation only;: 11 controller-only variants, each with a reason). Gate: `bash scripts/verify.sh t2.4` (`t2`). Phase T2 complete.
-- **T2.3 (2026-10)**: `presentation/src/App.test.tsx` (27 tests) + `App.lifecycle.test.tsx` (StrictMode unlisten check; found and fixed a real listener leak: `App.tsx` now uses one `onAppEvent` listener with safe cleanup) over `installMockIPC` + real `emit`: slide/background/media/empty rendering, staged-vs-active media gating, a typed table asserting every non-rendered `AppEvent` variant is ignored (adding a variant breaks typecheck), and `ipc.calls` empty after every test (listen-only). `data-testid`s added: `slide-canvas`, `slide-background`, `scene-media-image`, `scene-media-video`. Gate: `bash scripts/verify.sh t2.3` (`t2`).
-- **Coverage visibility (T0.4)**: `npm run test:coverage` in `controller/` and `presentation/` (Vitest v8, report-only, no thresholds, output in gitignored `coverage/`); baseline in `dev-docs/test_plan.md` §12. `verify.sh t0` checks the scripts exist.
+- **Phase 0 and Phase 1 (F1.1–F1.5) are done**: window/event/config foundations, slide renderer and state machine,
+  controller panel and timer, PPTX/PDF import with scene media, multi-display assignment with hotplug fallback.
+- **Hardening done** (see `dev-docs/public_release_audit.md` and git history): the `sdmedia` URI scheme serves
+  backgrounds/scene media (`media_protocol.rs`, only files under the app data dir plus the one staged video, with Range;
+  frontends build URLs via `lib/mediaUrl.ts`); the presentation window is listen-only and in release builds
+  `build.rs` declares an app manifest from the `state.rs` handler list so only the controller may invoke commands
+  (adding a command means adding its `allow-…` line to `permissions/controller-commands.toml`; `invariants.rs` fails
+  otherwise); `persist.rs` does atomic writes with `.bak` and sets damaged files aside as `*.broken-<ts>`; imports are
+  staged (`deck_import_stage` → `deck_import_commit`/`discard`) with size/zip-bomb caps in `pptx.rs` and a cargo-fuzz
+  target in `src-tauri/fuzz`; the bridge replays state after `BusLag` (`state::resync_events`, `lib/resync.ts`).
+  `node scripts/check-media-render.mjs <repo> <video>` re-checks media rendering and the projector's lack of
+  emit/invoke against a running `cargo tauri dev` started with
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
+- **PDF import needs a native `pdfium` library**: `load_pdfium` searches a candidate list (next to the exe,
+  `resources/pdfium`, `pdfium/`, `../lib/StreamDeck` for deb/AppImage, the staging dir in debug builds), then the system,
+  and returns an `AppError` instead of panicking. `release/deps.json` pins the checksummed binaries and
+  `bash scripts/fetch-deps.sh [platform]` stages them; installers bundle them via `release/bundle.pdfium.conf.json`
+  (deliberately not in `tauri.conf.json`: tauri-build errors on a resource glob matching nothing).
+- **Tests**: Rust unit, integration (mock Tauri runtime harness in `src-tauri/tests/common`), fixture-based importer
+  tests, `invariants.rs`; Vitest store/component/event-wiring tests in both frontends (`src/test/mockTauri.ts`);
+  `src/lib/events.exhaustive.test.ts` keeps the TS `AppEvent` unions in step with `events.rs`. Coverage:
+  `npm run test:coverage` in each frontend. Plans: `dev-docs/test_plan.md`, `dev-docs/test_framework_roadmap.md`.
+- **Owed manual checks** are listed (prioritized) in `dev-docs/unverified_items.md`; update it when you change behaviour
+  that only a real launch can confirm.
+- The product name and identifier are due to change before the first release; keep edits that mention the name minimal.
 
 ## Verification — `scripts/verify.sh`
 
@@ -241,16 +212,15 @@ Windows installer: `bash scripts/build-release.sh` (no args; optional `STREAMDEC
 
 ## Local environment note (Windows)
 
-`cargo`/`rustup` tools live in `/c/Users/<you>/.cargo/bin`; Node is managed via `fnm` —
-neither is on the default non-interactive shell PATH. **`$HOME` in this Git Bash/MSYS
-environment resolves to the MSYS home (`/c/msys64/home/<you>`), not the Windows user
-profile** — `$HOME/.cargo/bin` silently doesn't exist. Use the explicit Windows path:
+`cargo`/`rustup` live in `%USERPROFILE%\.cargo\bin`; Node is managed via `fnm`. Neither is on the default
+non-interactive Git Bash PATH, and **`$HOME` in Git Bash/MSYS resolves to the MSYS home, not the Windows profile**, so
+`$HOME/.cargo/bin` may not exist. Use:
 ```
-export PATH="/c/Users/<you>/.cargo/bin:$PATH"
+export PATH="$(cygpath -u "$USERPROFILE")/.cargo/bin:$PATH"
 eval "$(fnm env --shell bash)"
 ```
-(`.claude/hooks/*.sh` fall back through `/c/Users/sachu/.cargo/bin` → `$HOME/.cargo/bin` →
-`$USERPROFILE/.cargo/bin` for exactly this reason — don't "simplify" that to just `$HOME`.)
+`.claude/hooks/*.sh` and `scripts/verify.sh` try the `cygpath`-converted profile first, then `$HOME`, then
+`$USERPROFILE`; don't simplify that to just `$HOME`.
 
 ## Editor / LSP setup
 
@@ -266,7 +236,7 @@ macros the same way a bare `cargo build` would fail. Run `bash scripts/verify.sh
 --no-frontend` once (it bootstraps both frontend builds) before expecting a clean
 rust-analyzer state on a fresh checkout.
 
-## Hard-won lessons (curated — see individual `dev-docs/*-handoff.md` for the full running list)
+## Hard-won lessons (curated)
 
 - `generate_handler![]` needs full module paths — no `pub use` re-exports.
 - No manual `From<AppError> for InvokeError` — Tauri v2's blanket impl covers it.
@@ -312,40 +282,23 @@ rust-analyzer state on a fresh checkout.
 
 ## Agentic tooling in this repo
 
-- `/verify` skill (`.claude/skills/verify/`) — wraps `scripts/verify.sh`, the real
-  Definition-of-Done gate. Use it instead of running `cargo test` alone and calling
-  something done.
-- `feature-builder` subagent (`.claude/agents/feature-builder.md`) — implements one roadmap
-  feature end-to-end (Rust + frontend + verify.sh gate + tests) following this file's
-  conventions. Invoke it for "implement FX.Y"-shaped requests; it never runs git commands.
-- A `PreToolUse` hook (`.claude/settings.json` → `.claude/hooks/pre-push-verify.sh`) runs
-  `verify.sh core` before any `git push` and blocks the push if it fails (the script
-  itself early-exits unless stdin contains `git push`, since the `if:` filter misfires). A `PostToolUse`
-  hook (`.claude/hooks/fmt-rust.sh`) auto-runs `cargo fmt` after editing any `.rs` file.
-- T1.1 done: mock-runtime harness in `src-tauri/tests/common/mod.rs` (`TestApp`, `collect_events`) over `state::manage_core`/`mock_invoke_handler` (shared with `app.rs`); only runtime-generic commands are reachable in the mock until the `tauri::AppHandle` commands are made generic. Gate: `bash scripts/verify.sh t1`.
-- T1.2 done: every command is runtime-generic and on the shared `handler!` list; deck/scene commands read the managed `state::AppDataDir` (not `app.path()`); deck restore, timer spawn and display-state creation moved from `app.rs` into `state.rs` (`restore_on_startup`, `spawn_timer`, `manage_display`). `tests/deck_journeys.rs` covers import/nav/boundaries/clear/restore. Gate: `bash scripts/verify.sh t1.2`. **Manual `cargo tauri dev` launch required** (app.rs wiring changed). Fixed product bug found by T1.2: startup restore applied the saved slide index/timer to the stub deck before `load_deck` reset them; `restore_on_startup` now loads the deck first.
-- T1.3 done: display commands take an injected `display::DisplayProvider` (production `TauriDisplayProvider`, harness `FakeDisplays`) and a managed `state::ConfigPath` (never `app_config_dir`); the 2s poll body is `display::reconcile_displays`; `error` module is now `pub`. `tests/{scene,display,timer,config}_journeys.rs` (34 tests). Gate: `bash scripts/verify.sh t1.3`. **Manual `cargo tauri dev` launch required** (app.rs/display wiring changed: confirm display list, assignment, hotplug fallback).
-- T1.4 done: `src-tauri/tests/invariants.rs` (28 tests, hardened after review: all capability files + inline, string/comment-aware panic scan incl. `state.rs`, `.emit(` allow-list, structural Cargo/conf parsing) parses the real repo files for invariants: no unwrap/expect in `commands/`, `mod app` gated, capability files (presentation listen-only + dev `remote.urls`), window labels covered by capabilities, controller/presentation TS `AppEvent` unions vs `events.rs`, no secret-like config fields, `tauri/test` dev-only, no `withGlobalTauri`. Gate: `bash scripts/verify.sh t1.4`. Test-only; no product change.
-- Testing: `dev-docs/test_framework_roadmap.md` (build order, items T0–T7) and
-  `dev-docs/test_plan.md` (coverage, journeys, upgrade protocol, manual checklist). The
-  `test-authoring` skill (`.claude/skills/test-authoring/`) is the how-to; the `test-engineer`
-  subagent implements one roadmap test item (never runs git); `test-reviewer` is a read-only
-  false-green reviewer. Real-app E2E (Playwright over WebView2 CDP) is local-only — keep it
-  out of CI `pull_request` runs (metered minutes).
-- `scripts/uia-dump.ps1` drives the running real app via Windows UI Automation (no args: list controller controls; `-Click "<name substring>"`: invoke one) — launch with `cargo tauri dev`.
-- The built-in `/run` skill can launch the app for manual verification; `/code-review` for
-  an independent review pass on a diff.
+- `/verify` skill (`.claude/skills/verify/`) wraps `scripts/verify.sh`, the real Definition-of-Done gate. Use it instead
+  of running `cargo test` alone and calling something done.
+- A `PreToolUse` hook (`.claude/settings.json` → `.claude/hooks/pre-push-verify.sh`) runs `verify.sh push` before any
+  `git push` and blocks the push if it fails (the script early-exits unless stdin contains `git push`, since the `if:`
+  filter misfires). A `PostToolUse` hook (`.claude/hooks/fmt-rust.sh`) runs `cargo fmt` after editing any `.rs` file.
+- Testing: `dev-docs/test_framework_roadmap.md` (items T0–T7) and `dev-docs/test_plan.md` (coverage, journeys, manual
+  checklist). The `test-authoring` skill is the how-to; the `test-engineer` subagent implements one roadmap test item
+  (never runs git); `test-reviewer` is a read-only false-green reviewer. Real-app E2E (Playwright over WebView2 CDP) is
+  local-only; keep it out of CI `pull_request` runs.
+- `scripts/uia-dump.ps1` drives the running real app via Windows UI Automation (no args: list controller controls;
+  `-Click "<name substring>"`: invoke one); launch with `cargo tauri dev`.
 
-## Working agreement for AI-assisted sessions
+## Working agreement
 
-- Treat `dev-docs/streamdeck_product_roadmap_2026.md` as the spec of record for scope;
-  treat this file as the spec of record for *how* to work in this repo day to day.
-- `dev-docs/*-handoff.md` are historical, feature-scoped session logs (pre-Claude-Code
-  workflow) — useful for lessons/context on a specific past feature, not a template to keep
-  producing per-feature going forward now that context persists across a session.
-- A feature isn't done until `bash scripts/verify.sh <feature>` passes — not just
-  `cargo test`.
-- Commit as you go. Don't let multiple completed features accumulate uncommitted — see
-  "Current status" above for what that already cost once.
-- Windows/CRLF: `.gitattributes` now normalizes line endings (`eol=lf`) — don't fight it
-  by re-adding per-file `core.autocrlf` overrides.
+- `dev-docs/streamdeck_product_roadmap_2026.md` is the spec of record for scope; this file is the spec of record for
+  *how* to work in this repo day to day.
+- A change isn't done until `bash scripts/verify.sh push` passes (not just `cargo test`), plus a manual
+  `cargo tauri dev` launch for window/IPC wiring changes.
+- Commit as you go; sign off commits (`git commit -s`, see `CONTRIBUTING.md`). Don't let completed work pile up uncommitted.
+- Windows/CRLF: `.gitattributes` normalizes line endings (`eol=lf`); don't fight it with per-file `core.autocrlf`.

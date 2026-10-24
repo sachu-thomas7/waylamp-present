@@ -12,12 +12,14 @@ on:
       - "**.md"
       - "dev-docs/**"
 
-# Private repo — Actions minutes are metered (macOS runs count 10x, Windows 2x against
-# the monthly quota). Cancel superseded runs on the same ref instead of letting an
-# outdated push's jobs finish alongside the new one.
+# Cancel superseded runs on the same ref instead of letting an outdated push's jobs finish
+# alongside the new one.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -35,17 +37,18 @@ jobs:
         os: ${{ fromJSON(github.event.pull_request.user.login == 'dependabot[bot]' && '["ubuntu-24.04"]' || '["ubuntu-24.04","windows-2022"]') }}
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # Pinned by rust-toolchain.toml; matching it here avoids installing (and caching)
+      # Keep `toolchain` equal to rust-toolchain.toml (Dependabot ignores this action); matching it here avoids installing (and caching)
       # two separate toolchains in the same job.
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@1.96.0
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: 1.96.0
           components: clippy, rustfmt
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: ". -> target"
 
@@ -61,7 +64,7 @@ jobs:
             patchelf
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"
@@ -70,7 +73,7 @@ jobs:
             presentation/package-lock.json
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
         with:
           tool: nextest
 
@@ -85,8 +88,8 @@ jobs:
     name: cargo-deny (advisories, licenses, bans, sources)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           manifest-path: src-tauri/Cargo.toml
           arguments: --locked
@@ -96,7 +99,7 @@ jobs:
     name: osv-scanner (all lockfiles)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: bash scripts/verify.sh deps --only osv
 
   # ── Frontend type-checks, lint, unit tests ──────────────────────────────────
@@ -105,10 +108,10 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
           cache: "npm"

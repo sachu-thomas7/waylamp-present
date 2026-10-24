@@ -80,13 +80,13 @@ e2e/                              L4 harness (own package.json), specs/, pages/,
 ## 4. Commands (Windows / Git Bash)
 
 ```bash
-export PATH="/c/Users/sachu/.cargo/bin:$PATH"; eval "$(fnm env --shell bash)"
+export PATH="/c/Users/<you>/.cargo/bin:$PATH"; eval "$(fnm env --shell bash)"
 cargo test --manifest-path src-tauri/Cargo.toml <filter>
 npm test --prefix controller -- <file-or-pattern>      # vitest run
 npm test --prefix presentation -- <file-or-pattern>
 bash scripts/verify.sh core | t1 | t2 | t3 | e2e       # gates
 ```
-`$HOME` is the MSYS home — use the explicit `/c/Users/sachu/...` paths. Frontend `dist/`
+`$HOME` is the MSYS home — use the explicit `/c/Users/<you>/...` paths. Frontend `dist/`
 must exist before cargo builds (the `custom-protocol` feature embeds it); `verify.sh`
 bootstraps this. PowerShell is the escape hatch if a broken tree blocks Bash via the hook.
 

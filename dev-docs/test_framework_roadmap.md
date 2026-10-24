@@ -219,8 +219,8 @@ WebdriverIO `@wdio/tauri-service` (embedded provider, feature-gated plugin) and 
 roadmap before T4.1.
 
 ### T4.1 — App-data isolation seam
-Tests must not touch the real `%APPDATA%` deck state. Add a debug/`e2e`-only override
-(e.g. env `STREAMDECK_DATA_DIR`) read where `app_data_dir()` is resolved
+Tests must not touch the real `%APPDATA%` deck state. Not implemented yet: add a debug/`e2e`-only override
+(proposed env name `STREAMDECK_DATA_DIR`, does not exist in the code) read where `app_data_dir()` is resolved
 (`app.rs`, `commands/deck.rs`). Compiled out of release.
 **Acceptance:** with the env var set, no files are written to the real app-data dir; a unit
 test covers the resolution function; release build ignores the variable.
@@ -303,9 +303,9 @@ Hook that runs `scan-tests.sh` on edited files under test dirs and feeds violati
 
 ---
 
-## Phase T7 — Extension points for product Phase 2+
+## Phase T7 — Extension points for live production (branch `feature/live-production`)
 
-No work now; design hooks so camera/NDI/streaming features are testable without hardware:
+No work on `main`; design hooks so camera/NDI/streaming features (developed on `feature/live-production`) are testable without hardware:
 GStreamer `videotestsrc`/`audiotestsrc` fakes behind a trait; NDI/WHIP sources faked at the
 pipeline boundary; stream-health events asserted on the bus (L2) before any real-device E2E.
 Each new product feature's `run_fX_Y()` gate must declare which layers it adds tests to.
