@@ -41,15 +41,9 @@ describe('mockTauri helpers (controller)', () => {
     const { calls, unhandled } = installMockIPC({
       get_build_info: () => ({ version: '0.0.0', tauri_version: '2', os: 'test', arch: 'x', profile: 'debug' }),
       get_startup_notices: () => [],
-      stream_get_config: () => ({ settings: {}, destinations: [] }),
-      stream_get_status: () => ({ state: 'Stopped', encoder: null, hardware: false, started_unix_ms: null, destinations: [] }),
       slide_get_current: () => null,
       deck_get_all_slides: () => [],
       scene_get_active_source: () => 'SlideDeck',
-      ndi_list_sources: () => ({ discovered: [], added: [], unavailable: null }),
-      preview_get_snapshot: () => ({ frames: [], stats: [] }),
-      preview_get_layout: () => '2x2',
-      whip_get_info: () => ({ enabled: false, running: false, port: 8088, host: null, token_set: false, unavailable: null, last_error: null, slots: [] }),
     });
     renderApp();
     await waitFor(() => expect(screen.getByText('No slides yet')).toBeInTheDocument());
@@ -57,14 +51,8 @@ describe('mockTauri helpers (controller)', () => {
       'deck_get_all_slides',
       'get_build_info',
       'get_startup_notices',
-      'ndi_list_sources',
-      'preview_get_layout',
-      'preview_get_snapshot',
       'scene_get_active_source',
       'slide_get_current',
-      'stream_get_config',
-      'stream_get_status',
-      'whip_get_info',
     ]);
     expect(unhandled).toEqual([]);
     const before = calls.length;

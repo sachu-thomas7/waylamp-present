@@ -7,13 +7,7 @@ import { PresentButton } from './components/PresentButton';
 import { SlideDeckPanel } from './components/SlideDeckPanel';
 import { SceneMediaPanel } from './components/SceneMediaPanel';
 import { DisplayPanel } from './components/DisplayPanel';
-import { PipelinePanel } from './components/PipelinePanel';
-import { NdiSourcesPanel } from './components/NdiSourcesPanel';
-import { WhipPanel } from './components/WhipPanel';
-import { CompositorPanel } from './components/CompositorPanel';
-import { CameraPreviewGrid } from './components/CameraPreviewGrid';
 import { StartupNotices } from './components/StartupNotices';
-import { StreamPanel } from './components/StreamPanel';
 import { Popover } from './components/ui/Popover';
 import { IconButton } from './components/ui/IconButton';
 import { Button } from './components/ui/Button';
@@ -59,7 +53,7 @@ export default function App() {
             <IconPlay />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '0.01em' }}>StreamDeck</span>
+            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "0.01em" }}>StreamDeck</h1>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Controller</span>
           </div>
         </div>
@@ -93,18 +87,6 @@ export default function App() {
             )}
           >
             <DisplayPanel />
-            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
-              <PipelinePanel />
-            </div>
-            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
-              <NdiSourcesPanel />
-            </div>
-            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
-              <WhipPanel />
-            </div>
-            <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
-              <CompositorPanel />
-            </div>
             <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>Deck</span>
               <Button
@@ -136,16 +118,14 @@ export default function App() {
       <StartupNotices />
 
       {/* Main content */}
-      <div style={{ flex: 1, display: 'flex', gap: 20, padding: '20px 24px', minHeight: 0, overflow: 'auto' }}>
-        <div style={{ flex: '1 1 68%', display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
-          <CameraPreviewGrid />
+      <main className="app-main">
+        <div className="app-main-primary">
           <SlideDeckPanel />
         </div>
-        <div style={{ flex: '1 1 32%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <aside className="app-main-aside">
           <SceneMediaPanel />
-          <StreamPanel />
-        </div>
-      </div>
+        </aside>
+      </main>
     </div>
   );
 }

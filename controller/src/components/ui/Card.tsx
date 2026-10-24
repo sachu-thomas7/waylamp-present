@@ -19,7 +19,7 @@ export function Card({ title, headerRight, children, fill = false }: CardProps) 
         display: 'flex',
         flexDirection: 'column',
         gap: 14,
-        ...(fill ? { flex: 1, minHeight: 0 } : {}),
+        ...(fill ? { flex: 1 } : {}),
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>

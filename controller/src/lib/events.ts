@@ -3,7 +3,7 @@
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { SlidePayload } from './ipc';
 import type { SceneMediaPayload } from './ipc';
-import type { DestinationState, DisplayInfo, NdiSource, PipelineState, PreviewFrame, SourceGeometry, StreamFormat, StreamState, WhipLinkState } from './ipc';
+import type { DisplayInfo } from './ipc';
 
 export type AppEvent =
   | { type: 'BusLag'; payload: { receiver_id: string; dropped: number } }
@@ -24,31 +24,8 @@ export type AppEvent =
   | { type: 'SceneSourceChanged'; payload: { source: 'SlideDeck' | 'SceneMedia' } }
   | { type: 'DisplaysChanged';    payload: DisplayInfo[] }
   | { type: 'DisplayAssigned';    payload: { display_id: string } }
-  | { type: 'DisplayLost';        payload: null }
-  | { type: 'PipelineStateChanged'; payload: { state: PipelineState } }
-  | { type: 'PipelineError';   payload: { element: string; message: string } }
-  | { type: 'PipelineWarning'; payload: { element: string; message: string } }
-  | { type: 'PipelineLatency'; payload: { element: string } }
-  | { type: 'PipelineQos';     payload: { element: string; processed: number; dropped: number } }
-  | { type: 'SourceDiscovered'; payload: { source: NdiSource } }
-  | { type: 'SourceLost';       payload: { name: string } }
-  | { type: 'SourceListChanged'; payload: { sources: NdiSource[] } }
-  | { type: 'SourceAdded';      payload: { name: string; format: StreamFormat } }
-  | { type: 'SourceRemoved';    payload: { name: string } }
-  | { type: 'SourceStats';      payload: { name: string; width: number; height: number; fps: number; latency_ms: number } }
-  | { type: 'WhipServerChanged';  payload: { running: boolean; port: number } }
-  | { type: 'WhipSessionChanged'; payload: { slot: string; state: WhipLinkState } }
-  | { type: 'CompositorStateChanged'; payload: { running: boolean; element: string; hardware: boolean } }
-  | { type: 'CompositorLayoutChanged'; payload: { sources: SourceGeometry[] } }
-  | { type: 'StreamStateChanged'; payload: { state: StreamState } }
-  | { type: 'StreamDestinationChanged'; payload: { id: string; state: DestinationState } }
-  | { type: 'StreamHealth'; payload: { id: string; bitrate_kbps: number; dropped_frames: number } };
+  | { type: 'DisplayLost';        payload: null };
 
 export function onAppEvent(handler: (event: AppEvent) => void): Promise<UnlistenFn> {
   return listen<AppEvent>('app-event', (e) => handler(e.payload));
-}
-
-// High-rate thumbnails use their own channel (not the AppEvent bus) so they never flood the other window or the bus.
-export function onPreviewFrame(handler: (frame: PreviewFrame) => void): Promise<UnlistenFn> {
-  return listen<PreviewFrame>('preview-frame', (e) => handler(e.payload));
 }
