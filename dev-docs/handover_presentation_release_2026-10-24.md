@@ -171,7 +171,7 @@ Add: `THIRD_PARTY_NOTICES.txt` (PDFium BSD/Apache, Rust crates, npm packages) ge
 
 | # | Work | Size | Depends on | Done when |
 |---|---|---|---|---|
-| 1 | Time current `verify.sh core` and `all` | S | none | numbers recorded here: `core` 4m15s (incl. frontend bootstrap on a fresh worktree, warm target dir), full `--no-frontend` 9m18s (471 checks passed, 1 warning, 1 skipped), pre-split tree 71275fe |
+| 1 | Time current `verify.sh core` and `all` | S | none | numbers recorded here (after split: `core` 95 s, full 158 s with 307 checks; verify.sh 1380 -> 1046 lines): `core` 4m15s (incl. frontend bootstrap on a fresh worktree, warm target dir), full `--no-frontend` 9m18s (471 checks passed, 1 warning, 1 skipped), pre-split tree 71275fe |
 | 2 | Create `feature/live-production` + push | S | none | branch on origin |
 | 3 | Removal commit on a PR branch (4.2-4.4) | L | 2 | `push`-equivalent checks green, no live surface in UI, no listener/keychain |
 | 4 | Rebuild `verify.sh` as tiers; wire CI + hook to it | M | 1, 3 | `quick`/`push` documented; timing compared to #1 |
@@ -219,3 +219,6 @@ Start #7's identity validation and the name decision first; they have waiting ti
 
 - 2026-10-24 step 1 done: baseline on 71275fe: `verify.sh core` 255 s (20 checks), `verify.sh --no-frontend` (all) 558 s (471 checks, 0 failed, 1 warning, 1 skipped). Same box, warm `target`.
 - 2026-10-24 step 2 done: `feature/live-production` created at 71275fe and pushed to origin; untouched since.
+- 2026-10-24 steps 3-4 done on branch claude/split-presentation-only-e3a679: removal in ONE commit (101 files, -13.8k lines), docs/root-scaffold in a second. Rust 175 tests, controller vitest 168 -> 107, presentation 52 -> 52. `cargo tree`: no keyring/axum/gstreamer/qrcode/sysinfo/png/base64.
+- 2026-10-24 step 5 done: verify core 95 s, full 158 s (307 checks, 0 failed). Manual `cargo tauri dev`: Settings = Displays, Deck, Build Info only; no listening socket; check-media-render.mjs all PASS except video not tested (no fixture video passed). Not done: UIA check of Quit-while-presenting etc. (unchanged code).
+- Follow-ups left: verify.sh tier redesign (still per-feature, 1046 lines); `AppError::Keychain` variant kept (harmless); handler-count floor in invariants.rs lowered 40 -> 20; `.claude/agents/feature-builder.md` line 51 mentions GStreamer/NDI.
