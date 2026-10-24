@@ -190,6 +190,6 @@ Depends on the later rename: M1, product name in README/`CLAUDE.md`/docs/policie
 
 Needs the owner:
 - Contact: no email is published by design; SECURITY.md and CODE_OF_CONDUCT.md point to GitHub private vulnerability reporting, so that setting must be enabled after the repo is public.
-- Publish as a fresh squashed repo.
+- Decision: the existing repository is published with its history (gitleaks clean, 126 commits, 2026-10-24); the handover doc has been removed.
 - GitHub settings after the repo is public: ruleset/branch protection on `main` (PR + CI required, no force-push), private vulnerability reporting, Dependabot alerts and security updates, secret scanning + push protection, approval for first-time contributors' workflows, default `GITHUB_TOKEN` read-only. Close or merge Dependabot PR #9.
 - Signing applications (Certum, SignPath) and the SignPath attribution line only once SignPath is in use.
