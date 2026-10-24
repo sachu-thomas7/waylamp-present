@@ -206,9 +206,10 @@ export function SlideDeckPanel() {
       headerRight={<Badge>{totalSlides ? `${currentIndex + 1} / ${totalSlides}` : '-- / --'}</Badge>}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: -6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 7, width: 150 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, boxSizing: 'border-box', height: 32, padding: '0 10px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', width: 150 }}>
           <IconSearch style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           <input
+            aria-label="Filter slides"
             placeholder="Filter slides…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -276,11 +277,11 @@ export function SlideDeckPanel() {
       {/* Current + Next preview */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start' }}>
         <div data-testid="preview-current" style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Current</div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Current</div>
           {current && <SlideCanvas slide={current} fluid />}
         </div>
         <div data-testid="preview-next" style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Next</div>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Next</div>
           {slides[currentIndex + 1] && (
             <SlideCanvas slide={slides[currentIndex + 1]} fluid />
           )}
@@ -327,17 +328,17 @@ export function SlideDeckPanel() {
             placeholder="#"
             min={1}
             max={totalSlides}
-            style={{ width: 52, height: 30, textAlign: 'center', background: 'var(--color-bg)', border: '1px solid var(--color-text-muted)', borderRadius: 6, color: 'var(--color-text)', fontSize: 12.5 }}
+            style={{ boxSizing: 'border-box', width: 56, height: 32, padding: 0, lineHeight: '30px', textAlign: 'center', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', color: 'var(--color-text)', fontSize: 12.5 }}
           />
-          <button
+          <Button
+            variant="secondary"
             disabled={jumpTarget === null}
             onClick={() => {
               if (jumpTarget !== null) slideJumpTo(jumpTarget).catch(console.error);
             }}
-            style={{ height: 30, padding: '0 12px', borderRadius: 6, background: 'transparent', border: '1px solid var(--color-text-muted)', color: 'var(--color-text)', fontSize: 12, fontFamily: 'var(--font-body)', cursor: 'pointer' }}
           >
             Go
-          </button>
+          </Button>
         </div>
       </div>
     </Card>

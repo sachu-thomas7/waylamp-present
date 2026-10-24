@@ -53,7 +53,7 @@ export default function App() {
             <IconPlay />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '0.01em' }}>StreamDeck</span>
+            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "0.01em" }}>StreamDeck</h1>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Controller</span>
           </div>
         </div>
@@ -118,14 +118,14 @@ export default function App() {
       <StartupNotices />
 
       {/* Main content */}
-      <div style={{ flex: 1, display: 'flex', gap: 20, padding: '20px 24px', minHeight: 0, overflow: 'auto' }}>
+      <main style={{ flex: 1, display: 'flex', gap: 20, padding: '20px 24px', minHeight: 0, overflow: 'auto' }}>
         <div style={{ flex: '1 1 68%', display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
           <SlideDeckPanel />
         </div>
         <div style={{ flex: '1 1 32%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 16 }}>
           <SceneMediaPanel />
         </div>
-      </div>
+      </main>
     </div>
   );
 }

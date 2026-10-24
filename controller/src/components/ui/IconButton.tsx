@@ -12,8 +12,8 @@ export function IconButton({ children, active, style, disabled, ...rest }: IconB
     <button
       disabled={disabled}
       style={{
-        width: 30,
-        height: 30,
+        width: 32,
+        height: 32,
         borderRadius: 'var(--radius-sm)',
         background: active ? 'var(--color-primary)' : 'transparent',
         border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
