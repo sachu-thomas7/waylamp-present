@@ -1,6 +1,6 @@
 # Release process (Windows installer)
 
-Primary artifact: per-user NSIS `StreamDeck_<version>_x64-setup.exe` (no admin, installs under `%LOCALAPPDATA%\StreamDeck`), with the offline WebView2 runtime installer embedded for PCs on a closed network. No auto-update: upgrading = run the newer installer.
+Primary artifact: per-user NSIS `StreamDeck_<version>_x64-setup.exe` (no admin, installs under `%LOCALAPPDATA%\StreamDeck`), with the offline WebView2 runtime installer embedded. No auto-update: upgrading = run the newer installer.
 
 ## Name, identifier, publisher: one place to change
 
@@ -41,7 +41,7 @@ export STREAMDECK_SIGN_COMMAND='signtool sign /sha1 <certificate-thumbprint> /fd
 bash scripts/build-release.sh
 ```
 
-(Equivalent Tauri-native keys: `bundle.windows.certificateThumbprint`, `digestAlgorithm`, `timestampUrl`.) EV no longer bypasses SmartScreen, so it is not worth the premium. SignPath Foundation (free) needs a public OSI-licensed repo; the repo is private today.
+(Equivalent Tauri-native keys: `bundle.windows.certificateThumbprint`, `digestAlgorithm`, `timestampUrl`.) EV no longer bypasses SmartScreen, so it is not worth the premium. SignPath Foundation (free) needs a public OSI-licensed repo; the repo must be public.
 
 Rules: same publisher identity for every release (reputation carries over); never modify a file after signing; no UPX/packers. Reputation still takes weeks after the first signed release; SmartScreen may warn until then. No secrets in the repo.
 
@@ -52,12 +52,12 @@ Rules: same publisher identity for every release (reputation carries over); neve
 3. No packing; build on a clean `windows-2022` runner (the release workflow), not the dev box.
 4. No runtime downloads of executables; PDFium is bundled and hash-pinned.
 5. Per-user install, no admin, no auto-start, no firewall prompt.
-6. Before publishing: scan on VirusTotal (informational). Submit the installer to Microsoft Security Intelligence (https://www.microsoft.com/wdsi/filesubmission) for analysis; also report to Kaspersky/Norton if used on site. Never tell users to add exclusions.
+6. Before publishing: scan on VirusTotal (informational). Submit the installer to Microsoft Security Intelligence (https://www.microsoft.com/wdsi/filesubmission) for analysis; also report to any other AV vendor that flags it. Never tell users to add exclusions.
 7. Windows Defender detections named `!ml`/Wacatac are heuristics; signing and submission are the fix.
 
 ## Delivery
 
-GitHub draft release (installer + `SHA256SUMS.txt`) or a USB stick. Files copied from USB carry no Mark-of-the-Web, which avoids the download prompt but not Smart App Control: the signature is the fix. Verify on the target PC: `Get-FileHash .\StreamDeck_*-setup.exe` against `SHA256SUMS.txt`.
+GitHub draft release (installer + `SHA256SUMS.txt`). Files copied without a download (for example from removable media) carry no Mark-of-the-Web, which avoids the download prompt but not Smart App Control: the signature is the fix. Verify on the target PC: `Get-FileHash .\StreamDeck_*-setup.exe` against `SHA256SUMS.txt`.
 
 ## Licence
 
