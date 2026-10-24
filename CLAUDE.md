@@ -235,6 +235,10 @@ bash scripts/verify.sh release [bundle]  # delegates to scripts/build-release.sh
 Jobs: `rust` (matrix ubuntu/windows: `verify.sh push --only rust`), `frontend` (`verify.sh push --only frontend`), `cargo-deny`
 (action) and `osv` (`verify.sh deps --only osv`). macOS dropped until an Apple account exists.
 
+## Release (2026-10-24)
+
+Windows installer: `bash scripts/build-release.sh` (no args; optional `STREAMDECK_SIGN_COMMAND`), tag `v*` runs `.github/workflows/release.yml` to a draft release. Licence GPL-3.0-or-later. Name/identifier/publisher live in `src-tauri/tauri.conf.json`. Full process, signing routes and AV checklist: `dev-docs/release_process.md`.
+
 ## Local environment note (Windows)
 
 `cargo`/`rustup` tools live in `/c/Users/<you>/.cargo/bin`; Node is managed via `fnm` —

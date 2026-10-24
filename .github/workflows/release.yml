@@ -1,0 +1,100 @@
+name: release
+
+# Tag-triggered only (metered minutes); never runs on pull_request.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows-installer:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      HAVE_AZURE_SIGNING: ${{ secrets.AZURE_CLIENT_ID != '' }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read pinned toolchain
+        id: tc
+        run: echo "channel=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.tc.outputs.channel }}
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --version "^2.11" --locked
+
+      # Tauri downloads NSIS itself; this makes a failure of that download visible and early.
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
+      - name: Install artifact-signing-cli (only when signing is configured)
+        if: ${{ env.HAVE_AZURE_SIGNING == 'true' }}
+        run: cargo install artifact-signing-cli --locked
+
+      - name: Build installer
+        run: |
+          if [ -z "${STREAMDECK_SIGN_COMMAND:-}" ] && [ "$HAVE_AZURE_SIGNING" = true ]; then
+            export STREAMDECK_SIGN_COMMAND="artifact-signing-cli -e $AZURE_SIGN_ENDPOINT -a $AZURE_SIGN_ACCOUNT -c $AZURE_SIGN_PROFILE -d StreamDeck %1"
+          fi
+          bash scripts/build-release.sh
+        env:
+          # Signing is skipped when these are absent. Secrets live in GitHub secrets only.
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_SIGN_ENDPOINT: ${{ vars.AZURE_SIGN_ENDPOINT }}
+          AZURE_SIGN_ACCOUNT: ${{ vars.AZURE_SIGN_ACCOUNT }}
+          AZURE_SIGN_PROFILE: ${{ vars.AZURE_SIGN_PROFILE }}
+          STREAMDECK_SIGN_COMMAND: ${{ secrets.STREAMDECK_SIGN_COMMAND }}
+
+      - name: Silent install, launch smoke, uninstall, leftover check
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP 'sd-install'
+          $p = Start-Process $setup.FullName -ArgumentList '/S', "/D=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "installer exit $($p.ExitCode)" }
+          $exe = Join-Path $dir 'streamdeck.exe'
+          if (-not (Test-Path $exe)) { throw 'streamdeck.exe not installed' }
+          if (-not (Test-Path (Join-Path $dir 'pdfium.dll'))) { throw 'pdfium.dll not installed' }
+          $app = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 8
+          if ($app.HasExited) { throw "app exited early with $($app.ExitCode)" }
+          Stop-Process -Id $app.Id -Force
+          $un = Join-Path $dir 'uninstall.exe'
+          Start-Process $un -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 3
+          if (Test-Path $exe) { throw 'streamdeck.exe left behind after uninstall' }
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/nsis/SHA256SUMS.txt
+
+      - name: Draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" \
+            --notes "Draft. Unsigned unless the release notes say otherwise; see dev-docs/release_process.md." \
+            target/release/bundle/nsis/*-setup.exe target/release/bundle/nsis/SHA256SUMS.txt

@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.95"
 publish = false
+license = "GPL-3.0-or-later"
+authors = ["StreamDeck contributors"]
+description = "Presentation control: import PPTX/PDF, projector output, notes and timer"
 
 # The lib target must explicitly point to lib.rs
 [lib]

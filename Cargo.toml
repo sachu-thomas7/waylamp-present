@@ -16,3 +16,9 @@ debug = false
 [profile.test]
 debug = "line-tables-only"
 incremental = false
+
+# Shipped installer binary; no panic = "abort" (actor threads rely on unwinding).
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 1

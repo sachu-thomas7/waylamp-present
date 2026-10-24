@@ -1,5 +1,5 @@
 {
-  "note": "max total bytes of the checked bundle dir/installer; set after the first measured build, raise deliberately",
-  "windows-x64": { "max_bytes": 10000000 },
+  "note": "max total bytes of the checked bundle dir/installer; windows-x64 measured 2026-10-24: 223,347,445 (offline WebView2 runtime installer is 214,823,632 of that); raise deliberately",
+  "windows-x64": { "max_bytes": 235000000 },
   "linux-x64": { "max_bytes": 0 }
 }
