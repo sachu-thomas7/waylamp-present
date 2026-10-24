@@ -1,1046 +1,151 @@
 #!/usr/bin/env bash
-# ╔══════════════════════════════════════════════════════════════════╗
-# ║  StreamDeck — Universal Verification Framework                  ║
-# ║  Run from project root.                                         ║
-# ║                                                                 ║
-# ║  Usage:                                                         ║
-# ║    bash verify.sh                → full check (current phase)   ║
-# ║    bash verify.sh f0.2           → F0.2 feature checks only     ║
-# ║    bash verify.sh f0             → all Phase 0 checks           ║
-# ║    bash verify.sh invariants     → architecture invariants only  ║
-# ║    bash verify.sh release        → release bundling checks       ║
-# ║    bash verify.sh core           → build + test + lint only      ║
-# ║    bash verify.sh --no-frontend  → skip frontend build step      ║
-# ╚══════════════════════════════════════════════════════════════════╝
+# StreamDeck verification tiers. CI, the pre-push hook and humans all call this, so they cannot drift.
+#
+#   bash scripts/verify.sh quick       fmt, cargo check, fast Rust tests + typecheck/Vitest for what changed (every edit)
+#   bash scripts/verify.sh push        fmt, clippy -D warnings, ONE nextest run (incl. invariants), both frontends
+#                                      typecheck + Biome + Vitest once (pre-push hook and CI). `core` is an alias.
+#   bash scripts/verify.sh invariants  tests/invariants.rs only
+#   bash scripts/verify.sh deps        cargo deny, osv-scanner, fuzz smoke (needs Docker; skipped without it)
+#   bash scripts/verify.sh release [bundle]  delegates to scripts/build-release.sh / check-bundle.sh <bundle> if present
+# Options: --only rust|frontend (push) or deny|osv|fuzz (deps); --no-frontend skips the frontend lane and dist build.
+# Exit code = number of failed steps. Per-step logs live in a fresh temp dir (path printed on failure).
+set -uo pipefail
+cd "$(dirname "$0")/.." || exit 2
+for d in /c/Users/sachu/.cargo/bin "$HOME/.cargo/bin" "${USERPROFILE:-}/.cargo/bin"; do [ -d "$d" ] && PATH="$d:$PATH" && break; done
+command -v fnm >/dev/null 2>&1 && eval "$(fnm env --shell bash 2>/dev/null)"
 
-set -euo pipefail
-
-# ── Colours ────────────────────────────────────────────────────────
-RED='\033[0;31m';   GREEN='\033[0;32m';  YELLOW='\033[1;33m'
-CYAN='\033[0;36m';  BLUE='\033[0;34m';   MAGENTA='\033[0;35m'
-BOLD='\033[1m';     DIM='\033[2m';        RESET='\033[0m'
-
-PASS="${GREEN}✔${RESET}";  FAIL="${RED}✗${RESET}"
-WARN="${YELLOW}⚠${RESET}"; SKIP="${DIM}–${RESET}"; INFO="${CYAN}›${RESET}"
-
-# ── State ──────────────────────────────────────────────────────────
-FAILURES=0; WARNINGS=0; SKIPPED=0; PASSED=0
-FILTER="all"
-SKIP_FRONTEND=false
-LOG=/tmp/streamdeck-verify.log
-CACHE_DIR=".verify-cache"
-
-# ── Arg parsing ────────────────────────────────────────────────────
-for arg in "$@"; do
-  case "$arg" in
-    --no-frontend) SKIP_FRONTEND=true ;;
-    *) FILTER="$arg" ;;
+TIER=""; ONLY=""; NO_FRONTEND=false; ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-frontend) NO_FRONTEND=true ;;
+    --only) ONLY="${2:-}"; shift ;;
+    -*) echo "unknown option $1"; exit 2 ;;
+    *) [ -z "$TIER" ] && TIER="$1" || ARGS+=("$1") ;;
   esac
+  shift
 done
-FILTER=$(echo "$FILTER" | tr '[:upper:]' '[:lower:]')
+[ "$TIER" = core ] && TIER=push
+[ -f src-tauri/Cargo.toml ] || { echo "run from the repo root"; exit 2; }
 
-# ── Helpers ────────────────────────────────────────────────────────
-section() {
-  echo ""
-  echo -e "${BOLD}${BLUE}━━━ $1 ━━━${RESET}"
-}
-subsection() { echo ""; echo -e "  ${BOLD}${CYAN}$1${RESET}"; }
-pass()  { echo -e "  ${PASS}  $1";                         PASSED=$((PASSED+1)); }
-fail()  { echo -e "  ${FAIL}  ${RED}$1${RESET}";           FAILURES=$((FAILURES+1)); }
-warn()  { echo -e "  ${WARN}  ${YELLOW}$1${RESET}";        WARNINGS=$((WARNINGS+1)); }
-skip()  { echo -e "  ${SKIP}  ${DIM}$1 (skipped)${RESET}"; SKIPPED=$((SKIPPED+1)); }
-info()  { echo -e "  ${INFO}  ${DIM}$1${RESET}"; }
+LOGS="$(mktemp -d)"; CACHE=".verify-cache"; mkdir -p "$CACHE"
+win() { cygpath -m "$1" 2>/dev/null || echo "$1"; }
+RC_DIR="$LOGS/rc"; mkdir -p "$RC_DIR"
+FRONTENDS=(controller presentation)
+CARGO=(cargo)
+MANIFEST=(--manifest-path src-tauri/Cargo.toml)
 
-check() {
+# step <label> <cmd...>: run one step, log to $LOGS/<label>.log, append a result line to $OUT (lane output file).
+OUT="$LOGS/main.out"
+step() {
   local label="$1"; shift
-  if "$@" > "$LOG" 2>&1; then
-    pass "$label"
+  local log="$LOGS/${label//[^A-Za-z0-9._-]/_}.log" t0=$SECONDS
+  if "$@" >"$log" 2>&1; then
+    echo "  ok    $label ($((SECONDS - t0))s)" >>"$OUT"
   else
-    fail "$label"
-    echo -e "${DIM}$(head -n 25 "$LOG" | sed 's/^/      /')${RESET}"
+    { echo "  FAIL  $label ($((SECONDS - t0))s) - log: $log"; tail -n 25 "$log" | sed 's/^/        /'; } >>"$OUT"
+    echo "$label" >>"$RC_DIR/failed"
   fi
 }
-check_warn() {
-  local label="$1"; shift
-  if "$@" > "$LOG" 2>&1; then
-    pass "$label"
-  else
-    warn "$label (non-blocking)"
-    echo -e "${DIM}$(head -n 10 "$LOG" | sed 's/^/      /')${RESET}"
+skipped() { echo "  skip  $1" >>"$OUT"; }
+
+# lane <name> <function>: run a function with its own output file, so lanes can run concurrently.
+lane() { ( OUT="$LOGS/$1.out"; : >"$OUT"; "$2" ); }
+show() { for f in "$@"; do [ -f "$LOGS/$f.out" ] && cat "$LOGS/$f.out"; done; }
+
+# --- bootstrap: npm ci + dist build, each skipped while a content hash is unchanged ---------------
+hash_of() { { find "$@" -type f -not -path '*/node_modules/*' -not -path '*/dist/*' 2>/dev/null | sort | xargs md5sum 2>/dev/null; } | md5sum | cut -d' ' -f1; }
+npm_install() {
+  local w="$1" h; h="$(hash_of "$w/package.json" "$w/package-lock.json")"
+  [ "$h" = "$(cat "$CACHE/$w-npm.hash" 2>/dev/null)" ] && [ -d "$w/node_modules" ] && { echo "  ok    $w: node_modules cached" >>"$OUT"; return; }
+  step "$w npm ci" npm ci --prefix "$w" && echo "$h" >"$CACHE/$w-npm.hash"
+}
+dist_build() {
+  local w="$1" h; h="$(hash_of "$w/src" "$w/public" "$w/index.html" "$w/package.json" "$w"/vite.config.* "$w"/tsconfig*.json)"
+  [ "$h" = "$(cat "$CACHE/$w-build.hash" 2>/dev/null)" ] && [ -d "$w/dist" ] && { echo "  ok    $w: dist cached" >>"$OUT"; return; }
+  step "$w build" npm run build --prefix "$w" && echo "$h" >"$CACHE/$w-build.hash"
+}
+bootstrap() { # $1 = true when cargo needs dist/ (rust lane will run)
+  for w in "${FRONTENDS[@]}"; do lane "boot-$w" "npm_install_$w" & done; wait
+  show boot-controller boot-presentation
+  [ -s "$RC_DIR/failed" ] && return 1
+  if [ "$1" = true ] && [ "$NO_FRONTEND" = false ]; then
+    for w in "${FRONTENDS[@]}"; do lane "dist-$w" "dist_build_$w" & done; wait
+    show dist-controller dist-presentation
   fi
+  [ -s "$RC_DIR/failed" ] && return 1 || return 0
+}
+npm_install_controller() { npm_install controller; }; npm_install_presentation() { npm_install presentation; }
+dist_build_controller() { dist_build controller; };   dist_build_presentation() { dist_build presentation; }
+
+# --- building blocks ------------------------------------------------------------------------------
+fmt()     { step "cargo fmt --check" "${CARGO[@]}" fmt --check "${MANIFEST[@]}"; }
+nextest() { # extra args pass through; fails on zero tests and on anything skipped/ignored
+  step "cargo nextest $*" bash -c '"$@" >"$0" 2>&1; rc=$?; cat "$0"; [ $rc -eq 0 ] && ! grep -Eq "[1-9][0-9]* skipped" "$0"' \
+    "$(win "$LOGS")/nextest.raw" cargo nextest run --locked --no-fail-fast --no-tests=fail "${MANIFEST[@]}" "$@"
+}
+vitest_check() { # Vitest JSON report: no failed/pending/todo tests, at least one test ran
+  local w="$1" j; j="$(win "$LOGS")/vitest-$w.json"
+  step "$w vitest" bash -c 'npm test --prefix "$1" -- --reporter=default --reporter=json --outputFile.json="$2" && node scripts/check-vitest-json.cjs "$2"' _ "$w" "$j"
+}
+frontend_checks() { # $@ = windows
+  for w in "$@"; do
+    step "$w typecheck" npm run typecheck --prefix "$w"
+    [ "$TIER" = push ] && step "$w biome" npm run lint --prefix "$w"
+    vitest_check "$w"
+  done
+}
+rust_push_lane() { fmt; step "cargo clippy" cargo clippy --locked "${MANIFEST[@]}" --all-targets -- -D warnings; nextest; }
+# One lane per window so they run concurrently; each logs into its own .out file.
+fe_lane_controller() { frontend_checks controller; };     fe_lane_presentation() { frontend_checks presentation; }
+
+finish() {
+  echo; local n=0; [ -f "$RC_DIR/failed" ] && n=$(wc -l <"$RC_DIR/failed")
+  if [ "$n" -eq 0 ]; then echo "verify $TIER: all steps passed in ${SECONDS}s"; else echo "verify $TIER: $n step(s) failed in ${SECONDS}s (logs: $LOGS)"; fi
+  exit "$n"
 }
 
-file_exists()      { [ -f "$1" ] && pass "exists: $1"                    || fail "MISSING: $1"; }
-file_absent()      { [ ! -f "$1" ] && pass "absent (correct): $1"        || fail "MUST BE DELETED: $1"; }
-dir_exists()       { [ -d "$1" ] && pass "exists: $1/"                   || fail "MISSING dir: $1/"; }
-file_contains()    {
-  grep -q "$3" "$2" 2>/dev/null && pass "$1" || fail "$1 — pattern not found in $2"
-}
-file_not_contains() {
-  ! grep -q "$3" "$2" 2>/dev/null && pass "$1" || fail "$1 — forbidden pattern found in $2"
-}
-
-file_not_exists() {
-  local label="$1"
-  local file="$2"
-  if [ -f "$file" ]; then
-    fail "$label — $file should NOT exist but does"
-  else
-    pass "$label"
-  fi
-}
-
-# ── Guard: project root ────────────────────────────────────────────
-if [ ! -f "src-tauri/Cargo.toml" ]; then
-  echo -e "${RED}ERROR: Run from the project root (where src-tauri/ lives).${RESET}"
-  exit 1
-fi
-
-# ══════════════════════════════════════════════════════════════════
-# STEP 0 — DEPENDENCY BOOTSTRAP
-# Ensures npm packages and frontend dist exist before anything else.
-# Uses a hash-based cache so re-runs are instant when sources haven't changed.
-# ══════════════════════════════════════════════════════════════════
-run_bootstrap() {
-  section "Dependency Bootstrap"
-  mkdir -p "$CACHE_DIR"
-
-  # ── Node / npm ──────────────────────────────────────────────────
-  subsection "Node.js & npm"
-  if ! command -v node &>/dev/null; then
-    fail "node not found — install Node.js 20+ from https://nodejs.org"
-    return
-  fi
-  if ! command -v npm &>/dev/null; then
-    fail "npm not found"
-    return
-  fi
-  pass "node $(node --version)"
-  pass "npm  $(npm --version)"
-
-  # ── Rust toolchain ──────────────────────────────────────────────
-  subsection "Rust toolchain"
-  if ! command -v cargo &>/dev/null; then
-    fail "cargo not found — install Rust from https://rustup.rs"
-    return
-  fi
-  pass "cargo $(cargo --version)"
-  check_warn "cargo-tauri CLI available" bash -c 'cargo tauri --version'
-
-  # ── npm install (controller) ────────────────────────────────────
-  subsection "npm install — controller"
-  _npm_install "controller"
-
-  # ── npm install (presentation) ──────────────────────────────────
-  subsection "npm install — presentation"
-  _npm_install "presentation"
-
-  # ── Frontend build (if needed) ──────────────────────────────────
-  if [ "$SKIP_FRONTEND" = true ]; then
-    info "Skipping frontend build (--no-frontend)"
-  else
-    subsection "Frontend build — controller (required for cargo build/clippy)"
-    _frontend_build "controller"
-
-    subsection "Frontend build — presentation"
-    _frontend_build "presentation"
-  fi
-}
-
-# Install npm deps only if package.json changed since last install
-_npm_install() {
-  local win="$1"
-  local pkg="$win/package.json"
-  local lock="$win/package-lock.json"
-  local cache_file="$CACHE_DIR/${win}-npm.hash"
-
-  if [ ! -f "$pkg" ]; then
-    skip "$win/package.json not found"
-    return
-  fi
-
-  # Hash package.json + lockfile
-  local current_hash
-  current_hash=$(cat "$pkg" "${lock:-/dev/null}" 2>/dev/null | md5sum | cut -d' ' -f1)
-  local cached_hash=""
-  [ -f "$cache_file" ] && cached_hash=$(cat "$cache_file")
-
-  if [ "$current_hash" = "$cached_hash" ] && [ -d "$win/node_modules" ]; then
-    pass "$win: node_modules up to date (cached)"
-  else
-    info "$win: running npm install..."
-    if (cd "$win" && npm install) > "$LOG" 2>&1; then
-      echo "$current_hash" > "$cache_file"
-      pass "$win: npm install complete"
-    else
-      fail "$win: npm install failed"
-      cat "$LOG"
+# --- tiers ----------------------------------------------------------------------------------------
+echo "verify $TIER (logs: $LOGS)"
+case "$TIER" in
+  push)
+    want_rust=true; want_fe=true
+    [ "$ONLY" = rust ] && want_fe=false; [ "$ONLY" = frontend ] && want_rust=false
+    [ "$NO_FRONTEND" = true ] && want_fe=false
+    bootstrap "$want_rust" || { cat "$LOGS/main.out" 2>/dev/null; finish; }
+    [ "$want_rust" = true ] && { lane rust rust_push_lane & }
+    if [ "$want_fe" = true ]; then
+      for w in "${FRONTENDS[@]}"; do lane "fe-$w" "fe_lane_$w" & done
     fi
-  fi
-}
-
-# Build frontend only if src/ changed since last build
-_frontend_build() {
-  local win="$1"
-  local src_dir="$win/src"
-  local dist_dir="$win/dist"
-  local cache_file="$CACHE_DIR/${win}-build.hash"
-
-  if [ ! -d "$src_dir" ]; then
-    skip "$win/src not found"
-    return
-  fi
-
-  # Hash everything the build consumes: src/, public/, index.html, vite/ts config, package.json
-  local current_hash
-  current_hash=$( { find "$src_dir" "$win/public" -type f 2>/dev/null; ls "$win"/index.html "$win"/vite.config.* "$win"/tsconfig*.json "$win"/package.json 2>/dev/null; }     | sort | xargs md5sum 2>/dev/null | md5sum | cut -d' ' -f1)
-  local cached_hash=""
-  [ -f "$cache_file" ] && cached_hash=$(cat "$cache_file")
-
-  if [ "$current_hash" = "$cached_hash" ] && [ -d "$dist_dir" ]; then
-    pass "$win: dist/ up to date (cached — no source changes)"
-  else
-    info "$win: source changed or dist missing — building..."
-    if (cd "$win" && npm run build) > "$LOG" 2>&1; then
-      echo "$current_hash" > "$cache_file"
-      pass "$win: frontend build complete → $dist_dir/"
-    else
-      fail "$win: frontend build failed"
-      cat "$LOG"
-    fi
-  fi
-}
-
-# ══════════════════════════════════════════════════════════════════
-# ARCHITECTURE INVARIANTS
-# ══════════════════════════════════════════════════════════════════
-run_invariants() {
-  section "Architecture Invariants (all phases)"
-
-  subsection "No unwrap() in command handlers"
-  check "No .unwrap() in src-tauri/src/commands/" \
-    bash -c '! grep -rn "\.unwrap()" src-tauri/src/commands/ 2>/dev/null \
-             | grep -v "#\[cfg(test)\]" | grep -q .'
-
-  subsection "AppError invariants"
-  if [ -f "src-tauri/src/error.rs" ]; then
-    file_contains "#[non_exhaustive] present"            "src-tauri/src/error.rs" "non_exhaustive"
-    file_contains "serde tag+content discriminated union" "src-tauri/src/error.rs" 'serde(tag = "type", content = "message")'
-    file_not_contains "No manual From<AppError> impl"    "src-tauri/src/error.rs" "impl From<AppError>"
-  else
-    skip "error.rs not yet created"
-  fi
-
-  subsection "No raw invoke() in frontend components"
-  for win in controller presentation; do
-    if [ -d "$win/src" ]; then
-      check "No raw invoke() outside ipc.ts in $win/" \
-        bash -c "! grep -rn \"invoke(\" $win/src \
-                 --include='*.ts' --include='*.tsx' \
-                 --exclude='ipc.ts' --exclude='*.test.ts' --exclude='*.test.tsx' --exclude-dir=test 2>/dev/null | grep -q ."
-    else
-      skip "$win/src not yet created"
-    fi
-  done
-
-  subsection "Tauri wiring gated from test compilation"
-  if [ -f "src-tauri/src/app.rs" ]; then
-    check "app.rs gated via cfg(not(test)) in lib.rs" \
-      bash -c 'grep -q "cfg(not(test))" src-tauri/src/lib.rs \
-               && grep -q "mod app" src-tauri/src/lib.rs'
-  else
-    skip "app.rs not yet created (pre-F0.2)"
-  fi
-}
-
-# ══════════════════════════════════════════════════════════════════
-# F0.1 — Tauri v2 Project Bootstrap
-# ══════════════════════════════════════════════════════════════════
-run_f0_1() {
-  section "F0.1 — Tauri v2 Project Bootstrap"
-
-  subsection "File structure"
-  file_exists "src-tauri/Cargo.toml"
-  file_exists "src-tauri/tauri.conf.json"
-  file_exists "src-tauri/capabilities/default.json"
-  file_exists "src-tauri/src/lib.rs"
-  dir_exists  "controller/src"
-  dir_exists  "presentation/src"
-
-  subsection "Window configuration"
-  file_contains "controller window defined"   "src-tauri/tauri.conf.json" "controller"
-  file_contains "presentation window defined" "src-tauri/tauri.conf.json" "presentation"
-
-  subsection "Capabilities"
-  file_not_contains "controller does not grant unused create-webview-window" \
-    "src-tauri/capabilities/default.json" "create-webview-window"
-
-  subsection "CI pipeline"
-  if [ -d ".github/workflows" ]; then
-    check       "CI workflow file exists"     bash -c 'ls .github/workflows/*.yml 2>/dev/null | grep -q .'
-    check_warn  "CI runs cargo test"          bash -c 'grep -rE "cargo (test|nextest)" .github/workflows/ | grep -q .'
-    check_warn  "CI runs cargo clippy"        bash -c 'grep -r "cargo clippy" .github/workflows/ | grep -q .'
-    check_warn  "CI runs npm run typecheck"   bash -c 'grep -r "typecheck"    .github/workflows/ | grep -q .'
-  else
-    warn ".github/workflows/ not found — CI not configured yet"
-  fi
-}
-
-# ══════════════════════════════════════════════════════════════════
-# F0.2 — IPC Command Layer
-# ══════════════════════════════════════════════════════════════════
-run_f0_2() {
-  section "F0.2 — IPC Command Layer"
-
-  subsection "File structure"
-  file_exists  "src-tauri/src/error.rs"
-  file_exists  "src-tauri/src/app.rs"
-  file_exists  "src-tauri/src/commands/mod.rs"
-  file_exists  "src-tauri/src/commands/info.rs"
-  file_exists  "src-tauri/src/commands/system.rs"
-  file_absent  "src-tauri/src/commands.rs"
-  file_exists  "controller/src/lib/ipc.ts"
-  file_exists  "presentation/src/lib/ipc.ts"
-
-  subsection "error.rs"
-  file_contains "derive Debug"               "src-tauri/src/error.rs" "derive.*Debug"
-  file_contains "thiserror::Error"           "src-tauri/src/error.rs" "thiserror::Error"
-  file_contains "serde::Serialize"           "src-tauri/src/error.rs" "serde::Serialize"
-  file_contains "#[non_exhaustive]"          "src-tauri/src/error.rs" "non_exhaustive"
-  file_contains "Internal variant"           "src-tauri/src/error.rs" "Internal"
-  file_contains "NotFound variant"           "src-tauri/src/error.rs" "NotFound"
-  file_contains "InvalidInput variant"       "src-tauri/src/error.rs" "InvalidInput"
-
-  subsection "commands/system.rs"
-  file_contains "PingResponse struct"              "src-tauri/src/commands/system.rs" "PingResponse"
-  file_contains "pub async fn ping"                "src-tauri/src/commands/system.rs" "pub async fn ping"
-  file_contains "returns Result<PingResponse>"     "src-tauri/src/commands/system.rs" "Result<PingResponse"
-  file_contains "#[tauri::command]"                "src-tauri/src/commands/system.rs" "#\[tauri::command\]"
-  file_contains "#[cfg(test)] block present"       "src-tauri/src/commands/system.rs" "#\[cfg(test)\]"
-  file_contains "latency assertion (as_millis)"    "src-tauri/src/commands/system.rs" "as_millis"
-
-  subsection "lib.rs / app.rs wiring"
-  file_contains "mod commands declared"      "src-tauri/src/lib.rs" "mod commands"
-  file_contains "mod error declared"         "src-tauri/src/lib.rs" "mod error"
-  file_contains "ping registered"            "src-tauri/src/state.rs" "system::ping"
-  file_contains "get_build_info registered"  "src-tauri/src/state.rs" "info::get_build_info"
-
-  subsection "ipc.ts — both windows"
-  for win in controller presentation; do
-    local f="$win/src/lib/ipc.ts"
-    if [ -f "$f" ]; then
-      file_contains "$win: AppError type"          "$f" "AppError"
-      file_contains "$win: PingResponse interface" "$f" "PingResponse"
-      if [ "$win" = controller ]; then
-        file_contains "$win: ping() exported"        "$f" "export async function ping"
-        file_contains "$win: @tauri-apps/api import" "$f" "@tauri-apps/api"
-      else
-        check "presentation ipc.ts has no invoke wrappers (listen-only)" bash -c '! grep -q "invoke" presentation/src/lib/ipc.ts'
-      fi
-    else
-      fail "MISSING: $f"
-    fi
-  done
-
-  subsection "cargo test (independent — no frontend needed)"
-  check "All Rust unit tests pass" \
-    bash -c 'cd src-tauri && cargo test 2>&1 | tee /tmp/sd-test.log \
-             && ! grep -q "FAILED" /tmp/sd-test.log'
-
-  subsection "TypeScript typecheck"
-  for win in controller presentation; do
-    if grep -q '"typecheck"' "$win/package.json" 2>/dev/null; then
-      check "$win: npm run typecheck" bash -c "cd $win && npm run typecheck"
-    else
-      warn "$win: no typecheck script in package.json"
-    fi
-  done
-}
-
-# ══════════════════════════════════════════════════════════════════
-# F0.3 — Event Bus Foundation  (scaffolded — skips gracefully)
-# ══════════════════════════════════════════════════════════════════
-run_f0_3() {
-  section "F0.3 — Event Bus Foundation"
-  if [ ! -f "src-tauri/src/events.rs" ]; then
-    skip "events.rs not created — F0.3 not started yet"
-    return
-  fi
-  file_contains "pub enum AppEvent"     "src-tauri/src/events.rs" "pub enum AppEvent"
-  file_contains "#[non_exhaustive]"     "src-tauri/src/events.rs" "non_exhaustive"
-  file_contains "serde::Serialize"      "src-tauri/src/events.rs" "serde::Serialize"
-  file_contains "broadcast channel"     "src-tauri/src/bus.rs" "broadcast"
-  file_contains "BusLag variant"        "src-tauri/src/events.rs" "BusLag"
-  check "Event bus unit tests pass" \
-    bash -c 'cd src-tauri && cargo test events 2>&1 | tee /tmp/sd-test.log \
-             && ! grep -q "FAILED" /tmp/sd-test.log'
-}
-
-# ══════════════════════════════════════════════════════════════════
-# F0.4 — TOML Config Loader  (scaffolded — skips gracefully)
-# ══════════════════════════════════════════════════════════════════
-run_f0_4() {
-  section "F0.4 — TOML Config Loader"
-  if [ ! -f "src-tauri/src/config.rs" ]; then
-    skip "config.rs not created — F0.4 not started yet"
-    return
-  fi
-  file_contains "StreamDeckConfig struct" "src-tauri/src/config.rs" "StreamDeckConfig"
-  file_contains "serde::Deserialize"       "src-tauri/src/config.rs" "serde::Deserialize"
-  file_contains "notify hot-reload"       "src-tauri/src/config_loader.rs" "notify"
-  file_contains "version field"           "src-tauri/src/config.rs" "version"
-  file_not_contains "No plaintext tokens" "src-tauri/src/config.rs" "bearer_token.*String"
-}
-
-run_f1_1() {
-  section "F1.1 — Presentation Window & Slide Renderer"
-  if [ ! -f "src-tauri/src/slide.rs" ]; then
-    skip "slide.rs not created — F1.1 not started yet"
-    return
-  fi
-
-  file_contains "SlidePayload struct" "src-tauri/src/slide.rs" "SlidePayload"
-  file_contains "background_path Option<String>" "src-tauri/src/slide.rs" "background_path"
-  file_contains "SlideUpdate variant" "src-tauri/src/events.rs" "SlideUpdate"
-  file_contains "presentation_show command" "src-tauri/src/commands/presentation.rs" "presentation_show"
-  file_contains "presentation_hide command" "src-tauri/src/commands/presentation.rs" "presentation_hide"
-  file_contains "visible(false) in app.rs" "src-tauri/src/app.rs" "visible"
-  file_not_contains "No auto-spawn on setup" "src-tauri/src/app.rs" "presentation.*index.html.*spawn"
-
-  file_contains "SlideCanvas component" "presentation/src/components/SlideCanvas.tsx" "SlideCanvas"
-  file_contains "useSlideStore" "presentation/src/store/slideStore.ts" "useSlideStore"
-  file_contains "scale" "presentation/src/components/SlideCanvas.tsx" "scale"
-  file_contains "PresentButton in controller" "controller/src/components/PresentButton.tsx" "PresentButton"
-  file_contains "zustand in presentation" "presentation/package.json" "zustand"
-  file_contains "zustand in controller" "controller/package.json" "zustand"
-
-  subsection "Presentation always fullscreen, PowerPoint-style (regression check — see CLAUDE.md)"
-  file_contains "presentation_show goes fullscreen unconditionally" "src-tauri/src/commands/presentation.rs" "set_fullscreen(true)"
-  file_not_contains "no single-display windowed fallback branch" "src-tauri/src/commands/presentation.rs" "single_display"
-  file_contains "always-on-top gated on genuine multi-display (Alt+Tab must work on mirrored/single-display rigs)" "src-tauri/src/commands/presentation.rs" "multi_display"
-  file_contains "Escape registration failure is non-fatal" "src-tauri/src/commands/presentation.rs" "non-fatal"
-  file_contains "presentation window close is intercepted, not destroyed" "src-tauri/src/app.rs" "prevent_close"
-
-  subsection "Multi-window dev/build wiring (regression check — see CLAUDE.md)"
-  file_contains "presentation window uses dev server URL in debug builds" "src-tauri/src/app.rs" "localhost:5174"
-  file_contains "presentation dev-server IPC is granted at runtime, debug builds only" "src-tauri/src/app.rs" "presentation-dev-remote"
-  file_contains "beforeDevCommand runs both dev servers" "src-tauri/tauri.conf.json" "dev-both.cjs"
-  file_contains "beforeBuildCommand merges presentation dist" "src-tauri/tauri.conf.json" "merge-presentation-dist.cjs"
-  file_contains "presentation build uses relative asset base" "presentation/vite.config.ts" 'base: "./"'
-  file_exists "scripts/dev-both.cjs"
-  file_exists "scripts/merge-presentation-dist.cjs"
-
-  check "F1.1 unit tests pass" \
-    bash -c 'cd src-tauri && cargo test slide 2>&1 | tee /tmp/sd-test.log \
-    && ! grep -q "FAILED" /tmp/sd-test.log'
-}
-
-run_f1_2() {
-  section "F1.2 — Slide State Machine"
-  if [ ! -f "src-tauri/src/slide_state_machine.rs" ]; then
-    skip "slide_state_machine.rs not created — F1.2 not started yet"
-    return
-  fi
-  
-  file_contains "advance_from_last test"          "src-tauri/src/slide_state_machine.rs" "advance_from_last_emits_deck_end"
-  file_contains "rewind_from_first test"          "src-tauri/src/slide_state_machine.rs" "rewind_from_first_emits_deck_start"
-  file_contains "jump_to_valid_index test"        "src-tauri/src/slide_state_machine.rs" "jump_to_valid_index_publishes_slide_update"
-  file_contains "jump_to_invalid_index test"      "src-tauri/src/slide_state_machine.rs" "jump_to_invalid_index_returns_error"
-  file_contains "persist_then_restore test"       "src-tauri/src/slide_state_machine.rs" "advance_then_persist_then_restore_preserves_index"
-  file_contains "stub_deck_has_five_slides test"  "src-tauri/src/slide.rs"               "stub_deck_has_five_slides"
-  file_contains "from_entry_correct_payload test" "src-tauri/src/slide.rs"               "from_entry_produces_correct_payload"
-
-  check "F1.2 unit tests pass" \
-    bash -c 'cd src-tauri && cargo test slide_state_machine 2>&1 | tee /tmp/sd-test.log \
-    && ! grep -q "FAILED" /tmp/sd-test.log'
-}
-
-# ── ADD this function before the dispatch block ──────────────────────────────
-
-run_f1_3() {
-  section "F1.3 — Controller Slide Panel"
-  if [ ! -f "controller/src/components/SlideDeckPanel.tsx" ]; then
-    skip "SlideDeckPanel.tsx not created — F1.3 not started yet"
-    return
-  fi
-
-  # Rust checks
-  file_contains "TimerTick variant"       "src-tauri/src/events.rs"                      "TimerTick"
-  file_contains "TimerReset variant"      "src-tauri/src/events.rs"                      "TimerReset"
-  file_contains "timer_started_at"        "src-tauri/src/slide_state_machine.rs"         "timer_started_at"
-  file_contains "spawn_timer_task"        "src-tauri/src/slide_state_machine.rs"         "spawn_timer_task"
-  file_contains "slide_timer_reset cmd"   "src-tauri/src/commands/slide.rs"              "slide_timer_reset"
-  file_contains "stub notes non-empty"    "src-tauri/src/slide.rs"                       "Welcome the audience"
-
-  # Frontend checks
-  file_contains "SlideCanvas"             "controller/src/components/SlideCanvas.tsx"    "SlideCanvas"
-  file_contains "SlideDeckPanel"          "controller/src/components/SlideDeckPanel.tsx" "SlideDeckPanel"
-  file_contains "TimerTick events.ts"     "controller/src/lib/events.ts"                 "TimerTick"
-  file_contains "isCollapsed store"       "controller/src/store/slideStore.ts"           "isCollapsed"
-  file_contains "keydown listener"        "controller/src/components/SlideDeckPanel.tsx" "keydown"
-  file_contains "slideTimerReset ipc"     "controller/src/lib/ipc.ts"                    "slideTimerReset"
-  file_not_exists "SlidePanel deleted"    "controller/src/components/SlidePanel.tsx"
-
-  # Unit test presence checks
-  file_contains "timer_starts_on_first_advance_only test"  "src-tauri/src/slide_state_machine.rs" "timer_starts_on_first_advance_only"
-  file_contains "timer_does_not_reset_on_rewind test"      "src-tauri/src/slide_state_machine.rs" "timer_does_not_reset_on_rewind"
-  file_contains "timer_reset_command test"                  "src-tauri/src/slide_state_machine.rs" "timer_reset_command_sets_new_start_time"
-  file_contains "timer_persists_restores test"              "src-tauri/src/slide_state_machine.rs" "timer_persists_and_restores_correctly"
-  file_contains "stub_notes_non_empty test"                 "src-tauri/src/slide.rs"               "stub_deck_notes_are_non_empty"
-
-  check "F1.3 unit tests pass" \
-    bash -c 'cd src-tauri && cargo test slide 2>&1 | tee /tmp/sd-f13-test.log \
-    && ! grep -q "FAILED" /tmp/sd-f13-test.log'
-}
-
-run_f1_4() {
-  section "F1.4 — Slide Deck Import"
-  if [ ! -f "src-tauri/src/deck_importer.rs" ]; then
-    skip "deck_importer.rs not created — F1.4 not started yet"
-    return
-  fi
-
-  file_contains "DeckImportProgress variant"  "src-tauri/src/events.rs"                       "DeckImportProgress"
-  file_contains "DeckImportComplete variant"  "src-tauri/src/events.rs"                       "DeckImportComplete"
-  file_contains "SceneMediaUpdate variant"    "src-tauri/src/events.rs"                       "SceneMediaUpdate"
-  file_contains "SceneSourceChanged variant"  "src-tauri/src/events.rs"                       "SceneSourceChanged"
-  file_contains "SlideTextBlock type"         "src-tauri/src/slide.rs"                        "SlideTextBlock"
-  file_contains "SlideTextRun type"           "src-tauri/src/slide.rs"                        "SlideTextRun"
-  file_contains "word_count field"            "src-tauri/src/slide.rs"                        "word_count"
-  file_contains "is_code_slide field"         "src-tauri/src/slide.rs"                        "is_code_slide"
-  file_contains "deck_import cmd"             "src-tauri/src/commands/deck.rs"                "deck_import"
-  file_contains "deck_restore cmd"            "src-tauri/src/commands/deck.rs"                "deck_restore"
-  file_contains "deck_clear cmd (empty-deck support)" "src-tauri/src/commands/deck.rs"        "deck_clear"
-  file_contains "scene_push_image cmd"        "src-tauri/src/commands/scene.rs"               "scene_push_image"
-  file_contains "scene_set_source cmd"        "src-tauri/src/commands/scene.rs"               "scene_set_source"
-  file_contains "spawn_blocking"              "src-tauri/src/deck_importer.rs"                "spawn_blocking"
-  file_contains "tauri-plugin-dialog"         "src-tauri/Cargo.toml"                          "tauri-plugin-dialog"
-  file_contains "pdfium-render"               "src-tauri/Cargo.toml"                          "pdfium-render"
-  file_contains "quick-xml"                   "src-tauri/Cargo.toml"                          "quick-xml"
-
-  file_contains "DeckImportProgress events.ts"  "controller/src/lib/events.ts"                "DeckImportProgress"
-  file_contains "SceneMediaUpdate events.ts"    "controller/src/lib/events.ts"                "SceneMediaUpdate"
-  file_contains "deckImport ipc"                "controller/src/lib/ipc.ts"                   "deckImport"
-  file_contains "pickDeckFile ipc"              "controller/src/lib/ipc.ts"                   "pickDeckFile"
-  file_contains "sceneStore"                    "controller/src/store/sceneStore.ts"           "useSceneStore"
-  file_contains "SceneMediaPanel"               "controller/src/components/SceneMediaPanel.tsx" "SceneMediaPanel"
-  file_contains "SceneMediaView"                "presentation/src/components/SceneMediaView.tsx" "SceneMediaView"
-  file_contains "DeckImportProgress pres"       "presentation/src/lib/events.ts"              "DeckImportProgress"
-
-  file_contains "pptx_extracts_title test"   "src-tauri/src/deck_importer.rs" "pptx_extracts_title_body_notes"
-  file_contains "is_code_slide test"         "src-tauri/src/pptx.rs" "is_code_slide_true_for_monospace"
-  file_contains "importer enforces zip-bomb limits" "src-tauri/src/pptx.rs" "fn check_archive"
-  file_exists "src-tauri/fuzz/fuzz_targets/pptx_import.rs"
-  file_contains "load_deck_resets test"      "src-tauri/src/slide_state_machine.rs" "load_deck_resets_index_and_timer"
-  file_contains "round_trip_json test"       "src-tauri/src/slide.rs"         "deck_save_and_load_json_round_trips"
-
-  check "F1.4 unit tests pass" \
-    bash -c 'cd src-tauri && cargo test 2>&1 | tee /tmp/sd-f14-test.log \
-    && ! grep -q "FAILED" /tmp/sd-f14-test.log'
-}
-
-run_f1_5() {
-  section "F1.5 — Multi-Display Assignment"
-  if [ ! -f "src-tauri/src/display.rs" ]; then
-    skip "display.rs not created — F1.5 not started yet"
-    return
-  fi
-
-  file_contains "DisplayInfo struct"        "src-tauri/src/display.rs"              "pub struct DisplayInfo"
-  file_contains "list_displays fn"          "src-tauri/src/display.rs"              "pub fn list_displays"
-  file_contains "displays_changed fn"       "src-tauri/src/display.rs"              "pub fn displays_changed"
-  file_contains "is_assigned_display_lost"  "src-tauri/src/display.rs"              "pub fn is_assigned_display_lost"
-  file_contains "pick_fallback fn"          "src-tauri/src/display.rs"              "pub fn pick_fallback"
-  file_contains "spawn_watch_task fn"       "src-tauri/src/display.rs"              "pub fn spawn_watch_task"
-  file_contains "DisplaysChanged variant"   "src-tauri/src/events.rs"               "DisplaysChanged"
-  file_contains "DisplayLost variant"       "src-tauri/src/events.rs"               "DisplayLost"
-  file_contains "display_list cmd"          "src-tauri/src/commands/display.rs"     "display_list"
-  file_contains "display_assign cmd"        "src-tauri/src/commands/display.rs"     "display_assign_presentation"
-  file_contains "display_id in config"      "src-tauri/src/config.rs"               "display_id"
-  file_contains "ConfigLoader::save"        "src-tauri/src/config_loader.rs"        "pub fn save"
-
-  file_contains "DisplayPanel component"    "controller/src/components/DisplayPanel.tsx" "DisplayPanel"
-  file_contains "displayStore"              "controller/src/store/displayStore.ts"  "useDisplayStore"
-  file_contains "displayList ipc"           "controller/src/lib/ipc.ts"             "displayList"
-  file_contains "displayAssignPresentation ipc" "controller/src/lib/ipc.ts"         "displayAssignPresentation"
-  file_contains "DisplaysChanged events.ts" "controller/src/lib/events.ts"          "DisplaysChanged"
-
-  check "F1.5 unit tests pass" \
-    bash -c 'cd src-tauri && cargo test display 2>&1 | tee /tmp/sd-f15-test.log \
-    && ! grep -q "FAILED" /tmp/sd-f15-test.log'
-}
-
-
-# ══════════════════════════════════════════════════════════════════
-# CORE — Build + Lint (requires frontend dist to exist)
-# ══════════════════════════════════════════════════════════════════
-run_core() {
-  section "Core Build & Lint"
-
-  subsection "cargo fmt --check (always independent)"
-  check "cargo fmt --check" \
-    bash -c 'cd src-tauri && cargo fmt --check'
-
-  # Check frontend dist exists before attempting cargo build/clippy
-  local frontend_ready=true
-  for win in controller presentation; do
-    if [ ! -d "$win/dist" ]; then
-      warn "$win/dist not found — run bootstrap first (or remove --no-frontend)"
-      frontend_ready=false
-    fi
-  done
-
-  if [ "$frontend_ready" = true ]; then
-    subsection "cargo build (requires frontend dist)"
-    check "cargo build --debug" \
-      bash -c 'cd src-tauri && cargo build'
-
-    subsection "cargo clippy (requires frontend dist)"
-    check "cargo clippy -- -D warnings" \
-      bash -c 'cd src-tauri && cargo clippy -- -D warnings'
-  else
-    skip "cargo build  — skipped (frontend dist missing)"
-    skip "cargo clippy — skipped (frontend dist missing)"
-  fi
-
-  # cargo test is ALWAYS independent — never needs frontend dist
-  subsection "cargo test (always independent)"
-  check "cargo test" \
-    bash -c 'cd src-tauri && cargo test 2>&1 | tee /tmp/sd-test.log \
-             && ! grep -q "FAILED" /tmp/sd-test.log'
-  if command -v cargo-nextest >/dev/null 2>&1; then
-    check_warn "cargo nextest (what CI runs; per-test processes)" \
-      bash -c 'cd src-tauri && cargo nextest run --locked --no-fail-fast'
-  else
-    skip "cargo-nextest not installed (cargo install cargo-nextest --locked); CI runs it"
-  fi
-
-  subsection "TypeScript typecheck (always independent)"
-  for win in controller presentation; do
-    if grep -q '"typecheck"' "$win/package.json" 2>/dev/null; then
-      check "$win: npm run typecheck" bash -c "cd $win && npm run typecheck"
-    else
-      skip "$win: no typecheck script"
-    fi
-  done
-
-  subsection "Frontend lint — Biome (always independent)"
-  for win in controller presentation; do
-    if grep -q '"lint"' "$win/package.json" 2>/dev/null; then
-      check "$win: npm run lint" bash -c "cd $win && npm run lint"
-    else
-      skip "$win: no lint script"
-    fi
-  done
-
-  subsection "Frontend unit tests — Vitest (always independent)"
-  for win in controller presentation; do
-    if grep -q '"test"' "$win/package.json" 2>/dev/null; then
-      check "$win: npm test" bash -c "cd $win && npm test"
-    else
-      skip "$win: no test script"
-    fi
-  done
-
-  subsection "cargo-deny — advisories/licenses/bans/sources (non-blocking locally)"
-  if command -v cargo-deny >/dev/null 2>&1; then
-    check_warn "cargo deny check" bash -c 'cd src-tauri && cargo deny check'
-  else
-    skip "cargo-deny not installed locally — runs in CI via cargo-deny-action (cargo install cargo-deny to check here)"
-  fi
-
-  subsection "osv-scanner — OSV advisories across Cargo.lock and both npm lockfiles (non-blocking locally)"
-  if command -v osv-scanner >/dev/null 2>&1 || docker info >/dev/null 2>&1; then
-    check_warn "osv-scanner" bash scripts/osv-scan.sh
-  else
-    skip "neither osv-scanner nor Docker available — runs in CI (bash scripts/osv-scan.sh)"
-  fi
-}
-
-# ══════════════════════════════════════════════════════════════════
-# T0 — Test-framework foundations (T0.2: fmt gate)
-# ══════════════════════════════════════════════════════════════════
-run_t0() {
-  section "T0 — Test framework foundations"
-
-  subsection "T0.2 — rustfmt gate"
-  file_contains "run_core runs cargo fmt --check" "scripts/verify.sh" "cargo fmt --check"
-  check "cargo fmt --check" \
-    bash -c 'cd src-tauri && cargo fmt --check'
-
-  subsection "T0.3 — test directory contract"
-  local d
-  for d in src-tauri/tests src-tauri/tests/fixtures controller/src/test presentation/src/test \
-           e2e e2e/specs e2e/pages e2e/fixtures; do
-    dir_exists "$d"
-  done
-  file_contains "skill documents the layout" ".claude/skills/test-authoring/SKILL.md" "Directory contract"
-
-  subsection "T0.4 — coverage visibility"
-  local f
-  for f in controller presentation; do
-    file_contains "$f has test:coverage script" "$f/package.json" '"test:coverage"'
-    file_contains "$f has @vitest/coverage-v8" "$f/package.json" '"@vitest/coverage-v8"'
-    file_contains "$f vitest config uses v8 coverage" "$f/vitest.config.ts" 'provider: "v8"'
-  done
-  file_contains "coverage output is gitignored" ".gitignore" "coverage"
-}
-
-# ══════════════════════════════════════════════════════════════════
-# T1 — Rust integration tests (L2, mock runtime, no webview)
-# ══════════════════════════════════════════════════════════════════
-run_t1_1() {
-  section "T1.1 — Mock-runtime harness"
-
-  file_exists "src-tauri/src/state.rs"
-  file_exists "src-tauri/tests/common/mod.rs"
-  file_exists "src-tauri/tests/harness_smoke.rs"
-  file_contains "state.rs exposes manage_core" "src-tauri/src/state.rs" "pub fn manage_core"
-  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::manage_core" \
-    && pass "app.rs uses shared manage_core" || fail "app.rs must call state::manage_core (non-comment)"
-  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::invoke_handler" \
-    && pass "app.rs uses shared invoke_handler" || fail "app.rs must call state::invoke_handler (non-comment)"
-  file_contains "app.rs stays gated" "src-tauri/src/lib.rs" "cfg(not(test))"
-  file_contains "harness uses tauri mock runtime" "src-tauri/tests/common/mod.rs" "mock_builder"
-  file_contains "harness provides collect_events" "src-tauri/tests/common/mod.rs" "fn collect_events"
-  local cargo_toml="src-tauri/Cargo.toml"
-  local dev_deps prod_deps
-  dev_deps=$(awk '/^\[dev-dependencies\]/{f=1;next} /^\[/{f=0} f' "$cargo_toml")
-  prod_deps=$(awk '/^\[dependencies\]/{f=1;next} /^\[/{f=0} f' "$cargo_toml")
-  echo "$dev_deps" | grep -q '"test"' && ! echo "$prod_deps" | grep -q '"test"'     && pass "tauri test feature is dev-only" || fail "tauri test feature must be in [dev-dependencies] only"
-
-  local t11_log
-  t11_log=$(mktemp)
-  check "T1.1 harness smoke tests pass (>=6, none failed)" \
-    bash -c 'cd src-tauri && cargo test --test harness_smoke 2>&1 | tee "$1" \
-      && ! grep -q "FAILED" "$1" \
-      && n=$(grep -o "test result: ok\. [0-9]* passed" "$1" | grep -o "[0-9]*" | head -1) \
-      && [ "${n:-0}" -ge 6 ]' _ "$t11_log"
-  rm -f "$t11_log"
-}
-
-run_t1_2() {
-  section "T1.2 — Deck & slide command journeys"
-
-  file_exists "src-tauri/tests/deck_journeys.rs"
-  file_contains "state.rs extracts restore_deck" "src-tauri/src/state.rs" "pub async fn restore_deck"
-  file_contains "state.rs extracts restore_on_startup" "src-tauri/src/state.rs" "pub async fn restore_on_startup"
-  file_contains "state.rs extracts spawn_timer" "src-tauri/src/state.rs" "pub fn spawn_timer"
-  file_contains "state.rs extracts manage_display" "src-tauri/src/state.rs" "pub fn manage_display"
-  file_contains "mock handler registers deck_import" "src-tauri/src/state.rs" "commands::deck::deck_import"
-  file_contains "mock handler registers display_list" "src-tauri/src/state.rs" "commands::display::display_list"
-  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::restore_on_startup"     && pass "app.rs uses shared restore_on_startup" || fail "app.rs must call state::restore_on_startup"
-  grep -v '^[[:space:]]*//' src-tauri/src/app.rs | grep -q "state::manage_display"     && pass "app.rs uses shared manage_display" || fail "app.rs must call state::manage_display"
-  if grep -rnE 'tauri::AppHandle[,)>;]|: AppHandle[,)>;]' src-tauri/src/commands >/dev/null 2>&1; then
-    fail "commands must take AppHandle<R>, not a concrete AppHandle"
-  else
-    pass "commands are runtime-generic"
-  fi
-  file_contains "app.rs stays gated" "src-tauri/src/lib.rs" "cfg(not(test))"
-
-  local t12_log
-  t12_log=$(mktemp)
-  check "T1.2 deck journeys pass (>=17, none failed)"     bash -c 'set -o pipefail; cd src-tauri && cargo test --test deck_journeys 2>&1 | tee "$1"       && ! grep -q "FAILED" "$1"       && n=$(grep -o "test result: ok. [0-9]* passed" "$1" | grep -o "[0-9]*" | head -1)       && [ "${n:-0}" -ge 17 ]' _ "$t12_log"
-  rm -f "$t12_log"
-}
-
-run_t1_3() {
-  section "T1.3 — Scene, timer, display, config commands"
-
-  file_exists "src-tauri/tests/scene_journeys.rs"
-  file_exists "src-tauri/tests/display_journeys.rs"
-  file_exists "src-tauri/tests/timer_journeys.rs"
-  file_exists "src-tauri/tests/config_journeys.rs"
-  file_contains "display seam: DisplayProvider trait" "src-tauri/src/display.rs" "pub trait DisplayProvider"
-  file_contains "display seam: reconcile_displays is testable" "src-tauri/src/display.rs" "pub async fn reconcile_displays"
-  file_contains "state.rs manages ConfigPath" "src-tauri/src/state.rs" "pub struct ConfigPath"
-  file_contains "harness fakes the monitor list" "src-tauri/tests/common/mod.rs" "impl DisplayProvider for FakeDisplays"
-  if grep -rnE 'resolve_path|app_config_dir|app_data_dir|available_monitors' src-tauri/src/commands >/dev/null 2>&1; then
-    fail "commands must use managed ConfigPath/AppDataDir/DisplayProvider, not OS lookups"
-  else
-    pass "commands never resolve OS paths or monitors directly"
-  fi
-
-  local t13_log
-  t13_log=$(mktemp)
-  check "T1.3 journeys pass (scene>=10, display>=12, timer>=5, config>=7, none failed)" \
-    bash -c 'set -o pipefail; cd src-tauri && cargo test --test scene_journeys --test display_journeys --test timer_journeys --test config_journeys 2>&1 | tee "$1" \
-      && ! grep -q "FAILED" "$1" \
-      && [ "$(grep -c "test result: ok" "$1")" -eq 4 ] \
-      && n=$(grep -o "test result: ok\. [0-9]* passed" "$1" | grep -o "[0-9]*" | awk "{s+=\$1} END {print s}") \
-      && [ "${n:-0}" -ge 34 ]' _ "$t13_log"
-  rm -f "$t13_log"
-}
-
-run_t1_4() {
-  section "T1.4 — Architecture invariants as tests"
-
-  file_exists "src-tauri/tests/invariants.rs"
-  file_contains "invariants test covers capabilities" "src-tauri/tests/invariants.rs" "fn presentation_capability_is_listen_only"
-  file_contains "invariants test covers event union parity" "src-tauri/tests/invariants.rs" "fn controller_event_union_mirrors_every_rust_variant"
-  file_contains "invariants test covers unwrap ban" "src-tauri/tests/invariants.rs" "fn command_handlers_never_unwrap_or_expect"
-  file_contains "invariants test covers every capability file" "src-tauri/tests/invariants.rs" "fn no_capability_grants_presentation_more_than_listen_and_unlisten"
-  file_contains "invariants test covers emit allow-list" "src-tauri/tests/invariants.rs" "fn emit_is_only_called_from_the_app_event_bridge"
-
-  local t14_log
-  t14_log=$(mktemp)
-  check "T1.4 invariant tests pass (>=28, none failed)"     bash -c 'set -o pipefail; cd src-tauri && cargo test --test invariants 2>&1 | tee "$1"       && ! grep -q "FAILED" "$1"       && n=$(grep -o "test result: ok. [0-9]* passed" "$1" | grep -o "[0-9]*" | head -1)       && [ "${n:-0}" -ge 28 ]' _ "$t14_log"
-  rm -f "$t14_log"
-}
-
-run_t1() {
-  run_t1_1
-  run_t1_2
-  run_t1_3
-  run_t1_4
-}
-
-# ══════════════════════════════════════════════════════════════════
-# T2 — Frontend render & wiring tests (L2, JS)
-# ══════════════════════════════════════════════════════════════════
-run_t2_1() {
-  section "T2.1 — Shared frontend test utilities"
-
-  local f
-  for f in controller presentation; do
-    file_exists "$f/src/test/mockTauri.ts"
-    file_exists "$f/src/test/mockTauri.test.tsx"
-    file_contains "$f helper exports installMockIPC" "$f/src/test/mockTauri.ts" "export function installMockIPC"
-    file_contains "$f helper exports emitAppEvent" "$f/src/test/mockTauri.ts" "export async function emitAppEvent"
-    file_contains "$f helper exports renderApp" "$f/src/test/mockTauri.ts" "export function renderApp"
-    local out
-    out=$(mktemp)
-    check "$f vitest: 0 failed, 0 skipped, helper tests >=8 passed, typecheck" \
-      bash -c 'cd "$1" && npx vitest run --reporter=json --outputFile="$2" >/dev/null 2>&1; \
-        node ../scripts/check-vitest-json.cjs "$2" src/test/mockTauri.test.tsx 8 && npm run typecheck >/dev/null 2>&1' _ "$f" "$out"
-    rm -f "$out"
-  done
-}
-
-run_t2_2() {
-  section "T2.2 — Controller component tests"
-
-  local f
-  for f in src/App.test.tsx src/components/SlideDeckPanel.test.tsx src/components/PresentButton.test.tsx \
-           src/components/SceneMediaPanel.test.tsx src/components/DisplayPanel.test.tsx; do
-    file_exists "controller/$f"
-    check "controller/$f uses user-event, not fireEvent" bash -c '! sed "s#//.*##" "controller/$1" | grep -qw fireEvent && grep -q "@testing-library/user-event" "controller/$1"' _ "$f"
-    check "controller/$f asserts no unhandled IPC" grep -q "ipc.unhandled" "controller/$f"
-  done
-  file_exists controller/src/test/componentHelpers.ts
-
-  # All known product-bug pins are fixed; no it.fails may remain.
-  check "no it.fails product-bug pins" bash -c     '[ "$(cd controller && sed "s#//.*##" src/components/*.test.tsx src/App.test.tsx | grep -c "it.fails(")" = 0 ]'
-
-  local out
-  out=$(mktemp)
-  check "controller vitest: 0 failed/skipped, component tests >= App 10, Deck 31, Present 7, Scene 10, Display 8, typecheck" \
-    bash -c 'cd controller && npx vitest run --reporter=json --outputFile="$1" >/dev/null 2>&1; r=$1; \
-      node ../scripts/check-vitest-json.cjs "$r" src/App.test.tsx 10 && \
-      node ../scripts/check-vitest-json.cjs "$r" src/components/SlideDeckPanel.test.tsx 31 && \
-      node ../scripts/check-vitest-json.cjs "$r" src/components/PresentButton.test.tsx 7 && \
-      node ../scripts/check-vitest-json.cjs "$r" src/components/SceneMediaPanel.test.tsx 10 && \
-      node ../scripts/check-vitest-json.cjs "$r" src/components/DisplayPanel.test.tsx 8 && npm run typecheck >/dev/null 2>&1' _ "$out"
-  rm -f "$out"
-}
-
-run_t2_3() {
-  section "T2.3 — Presentation app tests"
-
-  file_exists presentation/src/App.test.tsx
-  file_exists presentation/src/App.lifecycle.test.tsx
-  check "presentation/App.test.tsx asserts listen-only (ipc.calls empty) and no unhandled IPC" \
-    bash -c 'grep -q "expect(ipc.calls).toEqual(\[\])" presentation/src/App.test.tsx && grep -q "ipc.unhandled" presentation/src/App.test.tsx'
-  check "presentation/App.test.tsx covers every non-rendered AppEvent via a typed ignored-events table" \
-    grep -q "IgnoredType = Exclude<AppEvent" presentation/src/App.test.tsx
-  check "presentation/App.test.tsx has no CSS-class queries" bash -c '! grep -Eq "querySelector|getByClassName" presentation/src/App.test.tsx'
-
-  local out
-  out=$(mktemp)
-  check "presentation vitest: 0 failed/skipped, App.test >= 27, lifecycle >= 1, typecheck" \
-    bash -c 'cd presentation && npx vitest run --reporter=json --outputFile="$1" >/dev/null 2>&1; \
-      node ../scripts/check-vitest-json.cjs "$1" src/App.test.tsx 27 && \
-      node ../scripts/check-vitest-json.cjs "$1" src/App.lifecycle.test.tsx 1 && npm run typecheck >/dev/null 2>&1' _ "$out"
-  rm -f "$out"
-}
-
-run_t2_4() {
-  section "T2.4 — Event-union exhaustiveness"
-
-  local f
-  for f in controller presentation; do
-    file_exists "$f/src/lib/events.exhaustive.test.ts"
-    file_contains "$f has typed TS_VARIANTS table" "$f/src/lib/events.exhaustive.test.ts" "const TS_VARIANTS: Record<AppEvent"
-    file_contains "$f reads events.rs" "$f/src/lib/events.exhaustive.test.ts" "src-tauri/src/events.rs?raw"
-    local out
-    out=$(mktemp)
-    check "$f vitest: 0 failed/skipped, exhaustiveness tests >=7 passed, typecheck"       bash -c 'cd "$1" && npx vitest run --reporter=json --outputFile="$2" >/dev/null 2>&1;         node ../scripts/check-vitest-json.cjs "$2" src/lib/events.exhaustive.test.ts 7 && npm run typecheck >/dev/null 2>&1' _ "$f" "$out"
-    rm -f "$out"
-  done
-}
-
-run_t2() {
-  run_t2_1
-  run_t2_2
-  run_t2_3
-  run_t2_4
-}
-
-# ══════════════════════════════════════════════════════════════════
-# RELEASE — step 1: PDFium bundling + bundle-contents assertion
-# (no real `cargo tauri build` here; it is too slow — run it manually, then scripts/check-bundle.sh)
-# ══════════════════════════════════════════════════════════════════
-run_release_pdfium() {
-  section "Release — PDFium bundling + bundle check"
-
-  file_exists "release/deps.json"
-  file_exists "release/bundle-budget.json"
-  file_exists "release/bundle.pdfium.conf.json"
-  file_exists "scripts/fetch-deps.sh"
-  file_exists "scripts/check-bundle.sh"
-  file_contains "deps.json pins windows-x64 sha256"   "release/deps.json" '"windows-x64"'
-  file_contains "deps.json pins linux-x64 sha256"     "release/deps.json" '"linux-x64"'
-  file_contains "deps.json only uses bblanchon releases" "release/deps.json" 'github.com/bblanchon/pdfium-binaries/releases/download/'
-  file_contains "fetch-deps verifies SHA-256"         "scripts/fetch-deps.sh" 'SHA-256 mismatch'
-  file_contains "staging dir is gitignored"           ".gitignore" 'src-tauri/resources/'
-  file_contains "bundle overlay maps pdfium resources" "release/bundle.pdfium.conf.json" 'resources/pdfium/\*'
-  # Missing resource globs fail tauri-build, so resources must live only in the overlay passed to `tauri build --config`.
-  file_not_contains "tauri.conf.json has no bundle.resources (empty staging dir must still build)" "src-tauri/tauri.conf.json" '"resources"'
-  file_contains "loader searches ../lib/<product>"    "src-tauri/src/deck_importer.rs" 'fn pdfium_candidate_dirs'
-  file_not_contains "PDF fixture test is no longer ignored" "src-tauri/tests/deck_import_fixtures.rs" '#\[ignore'
-  if git ls-files --error-unmatch src-tauri/resources >/dev/null 2>&1 && [ -n "$(git ls-files src-tauri/resources)" ]; then
-    fail "fetched binaries under src-tauri/resources must not be tracked"
-  else
-    pass "no fetched binaries tracked"
-  fi
-
-  check "pdfium loader unit tests + PDF fixture (skips if pdfium not fetched)" \
-    bash -c 'set -o pipefail; cd src-tauri && cargo test --lib deck_importer 2>&1 | tail -3 && cargo test --test deck_import_fixtures 2>&1 | grep -q "test result: ok. 3 passed"'
-
-  # check-bundle.sh against synthetic trees: a good one passes, a leaky/pdfium-less one fails.
-  local tmp; tmp="$(mktemp -d)"
-  mkdir -p "$tmp/good" "$tmp/bad/tests"
-  head -c 1100000 /dev/zero > "$tmp/good/pdfium.dll"
-  echo x > "$tmp/good/PDFIUM-LICENSE.txt"; echo x > "$tmp/good/streamdeck.exe"
-  echo x > "$tmp/bad/streamdeck.exe"; echo x > "$tmp/bad/app.pdb"
-  check "check-bundle.sh accepts a complete tree" bash scripts/check-bundle.sh "$tmp/good" windows-x64
-  if bash scripts/check-bundle.sh "$tmp/bad" windows-x64 >/dev/null 2>&1; then
-    fail "check-bundle.sh must reject a tree without pdfium / with .pdb and tests/"
-  else
-    pass "check-bundle.sh rejects a leaky tree without pdfium"
-  fi
-  rm -rf "$tmp"
-}
-
-# ══════════════════════════════════════════════════════════════════
-# DISPATCH
-# ══════════════════════════════════════════════════════════════════
-echo ""
-echo -e "${BOLD}StreamDeck — Verification Framework${RESET}"
-echo -e "${DIM}Filter: ${FILTER}  |  Frontend build: $( [ "$SKIP_FRONTEND" = true ] && echo "skipped" || echo "auto" )  |  $(date '+%Y-%m-%d %H:%M:%S')${RESET}"
-echo -e "══════════════════════════════════════════════════════"
-
-# Bootstrap always runs first (handles npm install + frontend build)
-run_bootstrap
-
-case "$FILTER" in
+    wait; show rust fe-controller fe-presentation ;;
+  quick)
+    base="$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null || echo HEAD)"
+    changed="$({ git diff --name-only "$base"; git ls-files -o --exclude-standard; } | sort -u)"
+    bootstrap true || { finish; }
+    fmt
+    step "cargo check" cargo check --locked "${MANIFEST[@]}" --all-targets
+    if grep -Eq '^(src-tauri/|Cargo\.|rust-toolchain)' <<<"$changed"; then nextest --lib --test invariants; else skipped "nextest (no Rust changes vs $base)"; fi
+    for w in "${FRONTENDS[@]}"; do
+      if grep -q "^$w/" <<<"$changed" && [ "$NO_FRONTEND" = false ]; then frontend_checks "$w"; else skipped "$w typecheck/vitest (unchanged vs $base)"; fi
+    done
+    cat "$OUT" ;;
   invariants)
-    run_invariants
-    ;;
-  f0.1)
-    run_invariants; run_f0_1
-    ;;
-  f0.2)
-    run_invariants; run_f0_2
-    ;;
-  f0.3)
-    run_invariants; run_f0_3
-    ;;
-  f0.4)
-    run_invariants; run_f0_4
-    ;;
-  f0|phase0)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_core
-    ;;
-  f1.1)
-    run_invariants; run_f1_1
-    ;;
-  f1.2)
-    run_invariants; run_f1_2; run_core
-    ;;
-  f1.3)
-    run_invariants; run_f1_1; run_f1_2; run_f1_3
-    ;;
-  f1.4)
-    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4
-    ;;
-  f1.5)
-    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5
-    ;;
-  f1|phase1)
-    run_invariants; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_core
-    ;;
-  t0)
-    run_t0
-    ;;
-  t1.1)
-    run_t1_1
-    ;;
-  t1.3)
-    run_t1_3
-    ;;
-  t1.2)
-    run_t1_2
-    ;;
-  t1.4)
-    run_t1_4
-    ;;
-  t2.1)
-    run_t2_1
-    ;;
-  t2.2)
-    run_t2_2
-    ;;
-  t2.3)
-    run_t2_3
-    ;;
-  t2.4)
-    run_t2_4
-    ;;
-  t2)
-    run_t2
-    ;;
-  t1)
-    run_t1
-    ;;
-  release|release.pdfium)
-    run_release_pdfium
-    ;;
-  core)
-    run_core
-    ;;
-  all|*)
-    run_invariants; run_f0_1; run_f0_2; run_f0_3; run_f0_4; run_f1_1; run_f1_2; run_f1_3; run_f1_4; run_f1_5; run_t0; run_t1; run_t2; run_release_pdfium; run_core
-    ;;
+    bootstrap true || { finish; }
+    nextest --test invariants; cat "$OUT" ;;
+  deps)
+    if [ -z "$ONLY" ] || [ "$ONLY" = deny ]; then
+      if command -v cargo-deny >/dev/null 2>&1; then step "cargo deny" cargo deny --locked "${MANIFEST[@]}" check; else skipped "cargo deny (install: cargo install cargo-deny --locked)"; fi
+    fi
+    [ -z "$ONLY" ] || [ "$ONLY" = osv ] && step "osv-scanner" bash scripts/osv-scan.sh
+    if [ -z "$ONLY" ] || [ "$ONLY" = fuzz ]; then
+      if docker info >/dev/null 2>&1; then
+        step "fuzz smoke (30s)" bash -c 'docker build -q -t streamdeck-fuzz src-tauri/fuzz && MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/work" -v streamdeck-fuzz-target:/fuzz-target -e CARGO_TARGET_DIR=/fuzz-target -w /work/src-tauri streamdeck-fuzz cargo +nightly fuzz run pptx_import fuzz/seeds/pptx_import -- -max_total_time=30'
+      else skipped "fuzz smoke (Docker unavailable)"; fi
+    fi
+    cat "$OUT" ;;
+  release)
+    if [ -f scripts/build-release.sh ]; then step "build-release.sh" bash scripts/build-release.sh; else skipped "scripts/build-release.sh not present yet (owned by the release work)"; fi
+    if [ -f scripts/check-bundle.sh ] && [ -n "${ARGS[0]:-}" ]; then step "check-bundle.sh ${ARGS[0]}" bash scripts/check-bundle.sh "${ARGS[0]}"; else skipped "check-bundle.sh (pass a bundle path: verify.sh release <installer|dir>)"; fi
+    cat "$OUT" ;;
+  *) sed -n 2,11p "$0"; exit 2 ;;
 esac
-
-# ══════════════════════════════════════════════════════════════════
-# SUMMARY
-# ══════════════════════════════════════════════════════════════════
-echo ""
-echo -e "══════════════════════════════════════════════════════"
-echo -e "  ${GREEN}${BOLD}Passed  : $PASSED${RESET}"
-[ "$FAILURES" -gt 0 ] && echo -e "  ${RED}${BOLD}Failed  : $FAILURES${RESET}" || echo -e "  ${DIM}Failed  : $FAILURES${RESET}"
-[ "$WARNINGS" -gt 0 ] && echo -e "  ${YELLOW}${BOLD}Warnings: $WARNINGS${RESET}" || echo -e "  ${DIM}Warnings: $WARNINGS${RESET}"
-echo -e "  ${DIM}Skipped : $SKIPPED${RESET}"
-echo ""
-
-if   [ "$FAILURES" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
-  echo -e "${GREEN}${BOLD}  ✔  All checks passed.${RESET}"
-elif [ "$FAILURES" -eq 0 ]; then
-  echo -e "${YELLOW}${BOLD}  ⚠  Passed with warnings — review before marking complete.${RESET}"
-else
-  echo -e "${RED}${BOLD}  ✗  $FAILURES check(s) failed.${RESET}"
-fi
-echo ""
-exit "$FAILURES"
+finish

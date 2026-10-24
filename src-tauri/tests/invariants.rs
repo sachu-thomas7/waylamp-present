@@ -1361,3 +1361,87 @@ fn emit_scanner_self_test() {
     assert!(emit_calls("fn f() { // h.emit(x)\n let s = \".emit(\"; }").is_empty());
     assert!(emit_calls("fn f() { h.emitter; }").is_empty());
 }
+
+// --- Regression guards moved from verify.sh greps (CLAUDE.md "Multi-window dev/build wiring") ---
+
+fn presentation_command_code() -> String {
+    production_text(
+        &read(&tauri_dir().join("src/commands/presentation.rs")),
+        true,
+    )
+}
+
+#[test]
+fn presentation_show_is_always_fullscreen_with_no_windowed_fallback() {
+    let code = presentation_command_code();
+    assert!(
+        code.contains("set_fullscreen(true)"),
+        "presentation_show must go fullscreen"
+    );
+    assert!(
+        !code.contains("single_display"),
+        "windowed single-display fallback was reverted on purpose"
+    );
+}
+
+#[test]
+fn presentation_is_always_on_top_only_with_two_or_more_displays() {
+    let code = presentation_command_code();
+    assert!(
+        !code.contains("set_always_on_top(true)"),
+        "unconditional always-on-top blocks Alt+Tab on mirrored rigs"
+    );
+    assert!(code.contains("set_always_on_top(multi_display)"));
+    assert!(
+        code.contains(".len() >= 2"),
+        "multi_display must mean 2+ displays"
+    );
+}
+
+#[test]
+fn presentation_window_close_is_prevented_and_routed_through_hide() {
+    let app = production_text(&read(&tauri_dir().join("src/app.rs")), true);
+    let at = app
+        .find("label() == \"presentation\"")
+        .expect("presentation arm in on_window_event");
+    let arm = &app[at..];
+    let prevent = arm
+        .find("prevent_close()")
+        .expect("presentation CloseRequested must prevent_close");
+    assert!(
+        arm[prevent..].contains("hide_presentation("),
+        "OS close must act like Stop Presenting"
+    );
+}
+
+#[test]
+fn dev_and_build_commands_start_both_frontends_from_the_repo_root() {
+    let conf = read_json(&tauri_dir().join("tauri.conf.json"));
+    for (key, needle) in [
+        ("beforeDevCommand", "dev-both.cjs"),
+        ("beforeBuildCommand", "merge-presentation-dist.cjs"),
+    ] {
+        let cmd = &conf["build"][key];
+        assert_eq!(
+            cmd["cwd"], "..",
+            "{key} must run from the repo root (no root package.json)"
+        );
+        assert!(
+            cmd["script"].as_str().unwrap_or_default().contains(needle),
+            "{key} must run {needle}"
+        );
+        assert!(
+            repo_root().join("scripts").join(needle).is_file(),
+            "scripts/{needle} missing"
+        );
+    }
+}
+
+#[test]
+fn presentation_build_uses_a_relative_asset_base() {
+    let vite = strip_ts_comments(&read(&repo_root().join("presentation/vite.config.ts")));
+    assert!(
+        vite.contains("base: \"./\""),
+        "presentation assets must resolve once relocated under controller/dist/presentation"
+    );
+}

@@ -213,35 +213,27 @@ then merge `feature/live-production`. Keep edits to shared files (`events.rs`, `
 
 ## Verification — `scripts/verify.sh`
 
-This is the actual Definition-of-Done gate, not `cargo test` alone. It bootstraps
-npm installs + frontend builds (hash-cached), then runs phase/feature-scoped checks:
-structural (`grep`-based file/pattern presence) + real `cargo test`/`clippy`/`typecheck`.
+Purpose/speed tiers; CI and the pre-push hook call the same commands, so they cannot drift. Features are test
+filters, not scripts. The script bootstraps `npm ci` + frontend `dist/` (hash-cached in `.verify-cache/`), runs the
+Rust and frontend lanes concurrently, and keeps per-step logs in a fresh temp dir (path printed on failure).
 
 ```
-bash scripts/verify.sh              # full check, current phase
-bash scripts/verify.sh f1.4         # one feature's checks (+ its prerequisites)
-bash scripts/verify.sh f1           # all of Phase 1
-bash scripts/verify.sh invariants   # architecture invariants only
-bash scripts/verify.sh core         # build + test + lint only, no structural checks
-bash scripts/verify.sh --no-frontend  # skip the frontend build bootstrap step
+bash scripts/verify.sh quick        # every edit: fmt, cargo check, fast Rust tests, typecheck+Vitest for changed frontends
+bash scripts/verify.sh push         # pre-push + CI: fmt, clippy -D warnings, ONE nextest (incl. invariants), both frontends typecheck+Biome+Vitest
+bash scripts/verify.sh invariants   # src-tauri/tests/invariants.rs only
+bash scripts/verify.sh deps         # cargo deny, osv-scanner, fuzz smoke (Docker); --only deny|osv|fuzz
+bash scripts/verify.sh release [bundle]  # delegates to scripts/build-release.sh / check-bundle.sh when present
 ```
 
-`cargo test` is always independent of frontend state. `cargo build`/`cargo clippy` are
-**not** — the default `custom-protocol` Cargo feature embeds `controller/dist` and
-`presentation/dist` via rust-embed at compile time, so those dirs must exist first
-(verify.sh's bootstrap step handles this; CI now does too — see below).
-
-When adding a new feature: add its `run_fX_Y()` block to `verify.sh` following the
-existing pattern (file existence → `file_contains` structural checks → a `cargo test`
-filter), and wire it into the `case` dispatch, including the `all|*)` fallthrough — that
-fallthrough is easy to forget and was itself out of date (missing `run_f1_4`) until fixed.
+`core` is an alias of `push`; `--no-frontend` skips the frontend lane and dist build; `push --only rust|frontend` is what CI jobs run.
+"Nothing unexpectedly skipped" replaces hard-coded counts: nextest runs with `--no-tests=fail` and fails on any skipped/ignored test;
+`scripts/check-vitest-json.cjs` fails on failed/skipped/todo Vitest tests. Regression greps live in `tests/invariants.rs` as real tests.
+`cargo build`/`clippy` need `controller/dist` and `presentation/dist` (rust-embed, `custom-protocol`); bootstrap builds them.
 
 ## CI (`.github/workflows/ci.yml`)
 
-Two jobs: `rust` (test + clippy, matrix over ubuntu/windows; macOS dropped until an Apple account exists) and `typecheck`
-(both frontends). The rust job now builds both frontend `dist/` directories before
-running cargo, for the reason above — this was previously missing and would have failed
-`cargo test`/`clippy` on any clean checkout since `dist/` is gitignored.
+Jobs: `rust` (matrix ubuntu/windows: `verify.sh push --only rust`), `frontend` (`verify.sh push --only frontend`), `cargo-deny`
+(action) and `osv` (`verify.sh deps --only osv`). macOS dropped until an Apple account exists.
 
 ## Release (2026-10-24)
 

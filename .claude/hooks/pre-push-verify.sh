@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse hook: blocks `git push` until scripts/verify.sh core passes.
+# PreToolUse hook: blocks `git push` until scripts/verify.sh push passes.
 # scripts/verify.sh is this repo's real Definition-of-Done gate (see CLAUDE.md) —
 # this hook enforces it at the one point that matters most: before code reaches
 # the shared GitHub remote.
@@ -20,18 +20,18 @@ if command -v fnm >/dev/null 2>&1; then
 fi
 
 LOG="$(mktemp)"
-if bash scripts/verify.sh core > "$LOG" 2>&1; then
+if bash scripts/verify.sh push > "$LOG" 2>&1; then
   rm -f "$LOG"
   exit 0
 fi
 
 {
-  echo "scripts/verify.sh core failed — last 40 lines:"
+  echo "scripts/verify.sh push failed — last 40 lines:"
   tail -n 40 "$LOG"
 } >&2
 rm -f "$LOG"
 
 cat <<'JSON'
-{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"scripts/verify.sh core failed. Fix the failures (see stderr) before pushing to the shared remote."}}
+{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"scripts/verify.sh push failed. Fix the failures (see stderr) before pushing to the shared remote."}}
 JSON
 exit 0
