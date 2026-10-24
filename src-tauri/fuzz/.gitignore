@@ -2,3 +2,5 @@ target/
 corpus/
 artifacts/
 coverage/
+seeds/pptx_import/*
+!seeds/pptx_import/*.pptx
