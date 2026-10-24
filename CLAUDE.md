@@ -151,7 +151,7 @@ isn't tracked in the repo.
 `main` is the **presentation-only product** (import PPTX/PDF, present on the projector, controller with notes/timer/scene media, multi-display). All live-production code
 (F2.1-F2.4 NDI/WHIP/camera previews/pipeline, F3.1 compositor, F4.1 multi-destination streaming) lives on the long-lived branch `feature/live-production`
 (forked at 71275fe) and was removed from `main` in a single commit (`chore: remove live-production code ...`). To bring it back: `git revert <that commit>` on `main`,
-then merge `feature/live-production`. Keep edits to shared files (`events.rs`, `state.rs`, `app.rs`, `config.rs`, controller `App.tsx`) small meanwhile. Full plan: `dev-docs/handover_presentation_release_2026-10-24.md`.
+then merge `feature/live-production`. Keep edits to shared files (`events.rs`, `state.rs`, `app.rs`, `config.rs`, controller `App.tsx`) small meanwhile.
 `verify.sh` still has its old per-feature structure for the remaining features; a tiered rebuild is a separate follow-on.
 
 ## Current status

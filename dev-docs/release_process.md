@@ -65,4 +65,4 @@ GPL-3.0-or-later (`LICENSE`, shown in the installer, installed as `LICENSE.txt`)
 
 ## Size, speed, minimum runtime
 
-Numbers are recorded in `dev-docs/handover_presentation_release_2026-10-24.md` (Status log) and `release/bundle-budget.json`. `minimumWebview2Version` = `122.0.2365.46` (the first stable release with WebResourceRequested for iframes/workers, which wry needs for custom protocols such as `sdmedia`); the installer updates an older runtime from the embedded offline installer.
+Numbers are recorded in `release/bundle-budget.json`. `minimumWebview2Version` = `122.0.2365.46` (the first stable release with WebResourceRequested for iframes/workers, which wry needs for custom protocols such as `sdmedia`); the installer updates an older runtime from the embedded offline installer.
