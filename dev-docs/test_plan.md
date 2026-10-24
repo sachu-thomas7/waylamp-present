@@ -24,10 +24,10 @@ Phase 2+ media (GStreamer/NDI/WHIP) is covered by roadmap T7 extension points, n
 
 | Layer | What | Tooling | Where it runs |
 |---|---|---|---|
-| L0 Static | fmt, clippy `-D warnings`, `tsc`, Biome, `cargo deny`, invariant greps | cargo, tsc, biome | `verify.sh core`, CI |
-| L1 Unit | state machine, parsers, stores, config | `#[test]`, Vitest | `verify.sh core`, CI |
-| L2 Integration | Rust: command→bus→payload on `tauri::test` mock runtime. JS: components/stores with Testing Library + `mockIPC` | cargo, Vitest | `verify.sh core`, CI |
-| L3 Golden/contract | fixture decks + snapshots, event/payload serialization, capability files | cargo, Vitest | `verify.sh core`, CI |
+| L0 Static | fmt, clippy `-D warnings`, `tsc`, Biome, `cargo deny`, invariant tests | cargo, tsc, biome | `verify.sh push`, CI |
+| L1 Unit | state machine, parsers, stores, config | `#[test]`, Vitest | `verify.sh push`, CI |
+| L2 Integration | Rust: command→bus→payload on `tauri::test` mock runtime. JS: components/stores with Testing Library + `mockIPC` | cargo, Vitest | `verify.sh push`, CI |
+| L3 Golden/contract | fixture decks + snapshots, event/payload serialization, capability files | cargo, Vitest | `verify.sh push`, CI |
 | L4 Real-app E2E | launch real app, click controller, assert presentation DOM and window state | Playwright over WebView2 CDP (fallback: WebdriverIO embedded) | `verify.sh e2e` locally; optional manual CI dispatch |
 | L5 Manual | hardware/OS behaviours | checklist §9 | before release / after Tauri-level bumps |
 
@@ -124,10 +124,10 @@ Run per upgrade set, locally, on an isolated worktree (never in place):
 
 | Change class | Minimum gate | Plus |
 |---|---|---|
-| npm minor/patch | `verify.sh core` | — |
-| Rust minor/patch | `verify.sh core` | — |
+| npm minor/patch | `verify.sh push` | — |
+| Rust minor/patch | `verify.sh push` | — |
 | Rust major (parsers/serializers: quick-xml, zip, serde, ts-rs) | `core` | T3 golden diff reviewed by a human |
-| Frontend toolchain (vite, plugin-react, vitest, typescript) | `core` + build both frontends | `verify.sh e2e` + T5.1 visual diff + both dev servers boot |
+| Frontend toolchain (vite, plugin-react, vitest, typescript) | `push` + build both frontends | `verify.sh e2e` + T5.1 visual diff + both dev servers boot |
 | React / react-dom / types | `core` | L4 J2–J3 + visual diff |
 | `tauri*` / `@tauri-apps/*` | `core` | full `e2e` + §9 manual launch |
 | GitHub Actions | read changelog; cannot run locally | first `main` CI run is the test |
@@ -139,7 +139,7 @@ the PR or commit message. `scripts/update-deps.sh` (T5.2) automates this.
 
 ## 8. Entry / exit criteria
 
-- **Per change:** `verify.sh core` green (includes fmt, clippy, all L1–L3). Touching windows,
+- **Per change:** `verify.sh push` green (includes fmt, clippy, all L1–L3). Touching windows,
   IPC, capabilities, dev/build wiring, or any Vite/Tauri dependency → also `verify.sh e2e`.
 - **Per roadmap test item:** its gate passes; new tests proven to fail (skill); traceability
   matrix and `CLAUDE.md` status updated.
@@ -191,7 +191,7 @@ Tauri/OS-integration bumps.
 | E2E journeys green | 0 / 9 | 9 / 9 (T4.3) |
 | Line coverage (frontends) | controller 45.5% lines / 45% branches; presentation 81.4% lines / 83.3% branches (v8, 2026-10-12; `npm run test:coverage`) | floor at T6.3 |
 | Line coverage (Rust) | not measured (`cargo-llvm-cov` not installed) | optional |
-| Time: `verify.sh core` | ~2–4 min warm | ≤ 6 min |
+| Time: `verify.sh push` | ~2–4 min warm | ≤ 6 min |
 | Time: `verify.sh e2e` | n/a | ≤ 8 min |
 | Flaky/quarantined tests | n/a | 0 at release |
 
