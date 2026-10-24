@@ -10,7 +10,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-[ -d "/c/Users/$USERNAME/.cargo/bin" ] && export PATH="/c/Users/$USERNAME/.cargo/bin:$PATH"
+CARGO_BIN="$(cygpath -u "${USERPROFILE:-}" 2>/dev/null)/.cargo/bin"; [ -d "$CARGO_BIN" ] && export PATH="$CARGO_BIN:$PATH"
 TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 export CARGO_TARGET_DIR="$TARGET_DIR"
 WIN() { cygpath -m "$1" 2>/dev/null || echo "$1"; }

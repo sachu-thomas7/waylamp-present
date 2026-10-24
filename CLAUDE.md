@@ -249,7 +249,7 @@ profile** — `$HOME/.cargo/bin` silently doesn't exist. Use the explicit Window
 export PATH="/c/Users/<you>/.cargo/bin:$PATH"
 eval "$(fnm env --shell bash)"
 ```
-(`.claude/hooks/*.sh` fall back through `/c/Users/sachu/.cargo/bin` → `$HOME/.cargo/bin` →
+(`.claude/hooks/*.sh` fall back through `/c/Users/<you>/.cargo/bin` → `$HOME/.cargo/bin` →
 `$USERPROFILE/.cargo/bin` for exactly this reason — don't "simplify" that to just `$HOME`.)
 
 ## Editor / LSP setup

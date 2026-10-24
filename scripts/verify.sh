@@ -11,7 +11,7 @@
 # Exit code = number of failed steps. Per-step logs live in a fresh temp dir (path printed on failure).
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
-for d in /c/Users/sachu/.cargo/bin "$HOME/.cargo/bin" "${USERPROFILE:-}/.cargo/bin"; do [ -d "$d" ] && PATH="$d:$PATH" && break; done
+for d in "$(cygpath -u "${USERPROFILE:-}" 2>/dev/null)/.cargo/bin" "$HOME/.cargo/bin" "${USERPROFILE:-}/.cargo/bin"; do [ -d "$d" ] && PATH="$d:$PATH" && break; done
 command -v fnm >/dev/null 2>&1 && eval "$(fnm env --shell bash 2>/dev/null)"
 
 TIER=""; ONLY=""; NO_FRONTEND=false; ARGS=()
