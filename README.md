@@ -1,7 +1,12 @@
 # StreamDeck
 
-Cross-platform desktop application for live presentation control, multi-camera
-production, and live-streaming egress. Built on Tauri v2 + Rust/Tokio + React/TypeScript.
+Cross-platform desktop application for live presentation control: import PPTX/PDF,
+present on the projector, operate from a controller window (notes, timer, scene media,
+multi-display). Built on Tauri v2 + Rust/Tokio + React/TypeScript.
+
+Live production (cameras, NDI, WHIP phone ingest, compositor, streaming) lives on the
+`feature/live-production` branch. To merge it back: `git revert` the `chore: remove live-production code`
+commit on `main`, then merge that branch.
 
 For architecture, invariants, and day-to-day working conventions in this repo, see
 [`CLAUDE.md`](./CLAUDE.md). For the full feature/phase roadmap, see
@@ -108,8 +113,8 @@ cd src-tauri && cargo deny check      # advisories, license compliance, banned c
   fixable should be fixed (bump the dependency), not silenced — `ignore` entries in
   `deny.toml` are reserved for genuinely unfixable transitive issues (unmaintained
   crates with no upstream replacement yet), each with a `reason` explaining why.
-- Secrets (WHIP bearer tokens, etc.) belong in the OS keychain via the `keyring` crate —
-  **never** in `streamdeck.toml` or any committed file.
+- Secrets belong in the OS keychain, **never** in `streamdeck.toml` or any committed file
+  (this branch stores none).
 
 ## The full Definition-of-Done gate
 
