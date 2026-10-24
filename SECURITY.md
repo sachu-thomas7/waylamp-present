@@ -9,9 +9,8 @@ current `main` branch is supported.
 
 Please do not open a public issue for security problems.
 
-1. Use GitHub's **private vulnerability reporting**: on the repository's *Security* tab choose
-   *Report a vulnerability*.
-2. If that is unavailable, email **[SECURITY CONTACT EMAIL: to be set by the maintainer before publication]**.
+Use GitHub's **private vulnerability reporting**: on the repository's *Security* tab choose
+*Report a vulnerability*. No email address is published. If that option is missing, open an issue that only asks for a private channel (no details) and the maintainer will respond there.
 
 Please include the affected version, steps to reproduce, and the impact you expect. A sample
 file that triggers the problem is very helpful (do not send files containing private data).

@@ -189,7 +189,7 @@ Fixed in the tree:
 Depends on the later rename: M1, product name in README/`CLAUDE.md`/docs/policies, test-fixture names, `streamdeck.toml`, identifier, `test-assets` metadata (creator "StreamDeck"), L6 icon review.
 
 Needs the owner:
-- Placeholder contact addresses: `SECURITY.md` and `CODE_OF_CONDUCT.md` (search for "to be set by the maintainer").
+- Contact: no email is published by design; SECURITY.md and CODE_OF_CONDUCT.md point to GitHub private vulnerability reporting, so that setting must be enabled after the repo is public.
 - Publish as a fresh squashed repo; drop `dev-docs/handover_presentation_release_2026-10-24.md` and this audit's old-history discussion in that step.
 - GitHub settings after the repo is public: ruleset/branch protection on `main` (PR + CI required, no force-push), private vulnerability reporting, Dependabot alerts and security updates, secret scanning + push protection, approval for first-time contributors' workflows, default `GITHUB_TOKEN` read-only. Close or merge Dependabot PR #9.
 - Signing applications (Certum, SignPath) and the SignPath attribution line only once SignPath is in use.
