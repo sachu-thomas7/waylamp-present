@@ -1,10 +1,10 @@
-# StreamDeck — Test Framework Roadmap
+# Waylamp Present — Test Framework Roadmap
 
 **Status:** Authoritative spec for building the automated test framework.
 **Audience:** the `test-engineer` agent (`.claude/agents/test-engineer.md`) and humans.
 **Companion docs:** `dev-docs/test_plan.md` (what to test and why),
 `.claude/skills/test-authoring/SKILL.md` (how to write tests here),
-`dev-docs/streamdeck_product_roadmap_2026.md` (product scope), `CLAUDE.md` (conventions).
+`dev-docs/product_roadmap_2026.md` (product scope), `CLAUDE.md` (conventions).
 
 Each item below is **one agent session's worth of work**. Implement exactly one item at a
 time, in order, unless the dependency column says otherwise. An item is done only when its
@@ -220,7 +220,7 @@ roadmap before T4.1.
 
 ### T4.1 — App-data isolation seam
 Tests must not touch the real `%APPDATA%` deck state. Not implemented yet: add a debug/`e2e`-only override
-(proposed env name `STREAMDECK_DATA_DIR`, does not exist in the code) read where `app_data_dir()` is resolved
+(proposed env name `WAYLAMP_DATA_DIR`, does not exist in the code) read where `app_data_dir()` is resolved
 (`app.rs`, `commands/deck.rs`). Compiled out of release.
 **Acceptance:** with the env var set, no files are written to the real app-data dir; a unit
 test covers the resolution function; release build ignores the variable.

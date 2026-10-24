@@ -1,15 +1,15 @@
 // T1.3: display list / assignment / hotplug fallback through real IPC, real bus, real display
-// state and a real streamdeck.toml in a temp dir. Only the monitor list is faked (OS boundary).
+// state and a real waylamp-present.toml in a temp dir. Only the monitor list is faked (OS boundary).
 
 mod common;
 
 use common::{display, TestApp};
 use serde_json::{json, Value};
-use streamdeck_lib::config::StreamDeckConfig;
-use streamdeck_lib::config_loader::ConfigLoader;
-use streamdeck_lib::display::{reconcile_displays, DisplayInfo, DisplayStateHandle};
-use streamdeck_lib::events::AppEvent;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use waylamp_present_lib::config::WaylampConfig;
+use waylamp_present_lib::config_loader::ConfigLoader;
+use waylamp_present_lib::display::{reconcile_displays, DisplayInfo, DisplayStateHandle};
+use waylamp_present_lib::events::AppEvent;
 
 const PRIMARY: &str = "Primary@0,0";
 const PROJECTOR: &str = "Projector@1920,0";
@@ -83,7 +83,7 @@ async fn assign_persists_to_toml_updates_state_and_publishes() {
 #[tokio::test(flavor = "multi_thread")]
 async fn assign_keeps_other_config_values_and_tolerates_a_presentation_window() {
     let t = TestApp::new();
-    let mut custom = StreamDeckConfig::default();
+    let mut custom = WaylampConfig::default();
     custom.app.log_level = "debug".into();
     ConfigLoader::save(&t.config_path(), &custom).expect("seed config");
     WebviewWindowBuilder::new(&t.app, "presentation", WebviewUrl::default())
@@ -134,7 +134,7 @@ async fn assign_with_unreadable_config_reports_config_error_and_does_not_overwri
 
 #[tokio::test(flavor = "multi_thread")]
 async fn startup_assignment_from_config_seeds_display_state() {
-    let mut cfg = StreamDeckConfig::default();
+    let mut cfg = WaylampConfig::default();
     cfg.presentation.display_id = Some(PROJECTOR.into());
     let t = TestApp::with_config(cfg);
 

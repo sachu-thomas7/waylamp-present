@@ -2,7 +2,7 @@ param([string]$Click = '', [int]$Index = 0)
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
 $ae = [System.Windows.Automation.AutomationElement]
 $root = $ae::RootElement
-$proc = Get-Process streamdeck -ErrorAction SilentlyContinue | Select-Object -First 1
+$proc = Get-Process waylamp-present -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $proc) { Write-Output 'NO PROCESS'; exit 1 }
 $cond = New-Object System.Windows.Automation.PropertyCondition($ae::ProcessIdProperty, $proc.Id)
 $win = $root.FindAll('Children', $cond) | Where-Object { $_.Current.Name -like '*Controller*' } | Select-Object -First 1

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "StreamDeck",
+  "productName": "Waylamp Present",
   "version": "0.1.0",
-  "identifier": "app.streamdeck.desktop",
+  "identifier": "app.waylamp.present",
   "build": {
     "frontendDist": "../controller/dist",
     "devUrl": "http://localhost:5173",
@@ -19,7 +19,7 @@
     "windows": [
       {
         "label": "controller",
-        "title": "StreamDeck — Controller",
+        "title": "Waylamp Present — Controller",
         "width": 1280,
         "height": 800,
         "minWidth": 720,
@@ -38,8 +38,8 @@
     "targets": [
       "nsis"
     ],
-    "publisher": "StreamDeck contributors",
-    "copyright": "Copyright (C) 2026 StreamDeck contributors. GPL-3.0-or-later.",
+    "publisher": "Waylamp Present contributors",
+    "copyright": "Copyright (C) 2026 Waylamp Present contributors. GPL-3.0-or-later.",
     "category": "Productivity",
     "shortDescription": "Presentation control: import PPTX/PDF, projector output, notes and timer",
     "longDescription": "Imports PowerPoint and PDF decks, shows them on a projector display, and gives the operator a controller with notes, timer and scene media.",

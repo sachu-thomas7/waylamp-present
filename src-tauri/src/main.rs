@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    streamdeck_lib::run()
+    waylamp_present_lib::run()
 }

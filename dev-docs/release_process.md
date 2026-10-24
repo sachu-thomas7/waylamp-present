@@ -1,10 +1,10 @@
 # Release process (Windows installer)
 
-Primary artifact: per-user NSIS `StreamDeck_<version>_x64-setup.exe` (no admin, installs under `%LOCALAPPDATA%\StreamDeck`), with the offline WebView2 runtime installer embedded. No auto-update: upgrading = run the newer installer.
+Primary artifact: per-user NSIS `Waylamp Present_<version>_x64-setup.exe` (no admin, installs under `%LOCALAPPDATA%\Waylamp Present`), with the offline WebView2 runtime installer embedded. No auto-update: upgrading = run the newer installer.
 
 ## Name, identifier, publisher: one place to change
 
-`src-tauri/tauri.conf.json`: `productName`, `identifier` (also fixes the app-data folder, so change it before real users have data), `bundle.publisher`, `bundle.copyright`, descriptions. The `StreamDeck` name collides with Elgato's Stream Deck trademark; decide a new name before v0.1 goes to anyone outside. The release scripts take the installer name from the build output, so nothing else hard-codes it (the CI smoke step and `check-bundle.sh` match `*-setup.exe`).
+`src-tauri/tauri.conf.json`: `productName`, `identifier` (also fixes the app-data folder, so change it before real users have data), `bundle.publisher`, `bundle.copyright`, descriptions. The `Waylamp Present` name collides with Elgato's Stream Deck trademark; decide a new name before v0.1 goes to anyone outside. The release scripts take the installer name from the build output, so nothing else hard-codes it (the CI smoke step and `check-bundle.sh` match `*-setup.exe`).
 
 ## Cut a release
 
@@ -17,7 +17,7 @@ The pdfium/release overlays are passed only to builds, never put in `tauri.conf.
 
 ## Signing (route not decided yet)
 
-Signing is optional in the scripts so unsigned dev builds keep working. **Unsigned builds can be blocked outright by Windows 11 Smart App Control** (and always trigger SmartScreen). Sign before giving a build to anyone who is not briefed. Set `STREAMDECK_SIGN_COMMAND` to a command template where `%1` is the file; the build signs the inner `streamdeck.exe` and the installer with it, then `build-release.sh` verifies both with `Get-AuthenticodeSignature` (status Valid and a timestamp present). The command must timestamp. Never sign after the build finishes by hand (the installer would then differ from `SHA256SUMS.txt`).
+Signing is optional in the scripts so unsigned dev builds keep working. **Unsigned builds can be blocked outright by Windows 11 Smart App Control** (and always trigger SmartScreen). Sign before giving a build to anyone who is not briefed. Set `WAYLAMP_SIGN_COMMAND` to a command template where `%1` is the file; the build signs the inner `waylamp-present.exe` and the installer with it, then `build-release.sh` verifies both with `Get-AuthenticodeSignature` (status Valid and a timestamp present). The command must timestamp. Never sign after the build finishes by hand (the installer would then differ from `SHA256SUMS.txt`).
 
 ### Route A: Azure Artifact Signing (about $9.99/month, no hardware token, CI friendly)
 
@@ -26,7 +26,7 @@ Individuals: USA and Canada only (organisations: USA/Canada/EU/UK); identity val
 ```bash
 cargo install artifact-signing-cli --locked
 export AZURE_CLIENT_ID=... AZURE_TENANT_ID=... AZURE_CLIENT_SECRET=...   # service principal; env only
-export STREAMDECK_SIGN_COMMAND='artifact-signing-cli -e <endpoint> -a <account> -c <certificate-profile> -d StreamDeck %1'
+export WAYLAMP_SIGN_COMMAND='artifact-signing-cli -e <endpoint> -a <account> -c <certificate-profile> -d Waylamp Present %1'
 bash scripts/build-release.sh
 ```
 
@@ -37,7 +37,7 @@ In GitHub: secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_SECRET`; 
 The private key must live on an HSM/USB token (since June 2023), so CI cannot use it unless the vendor offers cloud signing; sign on a local machine instead.
 
 ```bash
-export STREAMDECK_SIGN_COMMAND='signtool sign /sha1 <certificate-thumbprint> /fd sha256 /tr http://timestamp.digicert.com /td sha256 %1'
+export WAYLAMP_SIGN_COMMAND='signtool sign /sha1 <certificate-thumbprint> /fd sha256 /tr http://timestamp.digicert.com /td sha256 %1'
 bash scripts/build-release.sh
 ```
 
@@ -57,7 +57,7 @@ Rules: same publisher identity for every release (reputation carries over); neve
 
 ## Delivery
 
-GitHub draft release (installer + `SHA256SUMS.txt`). Files copied without a download (for example from removable media) carry no Mark-of-the-Web, which avoids the download prompt but not Smart App Control: the signature is the fix. Verify on the target PC: `Get-FileHash .\StreamDeck_*-setup.exe` against `SHA256SUMS.txt`.
+GitHub draft release (installer + `SHA256SUMS.txt`). Files copied without a download (for example from removable media) carry no Mark-of-the-Web, which avoids the download prompt but not Smart App Control: the signature is the fix. Verify on the target PC: `Get-FileHash .\Waylamp Present_*-setup.exe` against `SHA256SUMS.txt`.
 
 ## Licence
 

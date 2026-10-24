@@ -52,8 +52,8 @@ jobs:
 
       - name: Build installer
         run: |
-          if [ -z "${STREAMDECK_SIGN_COMMAND:-}" ] && [ "$HAVE_AZURE_SIGNING" = true ]; then
-            export STREAMDECK_SIGN_COMMAND="artifact-signing-cli -e $AZURE_SIGN_ENDPOINT -a $AZURE_SIGN_ACCOUNT -c $AZURE_SIGN_PROFILE -d StreamDeck %1"
+          if [ -z "${WAYLAMP_SIGN_COMMAND:-}" ] && [ "$HAVE_AZURE_SIGNING" = true ]; then
+            export WAYLAMP_SIGN_COMMAND="artifact-signing-cli -e $AZURE_SIGN_ENDPOINT -a $AZURE_SIGN_ACCOUNT -c $AZURE_SIGN_PROFILE -d Waylamp-Present %1"
           fi
           bash scripts/build-release.sh
         env:
@@ -64,7 +64,7 @@ jobs:
           AZURE_SIGN_ENDPOINT: ${{ vars.AZURE_SIGN_ENDPOINT }}
           AZURE_SIGN_ACCOUNT: ${{ vars.AZURE_SIGN_ACCOUNT }}
           AZURE_SIGN_PROFILE: ${{ vars.AZURE_SIGN_PROFILE }}
-          STREAMDECK_SIGN_COMMAND: ${{ secrets.STREAMDECK_SIGN_COMMAND }}
+          WAYLAMP_SIGN_COMMAND: ${{ secrets.WAYLAMP_SIGN_COMMAND }}
 
       - name: Silent install, launch smoke, uninstall, leftover check
         shell: pwsh
@@ -73,8 +73,8 @@ jobs:
           $dir = Join-Path $env:RUNNER_TEMP 'sd-install'
           $p = Start-Process $setup.FullName -ArgumentList '/S', "/D=$dir" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "installer exit $($p.ExitCode)" }
-          $exe = Join-Path $dir 'streamdeck.exe'
-          if (-not (Test-Path $exe)) { throw 'streamdeck.exe not installed' }
+          $exe = Join-Path $dir 'waylamp-present.exe'
+          if (-not (Test-Path $exe)) { throw 'waylamp-present.exe not installed' }
           if (-not (Test-Path (Join-Path $dir 'pdfium.dll'))) { throw 'pdfium.dll not installed' }
           $app = Start-Process $exe -PassThru
           Start-Sleep -Seconds 8
@@ -83,7 +83,7 @@ jobs:
           $un = Join-Path $dir 'uninstall.exe'
           Start-Process $un -ArgumentList '/S' -Wait
           Start-Sleep -Seconds 3
-          if (Test-Path $exe) { throw 'streamdeck.exe left behind after uninstall' }
+          if (Test-Path $exe) { throw 'waylamp-present.exe left behind after uninstall' }
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

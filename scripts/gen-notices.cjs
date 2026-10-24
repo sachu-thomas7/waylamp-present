@@ -32,7 +32,7 @@ const meta = JSON.parse(
 );
 const pkgs = new Map(meta.packages.map((p) => [p.id, p]));
 const nodes = new Map(meta.resolve.nodes.map((n) => [n.id, n]));
-const rootId = meta.workspace_members.find((id) => pkgs.get(id).name === "streamdeck");
+const rootId = meta.workspace_members.find((id) => pkgs.get(id).name === "waylamp-present");
 const seen = new Set();
 (function walk(id) {
   if (seen.has(id)) return;
@@ -92,7 +92,7 @@ const pdfiumLic = path.join(ROOT, "src-tauri", "resources", "pdfium", "PDFIUM-LI
 const pdfiumText = fs.existsSync(pdfiumLic) ? fs.readFileSync(pdfiumLic, "utf8").replace(/\r\n/g, "\n").trim() : "(run scripts/fetch-deps.sh first)";
 
 let out = "";
-out += "StreamDeck is licensed under GPL-3.0-or-later (see LICENSE.txt).\n";
+out += "Waylamp Present is licensed under GPL-3.0-or-later (see LICENSE.txt).\n";
 out += "It includes the third-party components below under their own licences.\n\n";
 out += "=== PDFium " + deps.version + " (" + deps.source + ", chromium/" + deps.tag.split("/")[1] + ") ===\n";
 out += "Bundled unmodified as pdfium.dll. PDFium is licensed BSD-3-Clause / Apache-2.0; its bundled licence file follows.\n\n" + pdfiumText + "\n\n";

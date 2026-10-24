@@ -10,7 +10,7 @@ contribution is licensed under the same terms. Please read the
   setup and, for import problems, a sample file that contains no private data.
 - **Features**: open an issue first and describe the problem you want solved. The scope is
   presentation control; live production (cameras, streaming) is developed on the
-  `feature/live-production` branch. See [dev-docs/streamdeck_product_roadmap_2026.md](./dev-docs/streamdeck_product_roadmap_2026.md).
+  `feature/live-production` branch. See [dev-docs/product_roadmap_2026.md](./dev-docs/product_roadmap_2026.md).
 - **Small fixes** (typos, docs, obvious bugs) can go straight to a pull request.
 - **Security issues**: do not use public issues; see [SECURITY.md](./SECURITY.md).
 

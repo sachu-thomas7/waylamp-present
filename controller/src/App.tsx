@@ -53,7 +53,7 @@ export default function App() {
             <IconPlay />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
-            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "0.01em" }}>StreamDeck</h1>
+            <h1 style={{ margin: 0, fontSize: 15, fontWeight: 600, letterSpacing: "0.01em" }}>Waylamp Present</h1>
             <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Controller</span>
           </div>
         </div>

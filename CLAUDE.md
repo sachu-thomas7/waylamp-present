@@ -1,10 +1,10 @@
-# StreamDeck
+# Waylamp Present
 
 Cross-platform desktop app (Windows primary; Linux builds in CI, macOS not built) for presentation control: import PPTX/PDF,
 projector output, controller with notes/timer/scene media, multi-display. Built on Tauri v2 + Rust/Tokio + React/TypeScript.
 GPL-3.0-or-later. Live production is developed on `feature/live-production`, not on `main`.
 
-Scope and plans: `dev-docs/streamdeck_product_roadmap_2026.md`. Read it before starting any new feature, and
+Scope and plans: `dev-docs/product_roadmap_2026.md`. Read it before starting any new feature, and
 reference only the section you need.
 
 ## Stack
@@ -15,7 +15,7 @@ reference only the section you need.
 | Backend | Rust (`rust-version` 1.95, toolchain pinned to 1.96.0 in `rust-toolchain.toml`) + Tokio (`src-tauri/`) |
 | Frontend | Two **independent** Vite + React 18 + TypeScript projects: `controller/` and `presentation/` |
 | State sync | `tokio::sync::broadcast::<AppEvent>` — the only channel for cross-subsystem state. No direct function calls across subsystem boundaries. |
-| Config | TOML (`streamdeck.toml` in app config dir), watched via `notify` (publishes `ConfigReloaded` only; nothing re-reads it yet — `get_config` is startup-time), secrets in OS keychain via `keyring` — never in TOML |
+| Config | TOML (`waylamp-present.toml` in app config dir), watched via `notify` (publishes `ConfigReloaded` only; nothing re-reads it yet — `get_config` is startup-time), secrets in OS keychain via `keyring` — never in TOML |
 | Frontend state | Zustand (`slideStore.ts`, `sceneStore.ts`, one per window) |
 | Media | None on this branch. Live production (GStreamer pipeline, NDI, WHIP phone ingest, compositor, RTMP streaming) lives on `feature/live-production`; see "Branch split" below |
 
@@ -82,7 +82,7 @@ src-tauri/src/
   bus.rs                  EventBus (broadcast channel wrapper)
   events.rs               AppEvent enum — single source of truth for what can flow over the bus
   error.rs                AppError — discriminated union returned by every command
-  config.rs / config_loader.rs   StreamDeckConfig, TOML load + hot-reload watcher
+  config.rs / config_loader.rs   AppConfig, TOML load + hot-reload watcher
   slide.rs / slide_state_machine.rs   Slide deck model + advance/rewind/jump/timer state machine
   scene.rs                 Scene media source state (image/video push, active source)
   deck_importer.rs         .pptx/.pdf import → SlideDeck (spawn_blocking — CPU-bound)
@@ -170,7 +170,7 @@ then merge `feature/live-production`. Keep edits to shared files (`events.rs`, `
   emit/invoke against a running `cargo tauri dev` started with
   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`.
 - **PDF import needs a native `pdfium` library**: `load_pdfium` searches a candidate list (next to the exe,
-  `resources/pdfium`, `pdfium/`, `../lib/StreamDeck` for deb/AppImage, the staging dir in debug builds), then the system,
+  `resources/pdfium`, `pdfium/`, `../lib/Waylamp Present` for deb/AppImage, the staging dir in debug builds), then the system,
   and returns an `AppError` instead of panicking. `release/deps.json` pins the checksummed binaries and
   `bash scripts/fetch-deps.sh [platform]` stages them; installers bundle them via `release/bundle.pdfium.conf.json`
   (deliberately not in `tauri.conf.json`: tauri-build errors on a resource glob matching nothing).
@@ -180,7 +180,6 @@ then merge `feature/live-production`. Keep edits to shared files (`events.rs`, `
   `npm run test:coverage` in each frontend. Plans: `dev-docs/test_plan.md`, `dev-docs/test_framework_roadmap.md`.
 - **Owed manual checks** are listed (prioritized) in `dev-docs/unverified_items.md`; update it when you change behaviour
   that only a real launch can confirm.
-- The product name and identifier are due to change before the first release; keep edits that mention the name minimal.
 
 ## Verification — `scripts/verify.sh`
 
@@ -208,7 +207,7 @@ Jobs: `rust` (matrix ubuntu/windows: `verify.sh push --only rust`), `frontend` (
 
 ## Release (2026-10-24)
 
-Windows installer: `bash scripts/build-release.sh` (no args; optional `STREAMDECK_SIGN_COMMAND`), tag `v*` runs `.github/workflows/release.yml` to a draft release. Licence GPL-3.0-or-later. Name/identifier/publisher live in `src-tauri/tauri.conf.json`. Full process, signing routes and AV checklist: `dev-docs/release_process.md`.
+Windows installer: `bash scripts/build-release.sh` (no args; optional `WAYLAMP_SIGN_COMMAND`), tag `v*` runs `.github/workflows/release.yml` to a draft release. Licence GPL-3.0-or-later. Name/identifier/publisher live in `src-tauri/tauri.conf.json`. Full process, signing routes and AV checklist: `dev-docs/release_process.md`.
 
 ## Local environment note (Windows)
 
@@ -296,7 +295,7 @@ rust-analyzer state on a fresh checkout.
 
 ## Working agreement
 
-- `dev-docs/streamdeck_product_roadmap_2026.md` is the spec of record for scope; this file is the spec of record for
+- `dev-docs/product_roadmap_2026.md` is the spec of record for scope; this file is the spec of record for
   *how* to work in this repo day to day.
 - A change isn't done until `bash scripts/verify.sh push` passes (not just `cargo test`), plus a manual
   `cargo tauri dev` launch for window/IPC wiring changes.

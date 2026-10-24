@@ -7,10 +7,10 @@ use std::time::Duration;
 
 use common::TestApp;
 use serde_json::{json, Value};
-use streamdeck_lib::config::StreamDeckConfig;
-use streamdeck_lib::config_loader::ConfigLoader;
-use streamdeck_lib::error::AppError;
-use streamdeck_lib::events::AppEvent;
+use waylamp_present_lib::config::WaylampConfig;
+use waylamp_present_lib::config_loader::ConfigLoader;
+use waylamp_present_lib::error::AppError;
+use waylamp_present_lib::events::AppEvent;
 
 // Deadline for the OS file watcher; the wait ends as soon as the event arrives.
 const WATCH_DEADLINE: Duration = Duration::from_secs(15);
@@ -50,7 +50,7 @@ async fn get_config_returns_the_defaults_the_app_started_with() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_config_returns_loaded_non_default_values() {
-    let mut custom = StreamDeckConfig::default();
+    let mut custom = WaylampConfig::default();
     custom.app.log_level = "trace".into();
     custom.presentation.display_id = Some("Projector@1920,0".into());
     let t = TestApp::with_config(custom);
@@ -65,11 +65,11 @@ async fn get_config_returns_loaded_non_default_values() {
 async fn editing_the_config_file_publishes_config_reloaded_event_only() {
     let t = TestApp::new();
     let path = t.config_path();
-    ConfigLoader::save(&path, &StreamDeckConfig::default()).expect("seed config");
+    ConfigLoader::save(&path, &WaylampConfig::default()).expect("seed config");
     let _watcher = ConfigLoader::spawn_watcher(path.clone(), t.bus.clone()).expect("watcher");
     let mut events = t.collect_events();
 
-    let mut edited = StreamDeckConfig::default();
+    let mut edited = WaylampConfig::default();
     edited.app.log_level = "debug".into();
 
     let seen = touch_until_reload(&mut events, || {
@@ -106,7 +106,7 @@ async fn creating_the_config_file_after_the_watcher_starts_publishes_config_relo
 async fn a_corrupt_edit_still_publishes_config_reloaded_event_only() {
     let t = TestApp::new();
     let path = t.config_path();
-    ConfigLoader::save(&path, &StreamDeckConfig::default()).expect("seed config");
+    ConfigLoader::save(&path, &WaylampConfig::default()).expect("seed config");
     let _watcher = ConfigLoader::spawn_watcher(path.clone(), t.bus.clone()).expect("watcher");
     let mut events = t.collect_events();
 
@@ -135,10 +135,10 @@ async fn changes_to_sibling_files_do_not_publish_config_reloaded() {
     let t = TestApp::new();
     let dir = t.config_path().parent().expect("parent").to_path_buf();
     std::fs::create_dir_all(&dir).expect("mkdir");
-    let watched = dir.join("streamdeck.toml");
+    let watched = dir.join("waylamp-present.toml");
     let sibling = dir.join("other.toml");
     // A second watcher on the same directory tells us when the OS has reported the sibling write.
-    let (probe_bus, _rx) = streamdeck_lib::bus::EventBus::new();
+    let (probe_bus, _rx) = waylamp_present_lib::bus::EventBus::new();
     let probe_bus = std::sync::Arc::new(probe_bus);
     let _probe = ConfigLoader::spawn_watcher(sibling.clone(), probe_bus.clone()).expect("probe");
     let _watcher = ConfigLoader::spawn_watcher(watched.clone(), t.bus.clone()).expect("watcher");
@@ -149,7 +149,7 @@ async fn changes_to_sibling_files_do_not_publish_config_reloaded() {
         watched.clone(),
         dir.canonicalize()
             .expect("canonical dir")
-            .join("streamdeck.toml"),
+            .join("waylamp-present.toml"),
     ];
     let mut ref_watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         if let Ok(e) = res {

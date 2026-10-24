@@ -96,7 +96,7 @@ const MAX_PDF_PAGES: u32 = 500;
 const PDFIUM_MISSING: &str =
     "PDF import is unavailable: the pdfium library was not found next to the app or on the system";
 
-const PRODUCT_NAME: &str = "StreamDeck";
+const PRODUCT_NAME: &str = "Waylamp Present";
 
 // Ordered search dirs: Windows/dev next to the exe, Tauri resource layouts, Linux deb/AppImage `../lib/<product>`.
 fn pdfium_candidate_dirs(exe_dir: &Path, dev_stage: Option<&Path>) -> Vec<PathBuf> {
@@ -269,7 +269,7 @@ mod tests {
 
         assert_eq!(dirs[0], exe);
         assert_eq!(dirs[1], exe.join("resources/pdfium"));
-        assert!(dirs.contains(&exe.join("../lib/StreamDeck")));
+        assert!(dirs.contains(&exe.join("../lib/Waylamp Present")));
         assert_eq!(dirs.last().map(PathBuf::as_path), Some(stage));
         assert!(
             !dirs.contains(&exe.join("..")),

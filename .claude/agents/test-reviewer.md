@@ -1,6 +1,6 @@
 ---
 name: test-reviewer
-description: Read-only reviewer of StreamDeck tests for false-greens, flakiness, wrong layer, and gaps against dev-docs/test_plan.md. Use after test-engineer finishes an item, before trusting a new suite, or when a "green" run is suspicious. Reports findings; never edits files.
+description: Read-only reviewer of Waylamp Present tests for false-greens, flakiness, wrong layer, and gaps against dev-docs/test_plan.md. Use after test-engineer finishes an item, before trusting a new suite, or when a "green" run is suspicious. Reports findings; never edits files.
 tools: Read, Grep, Glob, Bash
 ---
 

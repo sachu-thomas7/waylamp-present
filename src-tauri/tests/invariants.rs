@@ -5,9 +5,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
-use streamdeck_lib::config::StreamDeckConfig;
-use streamdeck_lib::events::AppEvent;
-use streamdeck_lib::slide::SlidePayload;
+use waylamp_present_lib::config::WaylampConfig;
+use waylamp_present_lib::events::AppEvent;
+use waylamp_present_lib::slide::SlidePayload;
 
 fn tauri_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -1165,7 +1165,7 @@ fn secret_field_names(src: &str) -> Vec<String> {
 #[test]
 fn config_structs_have_no_secret_like_fields() {
     let src = read(&tauri_dir().join("src").join("config.rs"));
-    assert!(src.contains("pub struct StreamDeckConfig"));
+    assert!(src.contains("pub struct WaylampConfig"));
     assert_eq!(secret_field_names(&src), Vec::<String>::new());
     assert_eq!(
         secret_field_names("pub struct C {\n pub whip_bearer_token: String,\n}"),
@@ -1180,7 +1180,7 @@ fn config_structs_have_no_secret_like_fields() {
 
 #[test]
 fn serialised_default_config_contains_no_secret_keys() {
-    let toml_text = toml::to_string(&StreamDeckConfig::default()).expect("serialise");
+    let toml_text = toml::to_string(&WaylampConfig::default()).expect("serialise");
     for line in toml_text.lines() {
         let key = line.split(['=', '[']).find(|s| !s.trim().is_empty());
         if let Some(k) = key {

@@ -12,7 +12,7 @@ Live production features (camera ingest, compositing, streaming) are not part of
 
 1. Long-running work runs in its own Tokio task; UI events never block it.
 2. State changes flow only through the `tokio::sync::broadcast` `AppEvent` bus.
-3. Behaviour is configured in TOML (`streamdeck.toml`); secrets never go in TOML.
+3. Behaviour is configured in TOML (`waylamp-present.toml`); secrets never go in TOML.
 4. New subsystems are additive and must not break existing flows.
 5. Capability minimalism: the controller window can invoke commands; the presentation window can only listen.
 6. No `unwrap()` in command handlers; every command returns `Result<T, AppError>`.
@@ -24,7 +24,7 @@ Live production features (camera ingest, compositing, streaming) are not part of
 - **F0.1 Tauri v2 bootstrap**: a Rust backend plus two separate Vite/React/TypeScript frontends (`controller/`, `presentation/`); CI runs tests, clippy and typecheck on every PR.
 - **F0.2 IPC command layer**: typed commands returning `Result<T, AppError>`, mirrored as TypeScript types; dispatch latency under 2 ms.
 - **F0.3 Event bus**: a typed `AppEvent` broadcast channel bridged to both windows; lagging receivers resync and a `BusLag` event is emitted.
-- **F0.4 TOML config**: `streamdeck.toml` loaded at startup, hot-reload watcher, forward-compatible defaults; invalid TOML never panics.
+- **F0.4 TOML config**: `waylamp-present.toml` loaded at startup, hot-reload watcher, forward-compatible defaults; invalid TOML never panics.
 
 ### Phase 1 - Presentation engine
 
@@ -32,7 +32,7 @@ Live production features (camera ingest, compositing, streaming) are not part of
 - **F1.2 Slide state machine**: Rust owns current index, deck, timer and metadata; advancing past the end emits `DeckEnd` and rewinding before the start emits `DeckStart` (no wrap-around); state is persisted so a restart restores position.
 - **F1.3 Controller slide panel**: thumbnail grid, current and next previews, speaker notes (never shown on the projector), elapsed timer, progress and keyboard shortcuts (Space/arrows/number jump) that apply only in the controller.
 - **F1.4 Deck import (PPTX/PDF)**: extracts title, body, notes and a background image per slide; unsupported layouts import with a blank body and a `layout_unsupported` flag shown in the controller; failures are reported per slide. PDF import needs the bundled PDFium library.
-- **F1.5 Multi-display assignment**: enumerates displays with hotplug detection, lets the operator assign the presentation window to a display, falls back to the primary display (with a `DisplayLost` warning) when it disconnects, and persists the choice in `streamdeck.toml`.
+- **F1.5 Multi-display assignment**: enumerates displays with hotplug detection, lets the operator assign the presentation window to a display, falls back to the primary display (with a `DisplayLost` warning) when it disconnects, and persists the choice in `waylamp-present.toml`.
 
 Hardening since then (media protocol, capability tightening, atomic persistence, import limits, fuzzing) is described in `CLAUDE.md` and tracked in `unverified_items.md`.
 

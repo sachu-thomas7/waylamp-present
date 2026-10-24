@@ -44,17 +44,17 @@ const check = (name, ok, detail) => {
 };
 
 const asset = (f) => path.join(root, 'dev-docs/test-assets', f);
-await invoke('deck_import', { path: asset('streamdeck-test-deck.pdf') });
+await invoke('deck_import', { path: asset('waylamp-present-test-deck.pdf') });
 await sleep(4000);
 await invoke('slide_jump_to', { index: 1 });
 await sleep(800);
 const bg = await probe('slide-background', 'e.naturalWidth');
 check('PDF page background renders (naturalWidth > 0)', bg > 0, `naturalWidth=${bg}`);
 
-check('PPTX import succeeds', (await invoke('deck_import', { path: asset('streamdeck-test-deck.pptx') })) === 'ok', 'import failed');
+check('PPTX import succeeds', (await invoke('deck_import', { path: asset('waylamp-present-test-deck.pptx') })) === 'ok', 'import failed');
 await sleep(3000);
 
-await invoke('scene_push_image', { path: asset('streamdeck-test-scene-image.png') });
+await invoke('scene_push_image', { path: asset('waylamp-present-test-scene-image.png') });
 await invoke('scene_set_source', { source: 'SceneMedia' });
 await sleep(800);
 const img = await probe('scene-media-image', 'e.naturalWidth');

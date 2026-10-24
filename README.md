@@ -1,4 +1,4 @@
-# StreamDeck
+# Waylamp Present
 
 Free, open-source desktop application for controlling slide presentations. Import a
 PowerPoint (`.pptx`) or PDF deck, show it fullscreen on a projector or second display,

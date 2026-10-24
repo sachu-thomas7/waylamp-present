@@ -5,8 +5,8 @@ mod common;
 
 use common::TestApp;
 use serde_json::{json, Value};
-use streamdeck_lib::config::StreamDeckConfig;
-use streamdeck_lib::events::AppEvent;
+use waylamp_present_lib::config::WaylampConfig;
+use waylamp_present_lib::events::AppEvent;
 
 fn invoke_unit(t: &TestApp, cmd: &str, args: Value) {
     let _: () = t
@@ -50,9 +50,9 @@ async fn reset_keeps_the_current_slide_and_survives_a_restart() {
     let started = first.machine.read().await.timer_started_at();
     assert_eq!(first.machine.read().await.current_index(), 2);
     let TestApp { data_dir, .. } = first;
-    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let t = TestApp::with_data_dir(data_dir, WaylampConfig::default());
 
-    streamdeck_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
+    waylamp_present_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
 
     assert_eq!(t.machine.read().await.current_index(), 2);
     assert_eq!(t.machine.read().await.timer_started_at(), started);

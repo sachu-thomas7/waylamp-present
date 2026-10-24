@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 
 use common::TestApp;
 use serde_json::{json, Value};
-use streamdeck_lib::events::AppEvent;
-use streamdeck_lib::scene::{SceneMediaType, SceneSource, SceneStateHandle};
 use tauri::Manager;
+use waylamp_present_lib::events::AppEvent;
+use waylamp_present_lib::scene::{SceneMediaType, SceneSource, SceneStateHandle};
 
 const MB: u64 = 1024 * 1024;
 

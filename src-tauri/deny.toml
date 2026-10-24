@@ -40,7 +40,7 @@ allow = [
 ]
 
 [licenses.private]
-# streamdeck itself is GPL-3.0-or-later (publish = false keeps it off crates.io);
+# waylamp-present itself is GPL-3.0-or-later (publish = false keeps it off crates.io);
 # the allow list below is the set of dependency licenses that are GPLv3-compatible.
 ignore = true
 

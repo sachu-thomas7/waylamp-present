@@ -19,11 +19,11 @@ fi
 
 # Extend these lists as later release steps add runtime pieces (GStreamer, NDI, notices).
 case "$PLATFORM" in
-  windows-x64) REQUIRED=(pdfium.dll PDFIUM-LICENSE.txt streamdeck.exe LICENSE.txt THIRD_PARTY_NOTICES.txt) ;;
-  linux-x64)   REQUIRED=(libpdfium.so PDFIUM-LICENSE.txt streamdeck LICENSE.txt THIRD_PARTY_NOTICES.txt) ;;
+  windows-x64) REQUIRED=(pdfium.dll PDFIUM-LICENSE.txt waylamp-present.exe LICENSE.txt THIRD_PARTY_NOTICES.txt) ;;
+  linux-x64)   REQUIRED=(libpdfium.so PDFIUM-LICENSE.txt waylamp-present LICENSE.txt THIRD_PARTY_NOTICES.txt) ;;
   *) echo "unknown platform $PLATFORM" >&2; exit 2 ;;
 esac
-FORBIDDEN_NAMES=('*.pdb' '*.dSYM' '*.pptx' '*.pdf' 'streamdeck-test-*' '*.rlib' '*.d')
+FORBIDDEN_NAMES=('*.pdb' '*.dSYM' '*.pptx' '*.pdf' 'waylamp-present-test-*' '*.rlib' '*.d')
 FORBIDDEN_DIRS=('fixtures' 'test-assets' 'tests')
 
 FAILS=0

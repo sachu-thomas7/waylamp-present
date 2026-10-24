@@ -11,20 +11,20 @@ node dev-docs/test-assets/make_test_assets.cjs
 
 ## Files
 
-- **`streamdeck-test-deck.pptx`** — 5 slides, each exercising a different code path:
+- **`waylamp-present-test-deck.pptx`** — 5 slides, each exercising a different code path:
   1. Title + body text (standard extraction)
   2. Title + multi-line bullet body
   3. Body text in a `Consolas` run — should be flagged `is_code_slide: true`
   4. A picture shape with `ppt/media/image1.png` — should set `has_background_image: true`
   5. A `subTitle` placeholder (not `title`/`body`) — should set `layout_unsupported: true`
      with an empty body
-- **`streamdeck-test-deck.pdf`** — 3 pages of real extractable text (Helvetica, not images),
+- **`waylamp-present-test-deck.pdf`** — 3 pages of real extractable text (Helvetica, not images),
   one slide per page expected on import.
 
   Note: PDF import needs the native `pdfium` library. Without it the import returns an error
   (it does not panic). Run `bash scripts/fetch-deps.sh` to stage a pinned copy for development;
   see `CLAUDE.md`.
-- **`streamdeck-test-scene-image.png`** — solid red 640×360 PNG for testing
+- **`waylamp-present-test-scene-image.png`** — solid red 640×360 PNG for testing
   `scene_push_image` / the Scene Media panel. For video (`scene_push_video`), use any small
   local `.mp4`/`.webm` — one wasn't hand-generated here since a valid encoded video file
   isn't practical to hand-roll.

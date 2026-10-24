@@ -67,7 +67,7 @@ impl SlideDeck {
                 SlideEntry {
                     index: 0,
                     title: "Welcome".into(),
-                    body: "StreamDeck F1.2 State Machine".into(),
+                    body: "Waylamp Present F1.2 State Machine".into(),
                     notes: "Welcome the audience. Mention the event name and your role.".into(),
                     background_path: None,
                     rich_body: Vec::new(),
@@ -176,7 +176,7 @@ impl SlidePayload {
         Self {
             index: 0,
             total: 1,
-            title: "StreamDeck".into(),
+            title: "Waylamp Present".into(),
             body: "Ready to present".into(),
             notes: String::new(),
             background_path: None,
@@ -208,7 +208,7 @@ mod tests {
         let s = SlidePayload::stub();
         assert_eq!(s.index, 0);
         assert_eq!(s.total, 1);
-        assert_eq!(s.title, "StreamDeck");
+        assert_eq!(s.title, "Waylamp Present");
         assert_eq!(s.body, "Ready to present");
         assert!(s.notes.is_empty());
         assert!(s.background_path.is_none());

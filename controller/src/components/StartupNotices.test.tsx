@@ -18,7 +18,7 @@ describe('StartupNotices', () => {
   });
 
   it('shows each recovery notice in a banner that can be dismissed', async () => {
-    const notice = 'Settings (streamdeck.toml) was damaged and no usable backup existed; defaults are in use.';
+    const notice = 'Settings (waylamp-present.toml) was damaged and no usable backup existed; defaults are in use.';
     ipc = installMockIPC(baseHandlers({ get_startup_notices: () => [notice] }));
     renderApp();
     expect(await screen.findByRole('alert')).toHaveTextContent(notice);

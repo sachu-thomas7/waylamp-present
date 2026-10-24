@@ -109,11 +109,11 @@ import path from 'node:path';
 export const test = base.extend<{ app: { controller: Page; presentation: Page; dataDir: string } }>({
   app: async ({}, use, testInfo) => {
     const port = 10000 + testInfo.workerIndex;
-    const dataDir = mkdtempSync(path.join(tmpdir(), 'streamdeck-e2e-'));
-    const proc = spawn(process.env.STREAMDECK_BIN!, [], {
+    const dataDir = mkdtempSync(path.join(tmpdir(), 'waylamp-present-e2e-'));
+    const proc = spawn(process.env.WAYLAMP_BIN!, [], {
       env: {
         ...process.env,
-        STREAMDECK_DATA_DIR: dataDir,                       // T4.1 seam
+        WAYLAMP_DATA_DIR: dataDir,                       // T4.1 seam
         WEBVIEW2_USER_DATA_FOLDER: path.join(dataDir, 'wv2'),
         WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
       },

@@ -18,7 +18,7 @@ GStreamer, NDI and phone-camera runtimes are not bundled on `main`; their packag
 
 - Source: bblanchon/pdfium-binaries, pinned in `release/deps.json`.
 - Windows: `pdfium.dll` via `bundle.resources` (overlay `release/bundle.pdfium.conf.json`, passed only to builds), placed next to the exe, where the loader already looks.
-- Linux: `libpdfium.so`; `load_pdfium` also searches `../lib/StreamDeck` for deb/AppImage layouts. Untested on Linux (unverified item #8).
+- Linux: `libpdfium.so`; `load_pdfium` also searches `../lib/Waylamp Present` for deb/AppImage layouts. Untested on Linux (unverified item #8).
 - A release-mode import of the `dev-docs/test-assets` PDF through the real loader is the check; the fixture test prints SKIPPED when PDFium is not found.
 
 ## Bundle validation
