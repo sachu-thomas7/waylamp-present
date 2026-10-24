@@ -118,13 +118,13 @@ export default function App() {
       <StartupNotices />
 
       {/* Main content */}
-      <main style={{ flex: 1, display: 'flex', gap: 20, padding: '20px 24px', minHeight: 0, overflow: 'auto' }}>
-        <div style={{ flex: '1 1 68%', display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
+      <main className="app-main">
+        <div className="app-main-primary">
           <SlideDeckPanel />
         </div>
-        <div style={{ flex: '1 1 32%', maxWidth: 340, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <aside className="app-main-aside">
           <SceneMediaPanel />
-        </div>
+        </aside>
       </main>
     </div>
   );

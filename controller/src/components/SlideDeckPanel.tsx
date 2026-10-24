@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useControllerSlideStore } from '../store/slideStore';
 import { onAppEvent } from '../lib/events';
 import {
   slideAdvance, slideRewind, slideJumpTo, slideGetCurrent, slideTimerReset, pickDeckFile, deckImportStage, deckImportCommit, deckImportDiscard, deckGetAllSlides,
 } from '../lib/ipc';
-import type { ImportPreview } from '../lib/ipc';
+import type { ImportPreview, SlidePayload } from '../lib/ipc';
 import { SlideCanvas } from './SlideCanvas';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
@@ -31,6 +31,59 @@ function errorMessage(e: unknown): string {
 }
 
 // slide 0 means the whole file failed, not one slide.
+interface SlideThumbProps {
+  index: number;
+  slide: SlidePayload | undefined;
+  active: boolean;
+  onSelect: (index: number) => void;
+}
+
+const SlideThumb = memo(function SlideThumb({ index, slide, active, onSelect }: SlideThumbProps) {
+  return (
+  <button
+              type="button"
+        aria-label={`Slide ${index + 1}`}
+        aria-current={active ? 'true' : undefined}
+        onClick={(e) => {
+          onSelect(index);
+          e.currentTarget.blur();
+        }}
+        onKeyDown={(e) => {
+          if (e.key === ' ') e.stopPropagation();
+        }}
+        style={{
+          flexShrink: 0,
+          padding: 0,
+          border: 'none',
+          background: 'none',
+          font: 'inherit',
+          borderRadius: 8,
+          cursor: 'pointer',
+          overflow: 'hidden',
+          position: 'relative',
+          outline: active ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
+          boxShadow: active ? '0 0 0 3px rgba(79,152,163,0.22)' : undefined,
+        }}
+      >
+        {slide && (
+          <>
+            <SlideCanvas slide={slide} scale={THUMB_SCALE} />
+            {slide.layout_unsupported && (
+              <div
+                role="img"
+                aria-label="Unsupported layout — imported with blank body"
+                title="Unsupported layout — imported with blank body"
+                style={{ position: 'absolute', top: 5, right: 5, color: 'var(--color-warn)' }}
+              >
+                <IconWarning />
+              </div>
+            )}
+          </>
+        )}
+      </button>
+  );
+});
+
 function importErrorText({ slide, reason }: { slide: number; reason: string }): string {
   return slide > 0 ? `Slide ${slide}: ${reason}` : reason;
 }
@@ -44,6 +97,7 @@ export function SlideDeckPanel() {
 
   const [jumpIndex, setJumpIndex] = useState('');
   const [filter, setFilter] = useState('');
+  const deferredFilter = useDeferredValue(filter);
   const [pending, setPending] = useState<ImportPreview | null>(null);
 
   useEffect(() => {
@@ -160,14 +214,18 @@ export function SlideDeckPanel() {
     </div>
   );
 
+  const jumpTo = useCallback((i: number) => {
+    slideJumpTo(i).catch(console.error);
+  }, []);
+
   const filteredIndices = useMemo(() => {
-    if (!filter.trim()) return slides.map((_, i) => i);
-    const q = filter.trim().toLowerCase();
+    if (!deferredFilter.trim()) return slides.map((_, i) => i);
+    const q = deferredFilter.trim().toLowerCase();
     return slides.reduce<number[]>((acc, s, i) => {
       if (s.title.toLowerCase().includes(q)) acc.push(i);
       return acc;
     }, []);
-  }, [slides, filter]);
+  }, [slides, deferredFilter]);
 
   if (totalSlides === 0) {
     return (
@@ -200,6 +258,7 @@ export function SlideDeckPanel() {
   }
 
   return (
+    <div className="deck-panel">
     <Card
       fill
       title="Slide Deck"
@@ -229,53 +288,12 @@ export function SlideDeckPanel() {
       {/* Thumbnail strip */}
       <div ref={stripRef} style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
         {filteredIndices.map((i) => (
-          <button
-            key={i}
-            type="button"
-            aria-label={`Slide ${i + 1}`}
-            aria-current={i === currentIndex ? 'true' : undefined}
-            onClick={(e) => {
-              slideJumpTo(i).catch(console.error);
-              e.currentTarget.blur();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === ' ') e.stopPropagation();
-            }}
-            style={{
-              flexShrink: 0,
-              padding: 0,
-              border: 'none',
-              background: 'none',
-              font: 'inherit',
-              borderRadius: 8,
-              cursor: 'pointer',
-              overflow: 'hidden',
-              position: 'relative',
-              outline: i === currentIndex ? '2px solid var(--color-primary)' : '1px solid var(--color-border)',
-              boxShadow: i === currentIndex ? '0 0 0 3px rgba(79,152,163,0.22)' : undefined,
-            }}
-          >
-            {slides[i] && (
-              <>
-                <SlideCanvas slide={slides[i]} scale={THUMB_SCALE} />
-                {slides[i].layout_unsupported && (
-                  <div
-                    role="img"
-                    aria-label="Unsupported layout — imported with blank body"
-                    title="Unsupported layout — imported with blank body"
-                    style={{ position: 'absolute', top: 5, right: 5, color: 'var(--color-warn)' }}
-                  >
-                    <IconWarning />
-                  </div>
-                )}
-              </>
-            )}
-          </button>
+          <SlideThumb key={i} index={i} slide={slides[i]} active={i === currentIndex} onSelect={jumpTo} />
         ))}
       </div>
 
       {/* Current + Next preview */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 18, alignItems: 'start' }}>
+      <div className="preview-grid">
         <div data-testid="preview-current" style={{ minWidth: 0 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 6 }}>Current</div>
           {current && <SlideCanvas slide={current} fluid />}
@@ -293,7 +311,7 @@ export function SlideDeckPanel() {
       </div>
 
       {/* Timer + nav */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid var(--color-border)', gap: 12, marginTop: 'auto' }}>
+      <div className="nav-bar" style={{ paddingTop: 12, borderTop: '1px solid var(--color-border)', marginTop: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 19, fontWeight: 600, letterSpacing: '0.02em', minWidth: 64 }}>
             {formatTimer(elapsedSecs)}
@@ -342,5 +360,6 @@ export function SlideDeckPanel() {
         </div>
       </div>
     </Card>
+    </div>
   );
 }
