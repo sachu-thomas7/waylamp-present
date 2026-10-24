@@ -2,7 +2,7 @@
 
 Single list of things shipped but not proven. Update on every session: move an item to "Verified"
 with the date and how, or add new ones. Priority = risk to the product x cost of finding out late.
-Last updated: 2026-10-23 (stop-the-bleeding pass).
+Last updated: 2026-10-24 (release packaging pass).
 
 ## P0 — verify before building more on top
 
@@ -15,6 +15,7 @@ Last updated: 2026-10-23 (stop-the-bleeding pass).
 | 17 | **Mevo Start NDI\|HX with the iPad connected** (added 2026-10-23): does the laptop still receive while Mevo Studio is attached, must the iPad app stay open, HX latency Wi-Fi vs Ethernet, does `ndisrc` decode HX | Decides whether the iPad can stay as camera operator while StreamDeck mixes (see roadmap addendum F2.2b) | Enable NDI in Camera Settings on the iPad; receive in NDI Tools Studio Monitor and in `cargo tauri dev --features ndi,gstreamer`; repeat with the iPad closed | NDI runtime install; the user's camera |
 | 18 | **Google Drive import spike** (added 2026-10-23): does Picker + export work on `drive.file` alone; 10 MB export cap on real decks | The roadmap addendum's F1.7a depends on it | Desktop OAuth (loopback + PKCE), Picker, export a real deck to PPTX and PDF, import | Google Cloud project + OAuth client |
 | 19 | **ClickShare: window share vs whole screen** (added 2026-10-23) | Decides what the operator sees on the laptop while the presentation window is shared | Try sharing only the presentation window from the laptop with the real ClickShare button | the venue's ClickShare |
+| 29 | **Release installer beyond this dev box** (added 2026-10-24; narrows #4): the NSIS installer was proven only on the dev PC (Kaspersky, WebView2 already present) | Not proven: clean Windows 10/11 VM without WebView2 (offline runtime install path, `minimumWebview2Version` update), Smart App Control / SmartScreen behaviour, Defender/Kaspersky/Norton verdicts, signed build (`STREAMDECK_SIGN_COMMAND` path never ran), upgrade-in-place keeps `%APPDATA%` data, the GitHub `release.yml` run itself (only actionlint-checked), `SOURCE_DATE_EPOCH` reproducibility, the WebView2 runtime installer is fetched from Microsoft's fwlink at build time and not hash-pinned | Clean VM + second machine; tag a `v0.0.0-test` on a throwaway repo copy; `dev-docs/release_process.md` | signing route, VM |
 
 ## P1 — decide or check soon
 
@@ -64,3 +65,4 @@ Last updated: 2026-10-23 (stop-the-bleeding pass).
 | 2026-10-23 | `cargo fuzz` PPTX target: 556,717 runs in 181 s, no crash or hang | Docker image from `src-tauri/fuzz/Dockerfile` |
 | 2026-10-23 | **New finding, fixed:** in a *release* build the projector window could invoke every app command (Tauri allows app commands to all local windows unless an app manifest exists); dev builds hid it because the dev-server origin is remote. Now `build.rs` declares the app manifest (command list read from `state.rs`), `permissions/controller-commands.toml` grants them to the controller only, and `invariants.rs` checks the set equals the handler list | release exe + CDP: `presentation cannot invoke app commands` failed before, passes after, in release and dev |
 | 2026-10-23 | Un-bundled **release** exe (`cargo tauri build --no-bundle`) with the new CSP: controller UI renders; PDF page background, scene image and WebM render in the presentation window over `http://sdmedia.localhost`; PPTX imports; projector cannot emit or invoke | `scripts/check-media-render.mjs` against `target/release/streamdeck.exe` (pdfium.dll copied next to it) |
+| 2026-10-24 | `scripts/build-release.sh` end to end on Windows (unsigned): installer 223,347,445 bytes; silent per-user install (no admin, exit 0, 18 s) to a temp dir; app launched and showed a window with WebView2 child processes; silent uninstall removed exe/dir/Start-menu and desktop shortcuts/uninstall key. Left behind by uninstall: `HKCUSoftware<publisher><product>` install-dir key (removed by hand) and `%APPDATA%`/`%LOCALAPPDATA%` `app.streamdeck.desktop` user data (by design). Kaspersky did not delete the exes | local run |

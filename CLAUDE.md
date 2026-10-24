@@ -243,6 +243,10 @@ Two jobs: `rust` (test + clippy, matrix over ubuntu/windows; macOS dropped until
 running cargo, for the reason above — this was previously missing and would have failed
 `cargo test`/`clippy` on any clean checkout since `dist/` is gitignored.
 
+## Release (2026-10-24)
+
+Windows installer: `bash scripts/build-release.sh` (no args; optional `STREAMDECK_SIGN_COMMAND`), tag `v*` runs `.github/workflows/release.yml` to a draft release. Licence GPL-3.0-or-later. Name/identifier/publisher live in `src-tauri/tauri.conf.json`. Full process, signing routes and AV checklist: `dev-docs/release_process.md`.
+
 ## Local environment note (Windows)
 
 `cargo`/`rustup` tools live in `/c/Users/<you>/.cargo/bin`; Node is managed via `fnm` —

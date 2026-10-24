@@ -19,8 +19,8 @@ fi
 
 # Extend these lists as later release steps add runtime pieces (GStreamer, NDI, notices).
 case "$PLATFORM" in
-  windows-x64) REQUIRED=(pdfium.dll PDFIUM-LICENSE.txt streamdeck.exe) ;;
-  linux-x64)   REQUIRED=(libpdfium.so PDFIUM-LICENSE.txt streamdeck) ;;
+  windows-x64) REQUIRED=(pdfium.dll PDFIUM-LICENSE.txt streamdeck.exe LICENSE.txt THIRD_PARTY_NOTICES.txt) ;;
+  linux-x64)   REQUIRED=(libpdfium.so PDFIUM-LICENSE.txt streamdeck LICENSE.txt THIRD_PARTY_NOTICES.txt) ;;
   *) echo "unknown platform $PLATFORM" >&2; exit 2 ;;
 esac
 FORBIDDEN_NAMES=('*.pdb' '*.dSYM' '*.pptx' '*.pdf' 'streamdeck-test-*' '*.rlib' '*.d')
@@ -50,6 +50,11 @@ echo "bundle check: $TARGET ($PLATFORM)"
 for f in "${REQUIRED[@]}"; do
   if [ -n "$(find "$TREE" -type f -name "$f" -print -quit)" ]; then ok "has $f"; else bad "missing $f"; fi
 done
+# Windows installers carry the offline WebView2 runtime installer (MicrosoftEdgeWebView2RuntimeInstaller*.exe, ~100+ MB) for PCs without it.
+if [ "$PLATFORM" = windows-x64 ] && [ -f "$TARGET" ]; then
+  if [ "$(stat -c %s "$TARGET")" -gt 80000000 ]; then ok "installer large enough to embed the offline WebView2 runtime"; else bad "installer under 80 MB: offline WebView2 runtime not embedded"; fi
+  case "$TARGET" in *-setup.exe) ;; *) bad "installer name should end in -setup.exe" ;; esac
+fi
 # A real pdfium is megabytes; a placeholder or empty file must not pass.
 LIBFILE="$(find "$TREE" -type f \( -name pdfium.dll -o -name libpdfium.so \) -print -quit)"
 if [ -n "$LIBFILE" ]; then
