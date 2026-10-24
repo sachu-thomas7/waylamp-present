@@ -69,29 +69,16 @@ jobs:
             controller/package-lock.json
             presentation/package-lock.json
 
-      # cargo test/build/clippy compile with the default "custom-protocol" feature,
-      # which embeds each window's dist/ at compile time — it must exist before cargo runs.
-      - name: Build frontend dist (controller + presentation)
-        run: |
-          npm ci --prefix controller
-          npm ci --prefix presentation
-          npm run build --prefix controller
-          npm run build --prefix presentation
-
-      - name: cargo fmt
-        run: cargo fmt --check --manifest-path src-tauri/Cargo.toml
-
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
           tool: nextest
 
-      # Each test runs in its own process, so process-global state (e.g. the PRESENTING flag) cannot leak between tests.
-      - name: cargo nextest
-        run: cargo nextest run --locked --no-fail-fast --manifest-path src-tauri/Cargo.toml
-
-      - name: cargo clippy
-        run: cargo clippy --locked --manifest-path src-tauri/Cargo.toml -- -D warnings
+      # Same command as the pre-push hook: builds both dist/ dirs (embedded at compile time), then
+      # fmt, clippy -D warnings and one nextest run (incl. tests/invariants.rs).
+      - name: verify push (Rust lane)
+        shell: bash
+        run: bash scripts/verify.sh push --only rust
 
   # ── Rust dependency security / license / bans ───────────────────────────────
   cargo-deny:
@@ -110,7 +97,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - run: bash scripts/osv-scan.sh
+      - run: bash scripts/verify.sh deps --only osv
 
   # ── Frontend type-checks, lint, unit tests ──────────────────────────────────
   frontend:
@@ -129,26 +116,6 @@ jobs:
             controller/package-lock.json
             presentation/package-lock.json
 
-      - name: Install controller deps
-        run: npm ci --prefix controller
-
-      - name: Install presentation deps
-        run: npm ci --prefix presentation
-
-      - name: Typecheck controller
-        run: npm run typecheck --prefix controller
-
-      - name: Typecheck presentation
-        run: npm run typecheck --prefix presentation
-
-      - name: Lint controller (Biome)
-        run: npm run lint --prefix controller
-
-      - name: Lint presentation (Biome)
-        run: npm run lint --prefix presentation
-
-      - name: Unit tests controller (Vitest)
-        run: npm test --prefix controller
-
-      - name: Unit tests presentation (Vitest)
-        run: npm test --prefix presentation
+      # Same command as the pre-push hook: typecheck + Biome + Vitest (no skipped tests) for both windows.
+      - name: verify push (frontend lane)
+        run: bash scripts/verify.sh push --only frontend

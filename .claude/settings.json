@@ -9,7 +9,7 @@
             "if": "Bash(git push*)",
             "command": "bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/pre-push-verify.sh",
             "timeout": 300,
-            "statusMessage": "Running scripts/verify.sh core before push..."
+            "statusMessage": "Running scripts/verify.sh push before push..."
           }
         ]
       }
