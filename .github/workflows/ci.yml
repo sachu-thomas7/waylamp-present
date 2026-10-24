@@ -3,14 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "dev-docs/**"
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "dev-docs/**"
 
 # Cancel superseded runs on the same ref instead of letting an outdated push's jobs finish
 # alongside the new one.
