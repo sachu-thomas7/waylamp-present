@@ -28,15 +28,15 @@ Scope: making `sachu-thomas7/stream-deck` public. Read-only audit of HEAD `a70ef
 |---|---|---|---|---|
 | S1 | Info | Commit author/committer identity: `sachu-thomas7 <sachuthomas7@gmail.com>` (87 commits), `Thomas Murickanattu <same email>` (3), dependabot, GitHub noreply. Real name appears in 3 commits. | git metadata | Accept (already decided by owner). Optionally set GitHub "keep my email private" for future commits. |
 | S2 | Low | Windows username `sachu` and MSYS paths in tracked files: `.claude/hooks/fmt-rust.sh:5`, `.claude/hooks/pre-push-verify.sh:13,15`, `.claude/agents/test-engineer.md:53,55`, `.claude/skills/test-authoring/SKILL.md:83,89`, `CLAUDE.md:256`, and ~98 hits in `dev-docs/research/notes/*` (96 in `gstreamer_capture_encode_code.md`). | tree + history | Remove/replace in tree (M5). Username is low sensitivity; accept in history. |
-| S3 | Medium | Owner-private context (no names): Anglican Eucharist services streamed to Facebook Live, closed church network, USB-stick workflow, owner Q&A and licence deliberation. | `dev-docs/roadmap_update_proposal_2026-10-21.md:82,175`, `owner_decisions_2026-10-23.md:13,23,27`, `handover_presentation_release_2026-10-24.md:13,117,123,155,201`, `next_session_ndi.md:7`, `review/architecture_review_2026-10-23.md:153,193,300`, `unverified_items.md` (#25 "test data left in owner's real app data dir") | See H2. |
-| S4 | Info | No emails, phones, IBANs, addresses, church/parish names, intercession names found in tools, tests, fixtures, test-assets, e2e or controller/presentation sources. `tools/service-analyzer/analyze.py` and the test deck are synthetic/generic. | | None. |
+| S3 | Medium | Owner-private context (no names): operational details of the owner's own deployment, owner Q&A and licence deliberation. | `dev-docs/roadmap_update_proposal_2026-10-21.md:82,175`, `owner_decisions_2026-10-23.md:13,23,27`, `handover_presentation_release_2026-10-24.md:13,117,123,155,201`, `next_session_ndi.md:7`, `review/architecture_review_2026-10-23.md:153,193,300`, `unverified_items.md` (#25 "test data left in owner's real app data dir") | See H2. |
+| S4 | Info | No emails, phones, IBANs, addresses, organisation names, intercession names found in tools, tests, fixtures, test-assets, e2e or controller/presentation sources. `tools/service-analyzer/analyze.py` and the test deck are synthetic/generic. | | None. |
 
 ### 1.3 Nothing to rotate
 No credential of any kind was found, so nothing needs rotation. On `feature/live-production` WHIP tokens are kept in the OS keychain by design (not in TOML); gitleaks and greps found none committed.
 
 ### 1.4 History rewrite: options and cost (not performed)
 H2 content stays reachable in history after `git rm`. Options:
-1. **Accept** history as is (no names, no credentials; church context is generic). Cost: none. Fine if the owner is comfortable with the Facebook-Live/Anglican/closed-network details being public.
+1. **Accept** history as is (no names, no credentials; that context is generic). Cost: none. Fine if the owner is comfortable with the those deployment details being public.
 2. **Publish a fresh squashed repo** (recommended if the owner is not comfortable): clean `main` tree to the final public state, then create a new public repo (or orphan branch) with one initial commit; keep the current private repo as the archive (it already holds `feature/live-production`). Cost: ~1 hour; loses commit history and PR/issue links (none are public yet), re-add Actions secrets (none exist), re-set up Dependabot and branch protection on the new repo; open PRs #26/#27/#9 must be merged first.
 3. **`git filter-repo` on the same repo**: `git filter-repo --invert-paths --path dev-docs/owner_decisions_2026-10-23.md --path dev-docs/roadmap_update_proposal_2026-10-21.md --path dev-docs/handover_presentation_release_2026-10-24.md --path dev-docs/next_session_ndi.md --path dev-docs/unverified_items.md --path dev-docs/review --path dev-docs/research --path tools/service-analyzer` (plus `--replace-text` for `C:/Users/sachu`) on a fresh clone, force-push all refs. Cost: rewrites all 91 SHAs, invalidates every `claude/*` branch/worktree and open PR (#26, #27, #9 would have to be rebased or recreated), requires force-push (needs branch protection off temporarily), `feature/live-production` must be rewritten too or it re-introduces the files. Do it only after merging #26/#27 and with everything else idle. Not better than option 2 for a one-person repo.
 
@@ -101,12 +101,12 @@ Legend: KEEP / UPDATE / ARCHIVE (remove from public tree; keep on `feature/live-
 |---|---|---|
 | `streamdeck_product_roadmap_2026.md` | ARCHIVE; publish short presentation-only `ROADMAP.md` | 661 lines, Phases 0–6 incl. live production and retire-Mevo/ProPresenter goals |
 | `roadmap_update_proposal_2026-10-21.md` | ARCHIVE | owner-private (audience, location, signing questions), unapproved |
-| `owner_decisions_2026-10-23.md` | ARCHIVE/DELETE | owner answers, licence deliberation, church network |
-| `handover_presentation_release_2026-10-24.md` | ARCHIVE | AI handover with church/USB details; carry its name-collision note into a rename note |
-| `next_session_ndi.md` | ARCHIVE | NDI-only, church network |
+| `owner_decisions_2026-10-23.md` | ARCHIVE/DELETE | owner answers, licence deliberation, private network |
+| `handover_presentation_release_2026-10-24.md` | ARCHIVE | AI handover; carry its name-collision note into a rename note |
+| `next_session_ndi.md` | ARCHIVE | NDI-only, private network |
 | `unverified_items.md` | ARCHIVE (extract presentation items) | mostly NDI/WHIP/Mevo/ClickShare, #25 mentions the owner's real data dir |
 | `release_bundling_plan.md` | UPDATE | keep PDFium/Windows installer parts, trim 26 GStreamer/NDI/WHIP mentions; PR #27 also adds `release_process.md` |
-| `review/architecture_review_2026-10-23.md` | ARCHIVE | AI review, church/owner references (l.153,193,300), most findings fixed |
+| `review/architecture_review_2026-10-23.md` | ARCHIVE | AI review, owner references (l.153,193,300), most findings fixed |
 | `streamdeck-ai-context-guide.html`, `streamdeck-ai-context-handoff-skill.md` | DELETE from public | AI process; stale "Rust 1.78 / Tokio 1.38" (skill.md:21,158) |
 | `streamdeck-f0.2 … f1.4-handoff.md` (7 files, ~4,700 lines) | ARCHIVE | historical AI session logs, stale Rust 1.78 (f0.2:21), ~300 name hits |
 | `test_framework_roadmap.md`, `test_plan.md` | UPDATE | valuable; mention a `STREAMDECK_DATA_DIR` seam that does not exist, some live-only features |
@@ -190,6 +190,6 @@ Depends on the later rename: M1, product name in README/`CLAUDE.md`/docs/policie
 
 Needs the owner:
 - Contact: no email is published by design; SECURITY.md and CODE_OF_CONDUCT.md point to GitHub private vulnerability reporting, so that setting must be enabled after the repo is public.
-- Publish as a fresh squashed repo; drop `dev-docs/handover_presentation_release_2026-10-24.md` and this audit's old-history discussion in that step.
+- Publish as a fresh squashed repo.
 - GitHub settings after the repo is public: ruleset/branch protection on `main` (PR + CI required, no force-push), private vulnerability reporting, Dependabot alerts and security updates, secret scanning + push protection, approval for first-time contributors' workflows, default `GITHUB_TOKEN` read-only. Close or merge Dependabot PR #9.
 - Signing applications (Certum, SignPath) and the SignPath attribution line only once SignPath is in use.
