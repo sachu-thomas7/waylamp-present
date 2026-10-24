@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tauri::{Manager, Runtime};
 
 use crate::bus::EventBus;
-use crate::config::StreamDeckConfig;
+use crate::config::WaylampConfig;
 use crate::display::{DisplayProviderHandle, DisplayStateHandle};
 use crate::error::AppError;
 use crate::events::AppEvent;
@@ -14,7 +14,7 @@ use crate::slide_state_machine::{self, StateMachineHandle};
 /// The app data directory, managed so commands (and tests) never re-resolve it from the OS.
 pub struct AppDataDir(pub PathBuf);
 
-/// Path of `streamdeck.toml`, managed so commands (and tests) never re-resolve it from the OS.
+/// Path of `waylamp-present.toml`, managed so commands (and tests) never re-resolve it from the OS.
 pub struct ConfigPath(pub PathBuf);
 
 /// One-time messages for the operator (e.g. a damaged file was recovered), shown as a banner.
@@ -37,7 +37,7 @@ pub fn manage_core<R: Runtime, M: Manager<R>>(
     bus: Arc<EventBus>,
     data_dir: PathBuf,
     config_path: PathBuf,
-    config: StreamDeckConfig,
+    config: WaylampConfig,
 ) -> StateMachineHandle {
     let machine = slide_state_machine::new_handle(SlideDeck::stub(), data_dir.clone());
     manager.manage(StartupNotices::default());
@@ -54,7 +54,7 @@ pub fn manage_core<R: Runtime, M: Manager<R>>(
 /// Creates and manages the display state (seeded with the persisted assignment) and provider.
 pub fn manage_display<R: Runtime, M: Manager<R>>(
     manager: &M,
-    config: &StreamDeckConfig,
+    config: &WaylampConfig,
     provider: DisplayProviderHandle,
 ) -> DisplayStateHandle {
     manager.manage(provider);

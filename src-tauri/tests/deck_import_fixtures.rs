@@ -5,8 +5,8 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use streamdeck_lib::bus::EventBus;
-use streamdeck_lib::deck_importer::import_deck;
+use waylamp_present_lib::bus::EventBus;
+use waylamp_present_lib::deck_importer::import_deck;
 
 fn fixture(name: &str) -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -20,13 +20,13 @@ async fn pptx_fixture_extracts_titles_body_code_and_layout_flags() {
     let bus = Arc::new(bus);
     let dest = tempfile::tempdir().unwrap();
 
-    let deck = import_deck(&fixture("streamdeck-test-deck.pptx"), dest.path(), bus)
+    let deck = import_deck(&fixture("waylamp-present-test-deck.pptx"), dest.path(), bus)
         .await
         .expect("pptx fixture should import cleanly");
 
     assert_eq!(deck.slides.len(), 5);
 
-    assert_eq!(deck.slides[0].title, "StreamDeck Test Deck");
+    assert_eq!(deck.slides[0].title, "Waylamp Present Test Deck");
     assert!(deck.slides[0]
         .body
         .contains("A sample presentation for testing deck import."));
@@ -50,7 +50,7 @@ async fn pptx_fixture_extracts_titles_body_code_and_layout_flags() {
     assert_eq!(deck.slides[4].title, "Unsupported Layout Demo");
     assert!(
         deck.slides[4].layout_unsupported,
-        "slide 5 uses a subTitle placeholder StreamDeck doesn't classify as body"
+        "slide 5 uses a subTitle placeholder Waylamp Present doesn't classify as body"
     );
     assert!(
         deck.slides[4].body.is_empty(),
@@ -65,7 +65,7 @@ async fn pdf_import_never_panics_when_pdfium_is_missing() {
     let bus = Arc::new(bus);
     let dest = tempfile::tempdir().unwrap();
 
-    let res = import_deck(&fixture("streamdeck-test-deck.pdf"), dest.path(), bus).await;
+    let res = import_deck(&fixture("waylamp-present-test-deck.pdf"), dest.path(), bus).await;
 
     if let Err(e) = res {
         assert!(
@@ -78,7 +78,7 @@ async fn pdf_import_never_panics_when_pdfium_is_missing() {
 // Runs when the real loader finds pdfium (`bash scripts/fetch-deps.sh`); skips with a message otherwise.
 #[tokio::test]
 async fn pdf_fixture_produces_one_slide_per_page_with_background() {
-    if !streamdeck_lib::deck_importer::pdfium_available() {
+    if !waylamp_present_lib::deck_importer::pdfium_available() {
         eprintln!(
             "SKIPPED: pdfium not found; run `bash scripts/fetch-deps.sh` to enable this test"
         );
@@ -88,7 +88,7 @@ async fn pdf_fixture_produces_one_slide_per_page_with_background() {
     let bus = Arc::new(bus);
     let dest = tempfile::tempdir().unwrap();
 
-    let deck = import_deck(&fixture("streamdeck-test-deck.pdf"), dest.path(), bus)
+    let deck = import_deck(&fixture("waylamp-present-test-deck.pdf"), dest.path(), bus)
         .await
         .expect("pdf fixture should import cleanly");
 
@@ -97,6 +97,6 @@ async fn pdf_fixture_produces_one_slide_per_page_with_background() {
         assert!(slide.has_background_image);
         assert!(slide.background_path.is_some());
     }
-    assert!(deck.slides[0].title.contains("StreamDeck Test PDF"));
+    assert!(deck.slides[0].title.contains("Waylamp Present Test PDF"));
     assert!(deck.slides[1].title.contains("Second Page"));
 }

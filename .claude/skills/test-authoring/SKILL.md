@@ -1,9 +1,9 @@
 ---
 name: test-authoring
-description: How to plan, write, run, and debug automated tests in the StreamDeck repo across all layers (Rust unit/integration with the mock Tauri runtime, Vitest component tests with mockIPC, golden fixtures, and real-app Playwright-over-WebView2 E2E). Use whenever adding or changing tests, building an item from dev-docs/test_framework_roadmap.md, writing E2E journeys, diagnosing a failing or flaky test, or deciding which test layer a bug belongs in.
+description: How to plan, write, run, and debug automated tests in the Waylamp Present repo across all layers (Rust unit/integration with the mock Tauri runtime, Vitest component tests with mockIPC, golden fixtures, and real-app Playwright-over-WebView2 E2E). Use whenever adding or changing tests, building an item from dev-docs/test_framework_roadmap.md, writing E2E journeys, diagnosing a failing or flaky test, or deciding which test layer a bug belongs in.
 ---
 
-# Test authoring (StreamDeck)
+# Test authoring (Waylamp Present)
 
 Specs of record: `dev-docs/test_framework_roadmap.md` (what to build, in order) and
 `dev-docs/test_plan.md` (what must be covered and why). `CLAUDE.md` holds repo conventions

@@ -1,9 +1,9 @@
 use tauri::State;
 
-use crate::config::StreamDeckConfig;
+use crate::config::WaylampConfig;
 
 #[tauri::command]
-pub fn get_config(config: State<StreamDeckConfig>) -> StreamDeckConfig {
+pub fn get_config(config: State<WaylampConfig>) -> WaylampConfig {
     config.inner().clone()
 }
 

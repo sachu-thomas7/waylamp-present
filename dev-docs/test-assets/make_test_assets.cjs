@@ -1,4 +1,4 @@
-// Generates dev-docs/test-assets/streamdeck-test-deck.{pptx,pdf} and a sample scene image.
+// Generates dev-docs/test-assets/waylamp-present-test-deck.{pptx,pdf} and a sample scene image.
 // Hand-rolled ZIP (for pptx) and PDF writers — no external deps, deterministic byte offsets.
 'use strict';
 const fs = require('fs');
@@ -206,12 +206,12 @@ const rootRels = XML_HEADER + `<Relationships xmlns="http://schemas.openxmlforma
 </Relationships>`;
 
 const coreProps = XML_HEADER + `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <dc:title>StreamDeck Test Deck</dc:title>
-  <dc:creator>StreamDeck</dc:creator>
+  <dc:title>Waylamp Present Test Deck</dc:title>
+  <dc:creator>Waylamp Present</dc:creator>
 </cp:coreProperties>`;
 
 const appProps = XML_HEADER + `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-  <Application>StreamDeck Test Generator</Application>
+  <Application>Waylamp Present Test Generator</Application>
   <Slides>5</Slides>
 </Properties>`;
 
@@ -258,9 +258,9 @@ const slideLayoutRels = XML_HEADER + `<Relationships xmlns="http://schemas.openx
   <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/>
 </Relationships>`;
 
-const theme = XML_HEADER + `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="StreamDeck Test Theme">
+const theme = XML_HEADER + `<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Waylamp Present Test Theme">
   <a:themeElements>
-    <a:clrScheme name="StreamDeck">
+    <a:clrScheme name="Waylamp Present">
       <a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>
       <a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1>
       <a:dk2><a:srgbClr val="1F2937"/></a:dk2>
@@ -274,11 +274,11 @@ const theme = XML_HEADER + `<a:theme xmlns:a="http://schemas.openxmlformats.org/
       <a:hlink><a:srgbClr val="2563EB"/></a:hlink>
       <a:folHlink><a:srgbClr val="7C3AED"/></a:folHlink>
     </a:clrScheme>
-    <a:fontScheme name="StreamDeck">
+    <a:fontScheme name="Waylamp Present">
       <a:majorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
       <a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>
     </a:fontScheme>
-    <a:fmtScheme name="StreamDeck">
+    <a:fmtScheme name="Waylamp Present">
       <a:fillStyleLst>
         <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
         <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
@@ -355,15 +355,15 @@ function slideRels(extra) {
 </Relationships>`;
 }
 
-const slide1 = slideXml(titleShape('StreamDeck Test Deck') + bodyShape(plainParagraph('A sample presentation for testing deck import.')));
+const slide1 = slideXml(titleShape('Waylamp Present Test Deck') + bodyShape(plainParagraph('A sample presentation for testing deck import.')));
 const slide2 = slideXml(titleShape('Feature Overview') + bodyShape(
   plainParagraph('Live presentation control from the Controller window') +
   plainParagraph('Multi-camera production (Phase 2, not yet built)') +
   plainParagraph('One-click live streaming egress (Phase 4, not yet built)')
 ));
-const slide3 = slideXml(titleShape('Sample Code') + bodyShape(monospaceParagraph('fn main() { println!("Hello, StreamDeck!"); }')));
+const slide3 = slideXml(titleShape('Sample Code') + bodyShape(monospaceParagraph('fn main() { println!("Hello, Waylamp Present!"); }')));
 const slide4 = slideXml(titleShape('Visual Slide') + pictureShape());
-const slide5 = slideXml(titleShape('Unsupported Layout Demo') + subtitleShape('This uses a subtitle placeholder StreamDeck does not classify as body text.'));
+const slide5 = slideXml(titleShape('Unsupported Layout Demo') + subtitleShape('This uses a subtitle placeholder Waylamp Present does not classify as body text.'));
 
 const slide4Rels = slideRels('<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/>');
 const plainSlideRels = slideRels('');
@@ -396,19 +396,19 @@ const entries = [
 ];
 
 const pptxBuf = buildZip(entries);
-fs.writeFileSync(path.join(OUT_DIR, 'streamdeck-test-deck.pptx'), pptxBuf);
+fs.writeFileSync(path.join(OUT_DIR, 'waylamp-present-test-deck.pptx'), pptxBuf);
 console.log('wrote pptx:', pptxBuf.length, 'bytes,', entries.length, 'entries');
 
 // ================= Build the PDF =================
 const pdfBuf = buildPdf([
-  { title: 'StreamDeck Test PDF', body: ['Page 1 of 3 - manual deck import validation.'] },
+  { title: 'Waylamp Present Test PDF', body: ['Page 1 of 3 - manual deck import validation.'] },
   { title: 'Second Page', body: ['Each PDF page becomes one rasterized slide.', 'Title = first line of extracted text.'] },
   { title: 'Third Page', body: ['Background image is the full rendered page.'] },
 ]);
-fs.writeFileSync(path.join(OUT_DIR, 'streamdeck-test-deck.pdf'), pdfBuf);
+fs.writeFileSync(path.join(OUT_DIR, 'waylamp-present-test-deck.pdf'), pdfBuf);
 console.log('wrote pdf:', pdfBuf.length, 'bytes');
 
 // ================= Sample scene-media image =================
 const sceneImg = buildPng(640, 360, [220, 38, 38]); // red, visually distinct from slide background
-fs.writeFileSync(path.join(OUT_DIR, 'streamdeck-test-scene-image.png'), sceneImg);
+fs.writeFileSync(path.join(OUT_DIR, 'waylamp-present-test-scene-image.png'), sceneImg);
 console.log('wrote scene image:', sceneImg.length, 'bytes');

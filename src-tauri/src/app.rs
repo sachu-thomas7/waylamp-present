@@ -74,7 +74,7 @@ pub fn run() {
             };
 
             WebviewWindowBuilder::new(app, "presentation", presentation_url)
-                .title("StreamDeck — Presentation")
+                .title("Waylamp Present — Presentation")
                 .inner_size(1920.0, 1080.0)
                 .visible(false)
                 .decorations(false)
@@ -102,7 +102,7 @@ pub fn run() {
                 config.clone(),
             );
             let notices = app.state::<crate::state::StartupNotices>();
-            if let Some(n) = config_recovery.notice("Settings (streamdeck.toml)") {
+            if let Some(n) = config_recovery.notice("Settings (waylamp-present.toml)") {
                 notices.push(n);
             }
             for n in tauri::async_runtime::block_on(crate::state::restore_on_startup(

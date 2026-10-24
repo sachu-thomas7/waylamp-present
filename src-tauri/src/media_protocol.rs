@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn refuses_disallowed_extension_even_inside_data_dir() {
         let (dir, _) = fixture();
-        let toml = dir.path().join("streamdeck.toml");
+        let toml = dir.path().join("waylamp-present.toml");
         std::fs::write(&toml, b"x=1").unwrap();
         assert_eq!(respond(dir.path(), None, &enc(&toml), None).status, 404);
     }

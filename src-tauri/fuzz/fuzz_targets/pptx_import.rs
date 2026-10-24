@@ -20,6 +20,6 @@ fuzz_target!(|data: &[u8]| {
         max_total_uncompressed: 16 << 20,
         ..Default::default()
     };
-    let media_dir = std::env::temp_dir().join("streamdeck-fuzz-media");
+    let media_dir = std::env::temp_dir().join("waylamp-present-fuzz-media");
     let _ = pptx::import_pptx(archive, &media_dir, &limits, &mut |_| {});
 });

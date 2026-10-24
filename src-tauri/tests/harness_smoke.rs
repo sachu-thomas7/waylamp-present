@@ -5,9 +5,9 @@ mod common;
 use std::time::Duration;
 
 use common::TestApp;
-use streamdeck_lib::config::StreamDeckConfig;
-use streamdeck_lib::events::AppEvent;
 use tauri::Manager;
+use waylamp_present_lib::config::WaylampConfig;
+use waylamp_present_lib::events::AppEvent;
 
 #[test]
 fn get_build_info_round_trips_through_ipc() {
@@ -23,17 +23,17 @@ fn get_build_info_round_trips_through_ipc() {
 
 #[test]
 fn get_config_returns_the_managed_config() {
-    let mut config = StreamDeckConfig::default();
+    let mut config = WaylampConfig::default();
     config.app.log_level = "trace".into();
     let t = TestApp::with_config(config);
 
-    let got: StreamDeckConfig = t
+    let got: WaylampConfig = t
         .invoke("get_config", serde_json::json!({}))
         .expect("get_config succeeds");
 
     assert_eq!(got.app.log_level, "trace");
     assert_eq!(
-        t.app.state::<StreamDeckConfig>().app.log_level,
+        t.app.state::<WaylampConfig>().app.log_level,
         "trace",
         "config is managed state, not a copy built per call"
     );

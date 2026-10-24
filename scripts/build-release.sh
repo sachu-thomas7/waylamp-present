@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Windows release installer end to end. No arguments; exit 0 only if every step passed.
 #   fetch pinned deps -> notices -> frontends -> cargo tauri build (NSIS) -> [sign] -> check-bundle -> SHA256SUMS.txt
-# Signing is optional: set STREAMDECK_SIGN_COMMAND to a command template where %1 is the file, e.g.
-#   artifact-signing-cli -e <endpoint> -a <account> -c <profile> -d StreamDeck %1
+# Signing is optional: set WAYLAMP_SIGN_COMMAND to a command template where %1 is the file, e.g.
+#   artifact-signing-cli -e <endpoint> -a <account> -c <profile> -d Waylamp-Present %1
 #   signtool sign /sha1 <thumbprint> /fd sha256 /tr http://timestamp.digicert.com /td sha256 %1
 # The command MUST timestamp. Secrets come from the environment only, never from the repo.
 # Env: CARGO_TARGET_DIR (default <repo>/target), SKIP_NPM_CI=1 to reuse node_modules.
@@ -33,18 +33,18 @@ node scripts/gen-notices.cjs
 CONFIGS=(--config release/bundle.pdfium.conf.json --config release/bundle.release.conf.json)
 SIGNED=0
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
-if [ -n "${STREAMDECK_SIGN_COMMAND:-}" ]; then
+if [ -n "${WAYLAMP_SIGN_COMMAND:-}" ]; then
   SIGNED=1
   # Tauri signs the app exe and the installer with this command (%1 = file).
-  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({bundle:{windows:{signCommand:process.env.STREAMDECK_SIGN_COMMAND}}}))' "$(WIN "$WORK/sign.conf.json")"
+  node -e 'require("fs").writeFileSync(process.argv[1], JSON.stringify({bundle:{windows:{signCommand:process.env.WAYLAMP_SIGN_COMMAND}}}))' "$(WIN "$WORK/sign.conf.json")"
   CONFIGS+=(--config "$(WIN "$WORK/sign.conf.json")")
 else
   cat >&2 <<'EOF'
 
   ############################################################################
   #  WARNING: building UNSIGNED. Windows 11 Smart App Control can block this  #
-  #  installer and streamdeck.exe outright, and SmartScreen will warn.        #
-  #  Set STREAMDECK_SIGN_COMMAND before handing this build to anyone.         #
+  #  installer and waylamp-present.exe outright, and SmartScreen will warn.        #
+  #  Set WAYLAMP_SIGN_COMMAND before handing this build to anyone.         #
   #  See dev-docs/release_process.md.                                         #
   ############################################################################
 
@@ -61,11 +61,11 @@ INSTALLERS=("$NSIS_DIR"/*-setup.exe)
 INSTALLER="${INSTALLERS[0]}"
 
 if [ "$SIGNED" = "1" ]; then
-  step "verify signatures (installer and inner streamdeck.exe, with timestamp)"
+  step "verify signatures (installer and inner waylamp-present.exe, with timestamp)"
   X="$WORK/x"; mkdir -p "$X"
   SEVENZ="$(command -v 7z 2>/dev/null || echo "/c/Program Files/7-Zip/7z.exe")"
-  "$SEVENZ" e -y -o"$(WIN "$X")" "$(WIN "$INSTALLER")" streamdeck.exe >/dev/null
-  for f in "$INSTALLER" "$X/streamdeck.exe"; do
+  "$SEVENZ" e -y -o"$(WIN "$X")" "$(WIN "$INSTALLER")" waylamp-present.exe >/dev/null
+  for f in "$INSTALLER" "$X/waylamp-present.exe"; do
     powershell.exe -NoProfile -Command "\$s=Get-AuthenticodeSignature -LiteralPath '$(WIN "$f")'; if(\$s.Status -ne 'Valid' -or -not \$s.TimeStamperCertificate){Write-Error ('not validly signed+timestamped: ' + \$s.Status); exit 1}; Write-Host ('signed: ' + \$s.SignerCertificate.Subject)" \
       || { echo "signature check failed for $f" >&2; exit 1; }
   done

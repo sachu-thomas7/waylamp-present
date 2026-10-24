@@ -5,16 +5,16 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
-use streamdeck_lib::bus::EventBus;
-use streamdeck_lib::config::StreamDeckConfig;
-use streamdeck_lib::display::{DisplayInfo, DisplayProvider};
-use streamdeck_lib::error::AppError;
-use streamdeck_lib::events::AppEvent;
-use streamdeck_lib::slide_state_machine::StateMachineHandle;
 use tauri::test::{get_ipc_response, mock_context, noop_assets, MockRuntime};
 use tauri::webview::InvokeRequest;
 use tauri::{App, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tokio::sync::broadcast::{error::TryRecvError, Receiver};
+use waylamp_present_lib::bus::EventBus;
+use waylamp_present_lib::config::WaylampConfig;
+use waylamp_present_lib::display::{DisplayInfo, DisplayProvider};
+use waylamp_present_lib::error::AppError;
+use waylamp_present_lib::events::AppEvent;
+use waylamp_present_lib::slide_state_machine::StateMachineHandle;
 
 // Tauri only treats this as the app's own (local) origin on the matching platform.
 #[cfg(any(windows, target_os = "android"))]
@@ -81,39 +81,39 @@ pub fn display(name: &str, x: i32, is_primary: bool) -> DisplayInfo {
 
 impl TestApp {
     pub fn new() -> Self {
-        Self::with_config(StreamDeckConfig::default())
+        Self::with_config(WaylampConfig::default())
     }
 
-    pub fn with_config(config: StreamDeckConfig) -> Self {
+    pub fn with_config(config: WaylampConfig) -> Self {
         Self::with_data_dir(tempfile::tempdir().expect("temp app-data dir"), config)
     }
 
     /// Boots an app on an existing data dir, simulating a restart over persisted files.
-    pub fn with_data_dir(data_dir: tempfile::TempDir, config: StreamDeckConfig) -> Self {
+    pub fn with_data_dir(data_dir: tempfile::TempDir, config: WaylampConfig) -> Self {
         Self::build(data_dir, config)
     }
 
-    fn build(data_dir: tempfile::TempDir, config: StreamDeckConfig) -> Self {
+    fn build(data_dir: tempfile::TempDir, config: WaylampConfig) -> Self {
         let (bus, _rx) = EventBus::new();
         let bus = Arc::new(bus);
 
         let app = tauri::test::mock_builder()
-            .invoke_handler(streamdeck_lib::state::mock_invoke_handler())
+            .invoke_handler(waylamp_present_lib::state::mock_invoke_handler())
             .build(mock_context(noop_assets()))
             .expect("mock app builds");
 
-        let machine = streamdeck_lib::state::manage_core(
+        let machine = waylamp_present_lib::state::manage_core(
             &app,
             Arc::clone(&bus),
             data_dir.path().to_path_buf(),
-            data_dir.path().join("config").join("streamdeck.toml"),
+            data_dir.path().join("config").join("waylamp-present.toml"),
             config.clone(),
         );
         let displays = Arc::new(FakeDisplays::new(vec![
             display("Primary", 0, true),
             display("Projector", 1920, false),
         ]));
-        streamdeck_lib::state::manage_display(&app, &config, displays.clone());
+        waylamp_present_lib::state::manage_display(&app, &config, displays.clone());
 
         let window = WebviewWindowBuilder::new(&app, "controller", WebviewUrl::default())
             .build()
@@ -129,9 +129,12 @@ impl TestApp {
         }
     }
 
-    /// The `streamdeck.toml` the app under test reads/writes (inside the temp data dir).
+    /// The `waylamp-present.toml` the app under test reads/writes (inside the temp data dir).
     pub fn config_path(&self) -> std::path::PathBuf {
-        self.data_dir.path().join("config").join("streamdeck.toml")
+        self.data_dir
+            .path()
+            .join("config")
+            .join("waylamp-present.toml")
     }
 
     /// Subscribe before acting so no event published by the command is missed.

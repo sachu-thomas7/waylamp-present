@@ -27,7 +27,7 @@ public E2E-quality catalogs; severities are ours.
 | G12 | CSS-class or positional selectors | role/label/text/`data-testid`, via page object |
 | G13 | `test.skip` / `#[ignore]` without a linked reason | Add reason + owner + expiry, or delete |
 | G14 | Shared mutable state / order dependence between tests | Per-test setup; run with shuffled order |
-| G15 | Reads or writes real `%APPDATA%` / real config | Temp dir + `STREAMDECK_DATA_DIR` |
+| G15 | Reads or writes real `%APPDATA%` / real config | Temp dir + `WAYLAMP_DATA_DIR` |
 | G16 | `expect.soft` overuse hiding the first failure | Use hard expects |
 | G17 | Snapshot auto-updated in the same change as the code it guards | Review the diff by hand |
 | G18 | Test passes both before and after the production change | It doesn't test the change — redo |

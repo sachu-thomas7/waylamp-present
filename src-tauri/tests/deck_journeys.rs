@@ -7,13 +7,13 @@ use std::path::{Path, PathBuf};
 
 use common::TestApp;
 use serde_json::{json, Value};
-use streamdeck_lib::config::StreamDeckConfig;
-use streamdeck_lib::events::AppEvent;
-use streamdeck_lib::scene::SceneSource;
 use tauri::Manager;
+use waylamp_present_lib::config::WaylampConfig;
+use waylamp_present_lib::events::AppEvent;
+use waylamp_present_lib::scene::SceneSource;
 
 const TITLES: [&str; 5] = [
-    "StreamDeck Test Deck",
+    "Waylamp Present Test Deck",
     "Feature Overview",
     "Sample Code",
     "Visual Slide",
@@ -22,7 +22,7 @@ const TITLES: [&str; 5] = [
 
 fn fixture_pptx() -> String {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/streamdeck-test-deck.pptx")
+        .join("tests/fixtures/waylamp-present-test-deck.pptx")
         .to_str()
         .expect("utf-8 fixture path")
         .to_string()
@@ -282,7 +282,7 @@ async fn restore_after_restart_reloads_the_imported_deck() {
     let deck_id = import(&first);
     let TestApp { data_dir, .. } = first;
 
-    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let t = TestApp::with_data_dir(data_dir, WaylampConfig::default());
     assert_eq!(current(&t)["title"], "Welcome", "fresh app starts on stub");
     let mut events = t.collect_events();
 
@@ -341,7 +341,7 @@ async fn clear_then_restart_does_not_resurrect_the_deck() {
     invoke_unit(&first, "deck_clear", json!({}));
     let TestApp { data_dir, .. } = first;
 
-    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let t = TestApp::with_data_dir(data_dir, WaylampConfig::default());
     let mut events = t.collect_events();
     invoke_unit(&t, "deck_restore", json!({}));
 
@@ -378,10 +378,10 @@ async fn startup_restore_activates_the_persisted_deck_with_saved_position() {
     let started = first.machine.read().await.timer_started_at();
     assert!(started.is_some());
     let TestApp { data_dir, .. } = first;
-    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let t = TestApp::with_data_dir(data_dir, WaylampConfig::default());
     let mut events = t.collect_events();
 
-    streamdeck_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
+    waylamp_present_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
 
     let seen = events.drain();
     let Some(AppEvent::SlideUpdate(last)) = seen.last() else {
@@ -402,9 +402,9 @@ async fn startup_restore_keeps_the_saved_slide_index_of_the_persisted_deck() {
     let started = first.machine.read().await.timer_started_at();
     assert!(started.is_some());
     let TestApp { data_dir, .. } = first;
-    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let t = TestApp::with_data_dir(data_dir, WaylampConfig::default());
 
-    streamdeck_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
+    waylamp_present_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
 
     assert_eq!(t.machine.read().await.current_index(), 4);
     assert_eq!(t.machine.read().await.timer_started_at(), started);
@@ -416,11 +416,11 @@ async fn spawn_timer_manages_abort_handle_and_publishes_ticks() {
     invoke_unit(&t, "slide_advance", json!({}));
     let mut events = t.collect_events();
 
-    streamdeck_lib::state::spawn_timer(&t.app, t.machine.clone(), t.bus.clone());
+    waylamp_present_lib::state::spawn_timer(&t.app, t.machine.clone(), t.bus.clone());
 
     assert!(t
         .app
-        .try_state::<streamdeck_lib::state::TimerAbortHandle>()
+        .try_state::<waylamp_present_lib::state::TimerAbortHandle>()
         .is_some());
     let is_tick = |e: &AppEvent| matches!(e, AppEvent::TimerTick { .. });
     let seen = events
@@ -446,12 +446,12 @@ async fn corrupt_deck_json_recovers_from_bak_and_reports_a_notice() {
         .join(id.trim())
         .join("deck.json");
     let good = std::fs::read(&deck_json).expect("deck.json");
-    std::fs::write(streamdeck_lib::persist::backup_path(&deck_json), &good).expect("bak");
+    std::fs::write(waylamp_present_lib::persist::backup_path(&deck_json), &good).expect("bak");
     std::fs::write(&deck_json, b"{\"slides\": [ trunc").expect("corrupt");
 
-    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let t = TestApp::with_data_dir(data_dir, WaylampConfig::default());
     let notices =
-        streamdeck_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
+        waylamp_present_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
 
     assert_eq!(t.machine.read().await.total(), 5, "deck restored from .bak");
     assert_eq!(notices.len(), 1);
@@ -473,11 +473,11 @@ async fn corrupt_deck_json_without_bak_does_not_abort_startup() {
         .join(id.trim())
         .join("deck.json");
     std::fs::write(&deck_json, b"not json").expect("corrupt");
-    let _ = std::fs::remove_file(streamdeck_lib::persist::backup_path(&deck_json));
+    let _ = std::fs::remove_file(waylamp_present_lib::persist::backup_path(&deck_json));
 
-    let t = TestApp::with_data_dir(data_dir, StreamDeckConfig::default());
+    let t = TestApp::with_data_dir(data_dir, WaylampConfig::default());
     let notices =
-        streamdeck_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
+        waylamp_present_lib::state::restore_on_startup(&t.machine, &t.bus, t.data_dir.path()).await;
 
     assert_eq!(notices.len(), 1);
     assert!(notices[0].contains("defaults are in use"), "{notices:?}");
@@ -639,7 +639,7 @@ async fn resync_after_a_lagged_bus_replays_slide_media_scene_and_presentation_st
     );
     invoke_unit(&t, "scene_set_source", json!({ "source": "SceneMedia" }));
 
-    let events = streamdeck_lib::state::resync_events(&t.app).await;
+    let events = waylamp_present_lib::state::resync_events(&t.app).await;
 
     let shape: Vec<String> = events
         .iter()

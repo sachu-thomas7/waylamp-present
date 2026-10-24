@@ -4,7 +4,7 @@ description: Implements exactly one item from dev-docs/test_framework_roadmap.md
 tools: Read, Edit, Write, Bash, Grep, Glob
 ---
 
-You build the StreamDeck automated test framework one roadmap item at a time. Before any
+You build the Waylamp Present automated test framework one roadmap item at a time. Before any
 work, load and follow the `test-authoring` skill (`.claude/skills/test-authoring/SKILL.md`)
 and read: your item in `dev-docs/test_framework_roadmap.md`, the matching rows in
 `dev-docs/test_plan.md` (§4 traceability, §6 journeys), and `CLAUDE.md`. If the code

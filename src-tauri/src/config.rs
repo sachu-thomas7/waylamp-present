@@ -5,13 +5,13 @@ pub const CONFIG_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct StreamDeckConfig {
+pub struct WaylampConfig {
     pub version: u32,
     pub app: AppConfig,
     pub presentation: PresentationConfig,
 }
 
-impl Default for StreamDeckConfig {
+impl Default for WaylampConfig {
     fn default() -> Self {
         Self {
             version: CONFIG_VERSION,
@@ -48,14 +48,14 @@ mod tests {
 
     #[test]
     fn default_version_is_one() {
-        assert_eq!(StreamDeckConfig::default().version, 1);
+        assert_eq!(WaylampConfig::default().version, 1);
     }
 
     #[test]
     fn round_trip_serialise_deserialise() {
-        let original = StreamDeckConfig::default();
+        let original = WaylampConfig::default();
         let serialised = toml::to_string(&original).unwrap();
-        let restored: StreamDeckConfig = toml::from_str(&serialised).unwrap();
+        let restored: WaylampConfig = toml::from_str(&serialised).unwrap();
         assert_eq!(original.version, restored.version);
         assert_eq!(original.app.log_level, restored.app.log_level);
         assert_eq!(
@@ -66,7 +66,7 @@ mod tests {
 
     #[test]
     fn old_configs_with_live_sections_still_load() {
-        let restored: StreamDeckConfig = toml::from_str(
+        let restored: WaylampConfig = toml::from_str(
             "version = 1
 [whip]
 enabled = true
@@ -80,16 +80,16 @@ preview_grid = \"2x2\"
 
     #[test]
     fn v0_config_without_presentation_section_defaults_to_none() {
-        let restored: StreamDeckConfig = toml::from_str("version = 0\n").unwrap();
+        let restored: WaylampConfig = toml::from_str("version = 0\n").unwrap();
         assert_eq!(restored.presentation.display_id, None);
     }
 
     #[test]
     fn presentation_display_id_round_trips() {
-        let mut original = StreamDeckConfig::default();
+        let mut original = WaylampConfig::default();
         original.presentation.display_id = Some("Built-in@0,0".into());
         let serialised = toml::to_string(&original).unwrap();
-        let restored: StreamDeckConfig = toml::from_str(&serialised).unwrap();
+        let restored: WaylampConfig = toml::from_str(&serialised).unwrap();
         assert_eq!(
             restored.presentation.display_id,
             Some("Built-in@0,0".into())

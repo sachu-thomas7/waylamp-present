@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# StreamDeck verification tiers. CI, the pre-push hook and humans all call this, so they cannot drift.
+# Waylamp Present verification tiers. CI, the pre-push hook and humans all call this, so they cannot drift.
 #
 #   bash scripts/verify.sh quick       fmt, cargo check, fast Rust tests + typecheck/Vitest for what changed (every edit)
 #   bash scripts/verify.sh push        fmt, clippy -D warnings, ONE nextest run (incl. invariants), both frontends
@@ -138,7 +138,7 @@ case "$TIER" in
     [ -z "$ONLY" ] || [ "$ONLY" = osv ] && step "osv-scanner" bash scripts/osv-scan.sh
     if [ -z "$ONLY" ] || [ "$ONLY" = fuzz ]; then
       if docker info >/dev/null 2>&1; then
-        step "fuzz smoke (30s)" bash -c 'docker build -q -t streamdeck-fuzz src-tauri/fuzz && MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/work" -v streamdeck-fuzz-target:/fuzz-target -e CARGO_TARGET_DIR=/fuzz-target -w /work/src-tauri streamdeck-fuzz cargo +nightly fuzz run pptx_import fuzz/seeds/pptx_import -- -max_total_time=30'
+        step "fuzz smoke (30s)" bash -c 'docker build -q -t waylamp-present-fuzz src-tauri/fuzz && MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd -W 2>/dev/null || pwd):/work" -v waylamp-present-fuzz-target:/fuzz-target -e CARGO_TARGET_DIR=/fuzz-target -w /work/src-tauri waylamp-present-fuzz cargo +nightly fuzz run pptx_import fuzz/seeds/pptx_import -- -max_total_time=30'
       else skipped "fuzz smoke (Docker unavailable)"; fi
     fi
     cat "$OUT" ;;

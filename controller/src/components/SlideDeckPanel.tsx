@@ -241,7 +241,7 @@ export function SlideDeckPanel() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 340 }}>
             <span style={{ fontSize: 16, fontWeight: 700 }}>No slides yet</span>
             <span style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.6 }}>
-              Import a PowerPoint or PDF file to build your deck — StreamDeck extracts titles, body text, and backgrounds automatically.
+              Import a PowerPoint or PDF file to build your deck — Waylamp Present extracts titles, body text, and backgrounds automatically.
             </span>
           </div>
           <Button variant="primary" pill icon={<IconUpload />} onClick={handleImport}>Import a Deck</Button>

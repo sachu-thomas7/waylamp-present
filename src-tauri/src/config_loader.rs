@@ -10,7 +10,7 @@ use notify::RecursiveMode;
 use notify::Watcher;
 
 use crate::bus::EventBus;
-use crate::config::StreamDeckConfig;
+use crate::config::WaylampConfig;
 use crate::error::AppError;
 use crate::events::AppEvent;
 
@@ -23,12 +23,12 @@ impl ConfigLoader {
             .path()
             .app_config_dir()
             .map_err(|e| AppError::Config(e.to_string()))?
-            .join("streamdeck.toml"))
+            .join("waylamp-present.toml"))
     }
 
-    pub fn load_or_default(path: &PathBuf) -> Result<StreamDeckConfig, AppError> {
+    pub fn load_or_default(path: &PathBuf) -> Result<WaylampConfig, AppError> {
         if !path.exists() {
-            let default = StreamDeckConfig::default();
+            let default = WaylampConfig::default();
             let toml_str =
                 toml::to_string_pretty(&default).map_err(|e| AppError::Config(e.to_string()))?;
             crate::persist::atomic_write(path, toml_str.as_bytes())?;
@@ -36,23 +36,23 @@ impl ConfigLoader {
         }
 
         let content = std::fs::read_to_string(path).map_err(|e| AppError::Config(e.to_string()))?;
-        toml::from_str::<StreamDeckConfig>(&content).map_err(|e| AppError::Config(e.to_string()))
+        toml::from_str::<WaylampConfig>(&content).map_err(|e| AppError::Config(e.to_string()))
     }
 
-    pub fn save(path: &std::path::Path, config: &StreamDeckConfig) -> Result<(), AppError> {
+    pub fn save(path: &std::path::Path, config: &WaylampConfig) -> Result<(), AppError> {
         let toml_str =
             toml::to_string_pretty(config).map_err(|e| AppError::Config(e.to_string()))?;
         crate::persist::atomic_write(path, toml_str.as_bytes())
     }
 
     /// Startup load that never fails on a damaged file: restores the `.bak` or falls back to defaults.
-    pub fn load_or_recover(path: &std::path::Path) -> (StreamDeckConfig, crate::persist::Recovery) {
+    pub fn load_or_recover(path: &std::path::Path) -> (WaylampConfig, crate::persist::Recovery) {
         let (cfg, recovery) =
-            crate::persist::load_recovering(path, |s| toml::from_str::<StreamDeckConfig>(s).ok());
+            crate::persist::load_recovering(path, |s| toml::from_str::<WaylampConfig>(s).ok());
         match cfg {
             Some(c) => (c, recovery),
             None => {
-                let default = StreamDeckConfig::default();
+                let default = WaylampConfig::default();
                 if let Ok(toml_str) = toml::to_string_pretty(&default) {
                     let _ = crate::persist::atomic_write(path, toml_str.as_bytes());
                 }
@@ -108,7 +108,7 @@ mod tests {
     #[test]
     fn missing_file_writes_default_and_returns_it() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("streamdeck.toml");
+        let path = dir.path().join("waylamp-present.toml");
         let config = ConfigLoader::load_or_default(&path).unwrap();
         assert_eq!(config.version, crate::config::CONFIG_VERSION);
         assert!(path.exists());
@@ -117,7 +117,7 @@ mod tests {
     #[test]
     fn valid_toml_parses_correctly() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("streamdeck.toml");
+        let path = dir.path().join("waylamp-present.toml");
         fs::write(&path, "version = 1\n[app]\nlog_level = \"debug\"\n").unwrap();
         let config = ConfigLoader::load_or_default(&path).unwrap();
         assert_eq!(config.app.log_level, "debug");
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn invalid_toml_returns_config_error() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("streamdeck.toml");
+        let path = dir.path().join("waylamp-present.toml");
         fs::write(&path, "not valid toml ][[[").unwrap();
         let result = ConfigLoader::load_or_default(&path);
         assert!(matches!(result, Err(AppError::Config(_))));
@@ -135,8 +135,8 @@ mod tests {
     #[test]
     fn save_then_load_round_trips_presentation_display_id() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("streamdeck.toml");
-        let mut config = StreamDeckConfig::default();
+        let path = dir.path().join("waylamp-present.toml");
+        let mut config = WaylampConfig::default();
         config.presentation.display_id = Some("Built-in@0,0".into());
         ConfigLoader::save(&path, &config).unwrap();
         let restored = ConfigLoader::load_or_default(&path).unwrap();
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn v0_config_missing_new_fields_applies_defaults() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("streamdeck.toml");
+        let path = dir.path().join("waylamp-present.toml");
         fs::write(&path, "version = 0\n").unwrap();
         let config = ConfigLoader::load_or_default(&path).unwrap();
         assert_eq!(config.version, 0);
@@ -159,8 +159,8 @@ mod tests {
     #[test]
     fn corrupt_config_recovers_from_bak_instead_of_aborting_startup() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("streamdeck.toml");
-        let mut c = StreamDeckConfig::default();
+        let path = dir.path().join("waylamp-present.toml");
+        let mut c = WaylampConfig::default();
         c.app.log_level = "debug".into();
         ConfigLoader::save(&path, &c).unwrap();
         ConfigLoader::save(&path, &c).unwrap();
@@ -180,7 +180,7 @@ mod tests {
     #[test]
     fn corrupt_config_without_bak_starts_with_defaults_and_keeps_the_broken_file() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("streamdeck.toml");
+        let path = dir.path().join("waylamp-present.toml");
         fs::write(&path, "not valid toml ][[[").unwrap();
         let (config, recovery) = ConfigLoader::load_or_recover(&path);
         assert_eq!(config.version, crate::config::CONFIG_VERSION);
