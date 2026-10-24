@@ -7,7 +7,7 @@ This application is an offline desktop program.
   talk to a local dev server on `localhost` only.) It has no auto-updater and no accounts or sign-in.
 - **Your files stay on your computer.** When you import a deck, the application copies it into its own data directory
   (in a `decks` folder) together with the images extracted from it. Scene media you add is kept in
-  a `scene_media` folder there; Slide position and timer state are saved
+  a `scene_media` folder there. Slide position and timer state are saved
   there so a restart can resume. Settings, such as the chosen presentation display, are stored in a
   TOML file in the application's config directory. Both directories are under your user profile and
   you can delete them at any time; uninstalling the application does not need them.
