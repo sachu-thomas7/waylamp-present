@@ -158,7 +158,7 @@ then merge `feature/live-production`. Keep edits to shared files (`events.rs`, `
 
 - **Phase 0 and Phase 1 (F1.1–F1.5) are done**: window/event/config foundations, slide renderer and state machine,
   controller panel and timer, PPTX/PDF import with scene media, multi-display assignment with hotplug fallback.
-- **Hardening done** (see `dev-docs/public_release_audit.md` and git history): the `sdmedia` URI scheme serves
+- **Hardening done** (see git history): the `sdmedia` URI scheme serves
   backgrounds/scene media (`media_protocol.rs`, only files under the app data dir plus the one staged video, with Range;
   frontends build URLs via `lib/mediaUrl.ts`); the presentation window is listen-only and in release builds
   `build.rs` declares an app manifest from the `state.rs` handler list so only the controller may invoke commands
